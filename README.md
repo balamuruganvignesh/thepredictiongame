@@ -40,7 +40,7 @@ use it or lose it.
 
 | Role | | What it does |
 | --- | --- | --- |
-| The Peeker | 🔍 | Peek at hands, bids and the deck. Or seize the lead outright. |
+| The Detective | 🕵️ | Read hands, bids and the undealt deck. Cast an illusion, or seize the lead outright. |
 | The Joker | 🃏 | Swap cards, hands and bids — but only 60% of swaps land. |
 | The Gambler | 🎲 | Raise your own stakes and flip coins with fate. |
 | The Judge | ⚖️ | Bend other players' bids, steal their tricks, disguise the truth. |

@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Web port of The Prediction Game (Judgement) -- multiplayer trick-taking card game",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",

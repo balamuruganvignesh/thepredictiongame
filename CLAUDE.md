@@ -69,7 +69,7 @@ Host toggles classic/chaos on a lobby card. All role logic lives in
 RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 
 - **EVERY seat gets a role**, dealt round-robin from a shuffled pool, so past
-  the pool size roles repeat. 5 standard roles (Peeker/Joker/Gambler/Judge/
+  the pool size roles repeat. 5 standard roles (Detective/Joker/Gambler/Judge/
   Guardian) + RARE Mirrorer, which only joins the pool 20% of games.
 - **Duplicate role holders are supported and must stay that way.** Every
   per-player effect is keyed by player id. The two effects keyed by TARGET must
@@ -127,3 +127,17 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 - `Room.detach` ignores a disconnect whose socket id no longer matches the
   seat, because a reconnect can land before the old socket's disconnect event.
 - All state is in memory. Restarting the server drops tables in progress.
+
+## Deployment
+
+Railway, from the GitHub repo — `railway.json` pins `npm run build` → `npm start`.
+One always-on Node process serves the built client AND the socket from the same
+origin, so there is nothing to proxy and no separate static host.
+
+**`numReplicas` must stay 1.** Tables live in one process's memory, so a second
+replica would strand half the players at a table the other replica can't see.
+For the same reason a redeploy drops games in progress — ship between rounds.
+
+Static hosts (Firebase Hosting, Netlify, Pages) CANNOT host this: a catch-all
+rewrite swallows `/socket.io/**` and the socket never connects, which looks
+exactly like players being kicked the moment they join.
