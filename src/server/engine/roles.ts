@@ -377,7 +377,11 @@ export class RoleManager {
   /**
    * Who actually leads the next trick. Normally the seat TrickManager picked
    * (the trick winner, or the round's opening leader), unless a Detective has
-   * claimed the lead with Set the Pace. Consumed on use.
+   * pointed the lead somewhere with Set the Pace. Consumed on use.
+   *
+   * The announcement deliberately doesn't say whether the Detective took the
+   * lead or forced it onto someone, so the new leader isn't automatically the
+   * Detective.
    */
   overrideNextLeader(defaultSeat: Seat): Seat {
     if (!this.rolesActive || this.pendingLeadId == null) return defaultSeat
@@ -388,7 +392,7 @@ export class RoleManager {
       return defaultSeat
     }
     this.announce(
-      `🕵️ SET THE PACE! The Detective seizes the lead from ${defaultSeat.name} and opens the next trick.`,
+      `🕵️ SET THE PACE! The Detective hands the lead to ${claimant.name} — they open the next trick instead of ${defaultSeat.name}.`,
     )
     return claimant
   }
@@ -639,9 +643,11 @@ export class RoleManager {
 
     // Resolve targets up front for abilities that need them.
     let target: Seat | null = null
-    if (def.target === 'other' || def.target === 'two') {
+    if (def.target === 'other' || def.target === 'two' || def.target === 'any') {
       const targetId = payload.targetId
-      if (!targetId || targetId === id) {
+      if (!targetId) return { ok: false, error: 'Pick a target first.' }
+      // Only "any" abilities may be aimed at yourself.
+      if (targetId === id && def.target !== 'any') {
         return { ok: false, error: 'Pick another player as the target.' }
       }
       target = this.findSeat(targetId)
@@ -677,14 +683,18 @@ export class RoleManager {
 
     switch (abilityId) {
       // ---- The Detective ----------------------------------------------------
-      case 'peek_high':
-      case 'peek_low': {
+      case 'read_table': {
         // One card from EVERY other hand rather than two from one: breadth over
-        // depth. It aims at nobody in particular, so no defense applies.
+        // depth. It aims at nobody in particular, so no defense applies. Which
+        // end of the hand to read is the player's call.
+        const peek = payload.peek
+        if (peek !== 'high' && peek !== 'low') {
+          return { ok: false, error: 'Call HIGHEST or LOWEST first.' }
+        }
         const others = this.roundSeats.filter((s) => s.id !== id && s.hand.length > 0)
         if (others.length === 0) return { ok: false, error: 'Nobody has cards left to read.' }
 
-        const high = abilityId === 'peek_high'
+        const high = peek === 'high'
         const lines = others.map((other) => {
           // Sort a COPY so the target's own hand order is untouched -- the
           // client renders it in the order the server sent.
@@ -694,23 +704,6 @@ export class RoleManager {
         this.privateResult(
           seat,
           `${high ? 'Highest' : 'Lowest'} card in every hand — ${lines.join('   ')}`,
-        )
-        return { ok: true }
-      }
-
-      case 'investigate': {
-        const t = target!
-        if (this.blockedByDefenses(t, abilityId)) {
-          this.privateResult(seat, 'Your investigation was NULLIFIED by the Guardian.')
-          return { ok: true }
-        }
-        const bidText = t.bid != null ? String(t.bid) : 'not placed yet'
-        const disguiseNote = this.disguisedBids.has(t.id) ? ' (their public bid is a DISGUISE)' : ''
-        this.privateResult(
-          seat,
-          `${t.name} — true bid: ${bidText}${disguiseNote}, tricks won: ${t.tricksWon}, doubled: ${
-            t.hasDoubled ? "YES — they're swinging for double" : 'no'
-          }`,
         )
         return { ok: true }
       }
@@ -766,19 +759,33 @@ export class RoleManager {
       }
 
       case 'set_pace': {
-        if (seat.hand.length === 0) {
-          return { ok: false, error: 'You have no cards left to lead with.' }
+        const t = target!
+        if (t.hand.length === 0) {
+          return { ok: false, error: 'They have no cards left to lead with.' }
         }
         if (this.pendingLeadId != null) {
           return { ok: false, error: 'The lead is already claimed for the next trick.' }
         }
-        this.pendingLeadId = id
-        // No public announcement here: the reveal lands when the lead actually
-        // changes hands (see overrideNextLeader), so claiming it during bidding
-        // doesn't tip anyone off early.
+        // Aiming it at yourself is just seizing the lead -- no target to defend,
+        // and no point reading a hand you already hold.
+        if (t.id === id) {
+          this.pendingLeadId = id
+          this.privateResult(
+            seat,
+            "You've claimed the lead. You open the next trick — the table will see the lead jump to you, so expect questions.",
+          )
+          return { ok: true }
+        }
+        // Forcing someone else into the lead aims at them, so it can be blocked.
+        if (this.blockedByDefenses(t, abilityId)) {
+          this.privateResult(seat, 'Your attempt to set the pace was NULLIFIED by the Guardian.')
+          return { ok: true }
+        }
+        this.pendingLeadId = t.id
+        const hand = [...t.hand].sort((a, b) => b.rank - a.rank).map(cardText).join('   ')
         this.privateResult(
           seat,
-          "You've claimed the lead. You open the next trick — the table will see the lead jump to you, so expect questions.",
+          `${t.name} opens the next trick, whether they like it or not — and their ENTIRE hand reads: ${hand}`,
         )
         return { ok: true }
       }
@@ -1029,7 +1036,7 @@ export class RoleManager {
         this.syncBids()
         this.privateResult(
           seat,
-          `${t.name}'s bid now shows as ${fake} to the table (really ${realBid}). Only Investigate sees through it.`,
+          `${t.name}'s bid now shows as ${fake} to the table (really ${realBid}). Nobody sees through it until scoring.`,
         )
         this.privateResult(
           t,

@@ -4,34 +4,50 @@
 
 import { useEffect, useState } from 'react'
 import * as RoleDefs from '@shared/roleDefs'
+import type { Suit } from '@shared/cards'
 import type { RoleState, UseAbilityPayload } from '@shared/protocol'
+
+/** The suits Fortune can name -- no Jokers, they aren't a suit anyone bids around. */
+const SUITS: { suit: Suit; glyph: string }[] = [
+  { suit: 'Spades', glyph: '♠' },
+  { suit: 'Diamonds', glyph: '♦' },
+  { suit: 'Clubs', glyph: '♣' },
+  { suit: 'Hearts', glyph: '♥' },
+]
 
 type Props = {
   roleState: RoleState
-  /** Everyone but you, in the same fixed order as the top bar / score sheet. */
-  targets: { id: string; name: string }[]
+  /** The whole table, in the same fixed order as the top bar / score sheet. */
+  players: { id: string; name: string }[]
+  meId: string | null
   lastResult: string | null
   onUse: (payload: UseAbilityPayload) => void
   onClose: () => void
 }
 
-export function RolePanel({ roleState, targets, lastResult, onUse, onClose }: Props) {
+export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose }: Props) {
   const role = RoleDefs.getRole(roleState.roleId)
   const def = RoleDefs.getAbility(roleState.abilityId)
 
   const [selected, setSelected] = useState<string[]>([])
   const [direction, setDirection] = useState<1 | -1>(1)
+  const [suit, setSuit] = useState<Suit | null>(null)
+  const [peek, setPeek] = useState<'high' | 'low' | null>(null)
   const [nag, setNag] = useState(false)
 
-  // A new ability (new round, or a retry that kept it live) clears the picker.
+  // A new ability (new round, or a retry that kept it live) clears the pickers.
   useEffect(() => {
     setSelected([])
+    setSuit(null)
+    setPeek(null)
     setNag(false)
   }, [roleState.abilityId, roleState.used, lastResult])
 
   if (!role) return null
 
-  const needed = def?.target === 'two' ? 2 : def?.target === 'other' ? 1 : 0
+  const needed = def?.target === 'two' ? 2 : def?.target === 'other' || def?.target === 'any' ? 1 : 0
+  // "any" abilities can be aimed at yourself, so you stay in the picker.
+  const pickable = def?.target === 'any' ? players : players.filter((p) => p.id !== meId)
 
   const toggle = (id: string) => {
     setSelected((current) => {
@@ -44,12 +60,24 @@ export function RolePanel({ roleState, targets, lastResult, onUse, onClose }: Pr
 
   const use = () => {
     if (roleState.used) return
-    if (selected.length < needed) {
+    // Every picker the ability shows has to be answered before it fires --
+    // the server rejects a half-filled payload anyway.
+    if (
+      selected.length < needed ||
+      (def?.extra === 'suit' && !suit) ||
+      (def?.extra === 'peek' && !peek)
+    ) {
       setNag(true)
       return
     }
     setNag(false)
-    onUse({ targetId: selected[0], targetId2: selected[1], direction })
+    onUse({
+      targetId: selected[0],
+      targetId2: selected[1],
+      direction,
+      suit: suit ?? undefined,
+      peek: peek ?? undefined,
+    })
   }
 
   return (
@@ -79,8 +107,10 @@ export function RolePanel({ roleState, targets, lastResult, onUse, onClose }: Pr
 
         {needed > 0 && !roleState.used && (
           <>
-            <p className={`role__picker-label${nag ? ' is-nagging' : ''}`}>
-              {nag
+            <p
+              className={`role__picker-label${nag && selected.length < needed ? ' is-nagging' : ''}`}
+            >
+              {nag && selected.length < needed
                 ? needed === 2
                   ? 'pick TWO players first!'
                   : 'pick a target first!'
@@ -88,14 +118,14 @@ export function RolePanel({ roleState, targets, lastResult, onUse, onClose }: Pr
                   ? 'pick two players'
                   : 'pick a target'}
             </p>
-            <div className={`role__targets${targets.length > 6 ? ' is-big' : ''}`}>
-              {targets.map((target) => (
+            <div className={`role__targets${pickable.length > 6 ? ' is-big' : ''}`}>
+              {pickable.map((target) => (
                 <button
                   key={target.id}
                   className={`role__target${selected.includes(target.id) ? ' is-selected' : ''}`}
                   onClick={() => toggle(target.id)}
                 >
-                  {target.name}
+                  {target.id === meId ? `${target.name} (you)` : target.name}
                 </button>
               ))}
             </div>
@@ -114,6 +144,44 @@ export function RolePanel({ roleState, targets, lastResult, onUse, onClose }: Pr
               </button>
             ))}
           </div>
+        )}
+
+        {def?.extra === 'suit' && !roleState.used && (
+          <>
+            <p className={`role__picker-label${nag && !suit ? ' is-nagging' : ''}`}>
+              {nag && !suit ? 'name a suit first!' : 'name a suit'}
+            </p>
+            <div className="role__extra">
+              {SUITS.map((option) => (
+                <button
+                  key={option.suit}
+                  className={`role__target${suit === option.suit ? ' is-selected' : ''}`}
+                  onClick={() => setSuit(option.suit)}
+                >
+                  {option.glyph} {option.suit}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {def?.extra === 'peek' && !roleState.used && (
+          <>
+            <p className={`role__picker-label${nag && !peek ? ' is-nagging' : ''}`}>
+              {nag && !peek ? 'call it first!' : 'call it'}
+            </p>
+            <div className="role__extra">
+              {(['high', 'low'] as const).map((end) => (
+                <button
+                  key={end}
+                  className={`role__target${peek === end ? ' is-selected' : ''}`}
+                  onClick={() => setPeek(end)}
+                >
+                  {end === 'high' ? 'HIGHEST' : 'LOWEST'}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {lastResult && <p className="role__result">{lastResult}</p>}

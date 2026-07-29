@@ -119,8 +119,9 @@ export class TrickManager {
     cardsDealt: number,
     trumpSuit: string,
   ) {
-    // Chaos mode's Detective can claim the lead (Set the Pace), including for the
-    // opening trick if they used it during bidding. No-op in classic.
+    // Chaos mode's Detective can point the lead at anyone (Set the Pace),
+    // including for the opening trick if they used it during bidding. No-op in
+    // classic.
     let leader = this.roles.overrideNextLeader(leaderSeat)
 
     for (let trickNumber = 1; trickNumber <= cardsDealt; trickNumber++) {
@@ -161,7 +162,7 @@ export class TrickManager {
         counted,
       })
 
-      // The winner leads next, unless a Detective seized it (Set the Pace).
+      // The winner leads next, unless a Detective redirected it (Set the Pace).
       // Skipped after the final trick: there's no next lead to take, and
       // resolving it there would announce a seizure that never happens.
       leader =

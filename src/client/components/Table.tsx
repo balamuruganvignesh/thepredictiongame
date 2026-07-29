@@ -82,8 +82,6 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
     store.roleBannerKey > 0 &&
     store.roleBannerKey !== bannerDismissed
 
-  const targets = players.filter((player) => player.id !== store.meId)
-
   const play = (card: Card) => actions.playCard(card)
 
   return (
@@ -186,7 +184,8 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
       {roleOpen && store.roleState && (
         <RolePanel
           roleState={store.roleState}
-          targets={targets}
+          players={players}
+          meId={store.meId}
           lastResult={store.lastAbilityResult}
           onUse={actions.useAbility}
           onClose={() => setRoleOpen(false)}

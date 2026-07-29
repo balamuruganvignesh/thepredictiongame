@@ -1241,7 +1241,8 @@ button.seat:hover {
 }
 
 .role__targets,
-.role__direction {
+.role__direction,
+.role__extra {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

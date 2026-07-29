@@ -5,18 +5,23 @@
 // Every round each player is dealt ONE of their role's abilities at random
 // (use it or lose it -- it expires at scoring).
 
-export type AbilityTarget = 'none' | 'other' | 'two'
+export type AbilityTarget = 'none' | 'other' | 'two' | 'any'
 
 export type AbilityDef = {
   id: string
   name: string
   desc: string
+  /**
+   * Who the ability aims at. "any" includes YOURSELF -- the picker lists the
+   * whole table and self-targeting is legal (nothing can defend against it).
+   */
   target: AbilityTarget
   /**
    * Extra input the ability needs beyond a target: "direction" shows a
-   * +1 / -1 picker, "suit" shows a ♠ ♦ ♣ ♥ picker.
+   * +1 / -1 picker, "suit" shows a ♠ ♦ ♣ ♥ picker, "peek" shows a
+   * HIGHEST / LOWEST picker.
    */
-  extra?: 'direction' | 'suit'
+  extra?: 'direction' | 'suit' | 'peek'
   /** Short usability note surfaced in the UI ("play phase only" etc.). */
   note?: string
 }
@@ -39,26 +44,13 @@ export type RoleDef = {
 
 export const abilities: Record<string, AbilityDef> = {
   // ---- The Detective ------------------------------------------------------
-  peek_high: {
-    id: 'peek_high',
-    name: 'High Peek',
-    desc: 'Secretly read the HIGHEST card in every other player’s hand. One card each, the whole table at once.',
+  read_table: {
+    id: 'read_table',
+    name: 'Read the Table',
+    desc: 'Call it — HIGHEST or LOWEST — then secretly read that card in every other player’s hand. One card each, the whole table at once.',
     target: 'none',
+    extra: 'peek',
     note: 'private — nobody is told. targets no one, so nothing can block it',
-  },
-  peek_low: {
-    id: 'peek_low',
-    name: 'Low Peek',
-    desc: 'Secretly read the LOWEST card in every other player’s hand. One card each, the whole table at once.',
-    target: 'none',
-    note: 'private — nobody is told. targets no one, so nothing can block it',
-  },
-  investigate: {
-    id: 'investigate',
-    name: 'Investigate',
-    desc: 'See a player’s TRUE bid, trick count, and whether they doubled. Sees through any disguise.',
-    target: 'other',
-    note: 'private — nobody is told. a Guardian’s Nullify can cancel it',
   },
   illusion: {
     id: 'illusion',
@@ -78,9 +70,9 @@ export const abilities: Record<string, AbilityDef> = {
   set_pace: {
     id: 'set_pace',
     name: 'Set the Pace',
-    desc: 'Seize the lead: YOU open the next trick instead of whoever won the last one. Knowing the table is worth little if you can’t choose the suit.',
-    target: 'none',
-    note: 'the lead change is public — it may give you away. targets no one, so nothing can block it',
+    desc: 'Name ANYONE to open the next trick. Take it yourself to choose the suit — or force it onto a player who was hiding, and secretly read their ENTIRE hand as you do it.',
+    target: 'any',
+    note: 'the lead change is public — it may give you away. aim it at yourself and nothing can block it; aim it at someone else and a Guardian’s Nullify can cancel it',
   },
 
   // ---- The Joker ----------------------------------------------------------
@@ -221,9 +213,9 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🕵️',
     tagline: 'Knowledge is power.',
     blurb:
-      'The information role. Read the whole table a card at a time, interrogate a bid, or name a suit and see what never got dealt — then bid like a prophet. When knowing isn’t enough, cast an Illusion to rattle them, or Set the Pace and take the lead yourself.',
+      'The information role. Read the whole table a card at a time, or name a suit and see what never got dealt — then bid like a prophet. When knowing isn’t enough, cast an Illusion to rattle them, or Set the Pace to decide who opens the next trick.',
     color: '#66BEFF',
-    abilities: ['peek_high', 'peek_low', 'investigate', 'illusion', 'fortune', 'set_pace'],
+    abilities: ['read_table', 'illusion', 'fortune', 'set_pace'],
   },
   joker: {
     id: 'joker',
@@ -261,7 +253,7 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🛡️',
     tagline: 'Not today.',
     blurb:
-      'The defensive role. Nullify cancels ANY ability aimed at you — an interrogation, a swap, a verdict, a curse, even a Mirrorer’s bet — for that round. Bid Lock shuts down bid tampering on top of that.',
+      'The defensive role. Nullify cancels ANY ability aimed at you — a swap, a verdict, a curse, a Detective forcing you into the lead, even a Mirrorer’s bet — for that round. Bid Lock shuts down bid tampering on top of that.',
     color: '#7ADE8E',
     abilities: ['shield', 'lock', 'nullify', 'gravekeeper'],
   },

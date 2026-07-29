@@ -132,6 +132,8 @@ export type UseAbilityPayload = {
   targetId2?: PlayerId
   direction?: 1 | -1
   suit?: Suit
+  /** Read the Table: which end of the hand to read. */
+  peek?: 'high' | 'low'
 }
 
 /**

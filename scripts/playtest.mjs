@@ -90,10 +90,13 @@ function makeBot(name, index) {
       bot.abilityTried = true
       setTimeout(() => {
         const others = (bot.lobby?.roster ?? []).filter((r) => r.id !== bot.id).map((r) => r.id)
+        const suits = ['Spades', 'Diamonds', 'Clubs', 'Hearts']
         socket.emit('useAbility', {
           targetId: others[0],
           targetId2: others[1],
           direction: Math.random() < 0.5 ? 1 : -1,
+          suit: suits[Math.floor(Math.random() * suits.length)],
+          peek: Math.random() < 0.5 ? 'high' : 'low',
         })
       }, 300 + Math.random() * 900)
     }
