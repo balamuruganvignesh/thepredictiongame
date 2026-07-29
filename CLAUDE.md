@@ -130,7 +130,9 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 
 ## Deployment
 
-Fly.io, via `Dockerfile` + `fly.toml` — `fly deploy` from the repo root. The
+Fly.io, via `Dockerfile` + `fly.toml`. **Pushing to `main` auto-deploys** via
+`.github/workflows/fly-deploy.yml` (uses the `FLY_API_TOKEN` repo secret); `fly
+deploy --ha=false` from the repo root does the same thing by hand. The
 Dockerfile multi-stage builds (`npm run build`) then runs `node
 dist/server/index.js`, the same always-on Node process that serves the built
 client AND the socket from one origin, so there is nothing to proxy and no
