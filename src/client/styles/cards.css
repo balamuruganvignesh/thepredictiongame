@@ -1,0 +1,249 @@
+/*
+ * Playing cards, drawn entirely in CSS -- no image assets to load or license.
+ * The look follows a real deck (and the reference web build): a white rounded
+ * face with a hairline edge, a rank-over-suit index in the top-left mirrored
+ * upside-down in the bottom-right, traditional pip arrangements for 2-10, one
+ * big pip for the Ace, and a framed court panel for J/Q/K.
+ */
+
+.card {
+  position: relative;
+  width: var(--card-w);
+  height: var(--card-h);
+  flex: none;
+  background: var(--card-face);
+  border-radius: var(--card-radius);
+  box-shadow:
+    0 0 0 1px var(--card-edge),
+    0 2px 6px rgb(0 0 0 / 45%);
+  color: var(--card-black);
+  font-family: var(--font-card);
+  user-select: none;
+  overflow: hidden;
+}
+
+.card--red {
+  color: var(--card-red);
+}
+
+.card--joker {
+  color: var(--card-joker);
+}
+
+/* ---- Corner indices --------------------------------------------------------- */
+
+.card__index {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.92;
+  font-weight: 700;
+}
+
+.card__index--tl {
+  top: 4%;
+  left: 5%;
+}
+
+/* The traditional mirrored index, so the card reads either way up. */
+.card__index--br {
+  right: 5%;
+  bottom: 4%;
+  transform: rotate(180deg);
+}
+
+.card__rank {
+  font-size: calc(var(--card-w) * 0.28);
+}
+
+.card__index .card__suit {
+  font-size: calc(var(--card-w) * 0.2);
+}
+
+/* ---- Middle art ------------------------------------------------------------- */
+
+.card__art {
+  position: absolute;
+  inset: 5% 24%;
+}
+
+.card__pip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: calc(var(--card-w) * 0.22);
+  line-height: 1;
+}
+
+.card__pip--flip {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.card__pip--ace {
+  font-size: calc(var(--card-w) * 0.62);
+}
+
+/* Court cards: a bordered panel with the big index letter, suits mirrored top
+   and bottom. Stands in for the illustrated figure of a printed deck. */
+.card__court {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6% 0;
+  border: 1px solid currentcolor;
+  border-radius: calc(var(--card-radius) * 0.6);
+  background: color-mix(in srgb, currentcolor 7%, transparent);
+}
+
+.card__court-letter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(var(--card-w) * 0.52);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.card__court-suit {
+  font-size: calc(var(--card-w) * 0.18);
+  line-height: 1;
+}
+
+.card__court-suit--bottom {
+  transform: rotate(180deg);
+}
+
+.card__joker-star {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--card-w) * 0.6);
+}
+
+/* ---- Backs and placeholders ------------------------------------------------- */
+
+.card--back {
+  background: var(--card-back);
+  box-shadow:
+    0 0 0 1px #d2d6e6,
+    0 2px 6px rgb(0 0 0 / 45%);
+}
+
+.card--back::after {
+  content: '';
+  position: absolute;
+  inset: 8%;
+  border-radius: calc(var(--card-radius) * 0.6);
+  background:
+    repeating-linear-gradient(45deg, transparent 0 4px, rgb(255 255 255 / 8%) 4px 8px),
+    var(--card-back-inner);
+}
+
+/* An empty slot -- "this player hasn't played yet". */
+.card--outline {
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed color-mix(in srgb, var(--stroke) 80%, transparent);
+}
+
+/* A decorative stack of backs, borrowed from the reference's deck widget. */
+.deck-stack {
+  position: relative;
+  width: var(--card-w);
+  height: var(--card-h);
+}
+
+.deck-stack > .card {
+  position: absolute;
+  inset: 0;
+}
+
+.deck-stack > .card:nth-child(2) {
+  translate: 4px -4px;
+}
+
+.deck-stack > .card:nth-child(3) {
+  translate: 8px -8px;
+}
+
+/* ---- Interaction states ----------------------------------------------------- */
+
+.card-button {
+  position: relative;
+  padding: 0;
+  background: none;
+  border: none;
+  line-height: 0;
+  transition:
+    transform var(--t-quick) ease-out,
+    filter var(--t-quick) ease-out;
+}
+
+/* Playable cards get a warm ring and lift under the cursor. */
+.card-button--playable .card {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 4px 10px rgb(0 0 0 / 50%);
+}
+
+.card-button--playable:hover,
+.card-button--playable:focus-visible {
+  transform: translateY(-14px);
+}
+
+.card-button--playable:active {
+  transform: translateY(-8px);
+}
+
+/* Keep the real card face but mute it, so an illegal play reads as "not now"
+   rather than blanked out. */
+.card-button--muted {
+  cursor: default;
+}
+
+.card-button--muted .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgb(10 10 14 / 55%);
+}
+
+/* Trick winner / losers. */
+.card-slot--winner .card {
+  box-shadow:
+    0 0 0 3px var(--positive),
+    0 6px 16px rgb(0 0 0 / 55%);
+  transform: scale(1.12);
+}
+
+.card-slot--lost .card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(8 8 12 / 50%);
+  animation: veil-in var(--t-normal) ease-out;
+}
+
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Cards land on the table rather than teleporting there. */
+@keyframes card-pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+}
+
+.card-pop {
+  animation: card-pop 280ms var(--ease-pop);
+}
