@@ -1,0 +1,22 @@
+# Fly.io app config. App name gets set on first `fly launch` / `fly apps create`.
+app = "thepredictiongame"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # All table state lives in one process's memory -- a machine that stops
+  # would drop every game in progress, so it must never autostop, and there
+  # must never be more than one running at once.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

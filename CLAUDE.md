@@ -130,13 +130,18 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 
 ## Deployment
 
-Railway, from the GitHub repo — `railway.json` pins `npm run build` → `npm start`.
-One always-on Node process serves the built client AND the socket from the same
-origin, so there is nothing to proxy and no separate static host.
+Fly.io, via `Dockerfile` + `fly.toml` — `fly deploy` from the repo root. The
+Dockerfile multi-stage builds (`npm run build`) then runs `node
+dist/server/index.js`, the same always-on Node process that serves the built
+client AND the socket from one origin, so there is nothing to proxy and no
+separate static host.
 
-**`numReplicas` must stay 1.** Tables live in one process's memory, so a second
-replica would strand half the players at a table the other replica can't see.
-For the same reason a redeploy drops games in progress — ship between rounds.
+**`fly.toml` pins `auto_stop_machines = false` and `min_machines_running = 1`
+on purpose — do not change either.** Tables live in one process's memory:
+autostop would drop every game in progress the moment traffic goes quiet, and
+more than one machine would strand half the players at a table the other
+machine can't see. For the same reason a redeploy drops games in progress —
+ship between rounds.
 
 Static hosts (Firebase Hosting, Netlify, Pages) CANNOT host this: a catch-all
 rewrite swallows `/socket.io/**` and the socket never connects, which looks
