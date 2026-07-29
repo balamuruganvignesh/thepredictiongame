@@ -52,6 +52,11 @@ export type Store = {
   currentTurnId: string | null
   leadSuit: string | null
   hand: Card[]
+  /**
+   * Card keys the Detective's Illusion has made LOOK unplayable. Cosmetic
+   * only -- every one of them is still perfectly legal to play.
+   */
+  illusionCards: string[]
   plays: PlayEntry[]
   trickNumber: number
   totalTricks: number
@@ -98,6 +103,7 @@ const initialStore: Store = {
   currentTurnId: null,
   leadSuit: null,
   hand: [],
+  illusionCards: [],
   plays: [],
   trickNumber: 0,
   totalTricks: 0,
@@ -124,6 +130,7 @@ type Action =
   | { type: 'bidding'; data: Extract<GameStateUpdate, { phase: 'Bidding' }> }
   | { type: 'playing' }
   | { type: 'hand'; hand: Card[] }
+  | { type: 'illusion'; cards: string[] }
   | { type: 'trickUpdate'; data: TrickUpdate }
   | { type: 'trickResolved'; data: TrickResolved }
   | { type: 'score'; data: ScoreUpdate }
@@ -217,6 +224,7 @@ function reducer(state: Store, action: Action): Store {
         currentTurnId: null,
         leadSuit: null,
         hand: [],
+        illusionCards: [],
         plays: [],
         trickNumber: 0,
         trickWinnerId: null,
@@ -241,6 +249,9 @@ function reducer(state: Store, action: Action): Store {
 
     case 'hand':
       return { ...state, hand: action.hand }
+
+    case 'illusion':
+      return { ...state, illusionCards: action.cards }
 
     case 'trickUpdate':
       return {
@@ -393,6 +404,7 @@ function reducer(state: Store, action: Action): Store {
         currentTurnId: data.currentTurnId,
         leadSuit: data.leadSuit,
         hand: data.hand,
+        illusionCards: data.illusion,
         plays: data.plays,
         trickNumber: data.trickNumber,
         trickWinnerId: null,
@@ -451,6 +463,7 @@ export function useGame() {
     })
 
     socket.on('dealHand', (data) => dispatch({ type: 'hand', hand: data.hand }))
+    socket.on('illusion', (data) => dispatch({ type: 'illusion', cards: data.cards }))
     socket.on('trickUpdate', (data) => dispatch({ type: 'trickUpdate', data }))
     socket.on('trickResolved', (data) => dispatch({ type: 'trickResolved', data }))
     socket.on('scoreUpdate', (data) => dispatch({ type: 'score', data }))

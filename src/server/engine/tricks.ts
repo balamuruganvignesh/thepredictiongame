@@ -119,7 +119,7 @@ export class TrickManager {
     cardsDealt: number,
     trumpSuit: string,
   ) {
-    // Chaos mode's Peeker can claim the lead (Set the Pace), including for the
+    // Chaos mode's Detective can claim the lead (Set the Pace), including for the
     // opening trick if they used it during bidding. No-op in classic.
     let leader = this.roles.overrideNextLeader(leaderSeat)
 
@@ -161,7 +161,7 @@ export class TrickManager {
         counted,
       })
 
-      // The winner leads next, unless a Peeker seized it (Set the Pace).
+      // The winner leads next, unless a Detective seized it (Set the Pace).
       // Skipped after the final trick: there's no next lead to take, and
       // resolving it there would announce a seizure that never happens.
       leader =

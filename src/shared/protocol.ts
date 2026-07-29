@@ -7,7 +7,7 @@
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
 //                   abilityResult, roleAnnounce, roleSync, snapshot
 
-import type { Card } from './cards'
+import type { Card, Suit } from './cards'
 
 export type PlayerId = string
 export type GameMode = 'classic' | 'chaos'
@@ -131,7 +131,16 @@ export type UseAbilityPayload = {
   targetId?: PlayerId
   targetId2?: PlayerId
   direction?: 1 | -1
+  suit?: Suit
 }
+
+/**
+ * The Detective's Illusion: card keys in YOUR hand to render as if they were
+ * unplayable. Purely cosmetic -- the server never consults this when checking
+ * a play, so every greyed card is still perfectly legal. An empty list clears
+ * the effect.
+ */
+export type Illusion = { cards: string[] }
 
 // ---- Reconnect --------------------------------------------------------------
 
@@ -158,6 +167,8 @@ export type Snapshot = {
   trickNumber: number
   hand: Card[]
   roleState: RoleState | null
+  /** Any Illusion currently cast on this player's hand. */
+  illusion: string[]
   /** Recent chat, so a refresh doesn't wipe the conversation. */
   chat: ChatMessage[]
 }
@@ -185,6 +196,7 @@ export interface ServerToClientEvents {
   abilityResult: (data: AbilityResult) => void
   roleAnnounce: (data: RoleAnnounce) => void
   roleSync: (data: RoleSync) => void
+  illusion: (data: Illusion) => void
   snapshot: (data: Snapshot) => void
 }
 

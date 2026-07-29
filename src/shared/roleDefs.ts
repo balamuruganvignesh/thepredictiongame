@@ -12,8 +12,11 @@ export type AbilityDef = {
   name: string
   desc: string
   target: AbilityTarget
-  /** Extra input the ability needs: "direction" shows a +1 / -1 picker. */
-  extra?: 'direction'
+  /**
+   * Extra input the ability needs beyond a target: "direction" shows a
+   * +1 / -1 picker, "suit" shows a ♠ ♦ ♣ ♥ picker.
+   */
+  extra?: 'direction' | 'suit'
   /** Short usability note surfaced in the UI ("play phase only" etc.). */
   note?: string
 }
@@ -35,20 +38,20 @@ export type RoleDef = {
 }
 
 export const abilities: Record<string, AbilityDef> = {
-  // ---- The Peeker ---------------------------------------------------------
+  // ---- The Detective ------------------------------------------------------
   peek_high: {
     id: 'peek_high',
     name: 'High Peek',
-    desc: 'Secretly view the TOP TWO cards in another player’s hand.',
-    target: 'other',
-    note: 'private — nobody is told. a Guardian’s Nullify can cancel it',
+    desc: 'Secretly read the HIGHEST card in every other player’s hand. One card each, the whole table at once.',
+    target: 'none',
+    note: 'private — nobody is told. targets no one, so nothing can block it',
   },
   peek_low: {
     id: 'peek_low',
     name: 'Low Peek',
-    desc: 'Secretly view the BOTTOM TWO cards in another player’s hand.',
-    target: 'other',
-    note: 'private — nobody is told. a Guardian’s Nullify can cancel it',
+    desc: 'Secretly read the LOWEST card in every other player’s hand. One card each, the whole table at once.',
+    target: 'none',
+    note: 'private — nobody is told. targets no one, so nothing can block it',
   },
   investigate: {
     id: 'investigate',
@@ -57,11 +60,19 @@ export const abilities: Record<string, AbilityDef> = {
     target: 'other',
     note: 'private — nobody is told. a Guardian’s Nullify can cancel it',
   },
+  illusion: {
+    id: 'illusion',
+    name: 'Illusion',
+    desc: 'Misdirection. Either ONE player sees their whole hand greyed out, or EVERY player sees one card greyed. The cards still play perfectly — they just look dead.',
+    target: 'none',
+    note: 'silent — nobody is told it was you. purely cosmetic, so all it costs them is nerve',
+  },
   fortune: {
     id: 'fortune',
     name: 'Fortune',
-    desc: 'Secretly view the top 5 undealt cards of the deck — every card nobody was dealt.',
+    desc: 'Name a suit and secretly view the top 2 undealt cards of it — cards nobody was dealt.',
     target: 'none',
+    extra: 'suit',
     note: 'private — nobody is told. targets no one, so nothing can block it',
   },
   set_pace: {
@@ -199,20 +210,20 @@ export const abilities: Record<string, AbilityDef> = {
     name: 'Mirror Bet',
     desc: 'Secretly bet on another player. At scoring: +3 for every trick they won, -1 for every trick they didn’t.',
     target: 'other',
-    note: 'bidding phase only — bet before the first card falls. a Guardian’s Nullify KILLS the bet outright',
+    note: 'bidding phase only — bet before the first card falls. a Guardian’s Nullify stops the bet for THAT ROUND only; you get a fresh one next deal',
   },
 }
 
 export const roles: Record<string, RoleDef> = {
-  peeker: {
-    id: 'peeker',
-    name: 'The Peeker',
-    emoji: '🔍',
+  detective: {
+    id: 'detective',
+    name: 'The Detective',
+    emoji: '🕵️',
     tagline: 'Knowledge is power.',
     blurb:
-      'The information role. Peek at hands, bids, and the deck itself — then bid like a prophet. And when knowing isn’t enough, Set the Pace and take the lead for yourself.',
+      'The information role. Read the whole table a card at a time, interrogate a bid, or name a suit and see what never got dealt — then bid like a prophet. When knowing isn’t enough, cast an Illusion to rattle them, or Set the Pace and take the lead yourself.',
     color: '#66BEFF',
-    abilities: ['peek_high', 'peek_low', 'investigate', 'fortune', 'set_pace'],
+    abilities: ['peek_high', 'peek_low', 'investigate', 'illusion', 'fortune', 'set_pace'],
   },
   joker: {
     id: 'joker',
@@ -250,7 +261,7 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🛡️',
     tagline: 'Not today.',
     blurb:
-      'The defensive role. Nullify cancels ANY ability aimed at you — peeks, swaps, verdicts, curses, even a Mirrorer’s bet — and Bid Lock shuts down bid tampering on top of that.',
+      'The defensive role. Nullify cancels ANY ability aimed at you — an interrogation, a swap, a verdict, a curse, even a Mirrorer’s bet — for that round. Bid Lock shuts down bid tampering on top of that.',
     color: '#7ADE8E',
     abilities: ['shield', 'lock', 'nullify', 'gravekeeper'],
   },
@@ -260,7 +271,7 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🪞',
     tagline: 'Your fate is my fate.',
     blurb:
-      'RARE. One permanent ability, every round: bet on a player and ride their tricks — their wins pay you, their losses cost you. Beware: a Guardian’s Nullify wipes the bet out entirely.',
+      'RARE. One permanent ability, every round: bet on a player and ride their tricks — their wins pay you, their losses cost you. A Guardian’s Nullify can stop a bet cold, but only for that round — the next deal hands you the ability back.',
     color: '#B2D2E0',
     abilities: ['mirror_bet'],
     rare: true,
@@ -268,10 +279,10 @@ export const roles: Record<string, RoleDef> = {
 }
 
 /** Stable order for the lobby gallery. */
-export const roleOrder = ['peeker', 'joker', 'gambler', 'judge', 'guardian', 'mirrorer']
+export const roleOrder = ['detective', 'joker', 'gambler', 'judge', 'guardian', 'mirrorer']
 
 /** The non-rare roles RoleManager deals from by default. */
-export const standardRoleOrder = ['peeker', 'joker', 'gambler', 'judge', 'guardian']
+export const standardRoleOrder = ['detective', 'joker', 'gambler', 'judge', 'guardian']
 
 export function getRole(roleId: string | null | undefined): RoleDef | null {
   if (!roleId) return null

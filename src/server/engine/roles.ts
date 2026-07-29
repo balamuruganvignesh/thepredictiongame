@@ -17,8 +17,8 @@
 // a LIST of saboteurs per target and armedGravekeeper is a COUNT. disguisedBids
 // is deliberately last-write-wins -- a bid can only display one number.
 
-import type { Card } from '@shared/cards'
-import { sortHand } from '@shared/cards'
+import type { Card, Suit } from '@shared/cards'
+import { cardKey, sortHand } from '@shared/cards'
 import { calculateScore } from '@shared/scoring'
 import * as RoleDefs from '@shared/roleDefs'
 import type { GameMode, RoleState, UseAbilityPayload } from '@shared/protocol'
@@ -41,6 +41,10 @@ const SWAP_ABILITIES = new Set(['hand_swap', 'card_theft', 'bid_chaos', 'fate_sw
 
 // Consecutive losing All In flips before the next one is a guaranteed win.
 const ALL_IN_PITY = 3
+
+// Suits the Detective's Fortune can name. Jokers aren't nameable: they're not
+// a suit anybody bids around.
+const FORTUNE_SUITS: Suit[] = ['Spades', 'Diamonds', 'Clubs', 'Hearts']
 
 // How much rarer a repeat gets each time it lands again. Weight is
 // DECAY^streak against 1.0 for every other option: with four abilities a first
@@ -113,8 +117,14 @@ export class RoleManager {
   // failed against (a retry has to find a new mark).
   private swapAttempts = new Map<string, number>()
   private swapTriedTargets = new Map<string, Set<string>>()
-  /** Peeker's Set the Pace: who has claimed the next trick's lead. */
+  /** The Detective's Set the Pace: who has claimed the next trick's lead. */
   private pendingLeadId: string | null = null
+  /**
+   * The Detective's Illusion: player id -> card keys their client should render
+   * as dead. Cosmetic only; nothing here is ever consulted when validating a
+   * play, so an illusioned card is still perfectly legal.
+   */
+  private illusionCards = new Map<string, string[]>()
 
   constructor(private io: EngineIO) {}
 
@@ -177,6 +187,17 @@ export class RoleManager {
 
   private resendHand(seat: Seat) {
     this.io.send(seat, 'dealHand', { hand: seat.hand })
+  }
+
+  /** Greys the given cards in one player's own view of their hand. */
+  private castIllusion(seat: Seat, cards: string[]) {
+    this.illusionCards.set(seat.id, cards)
+    this.io.send(seat, 'illusion', { cards })
+  }
+
+  /** Any Illusion on this player, for the reconnect snapshot. */
+  getIllusion(seat: Seat): string[] {
+    return this.illusionCards.get(seat.id) ?? []
   }
 
   /** The bid map clients should DISPLAY: real bids with disguises applied. */
@@ -311,8 +332,12 @@ export class RoleManager {
     this.swapAttempts.clear()
     this.swapTriedTargets.clear()
     this.pendingLeadId = null
+    this.illusionCards.clear()
 
     for (const seat of seats) {
+      // Last round's Illusion dies with the deal.
+      this.io.send(seat, 'illusion', { cards: [] })
+
       const role = RoleDefs.getRole(this.roleBySeat.get(seat.id))
       if (!role) continue
 
@@ -351,7 +376,7 @@ export class RoleManager {
 
   /**
    * Who actually leads the next trick. Normally the seat TrickManager picked
-   * (the trick winner, or the round's opening leader), unless a Peeker has
+   * (the trick winner, or the round's opening leader), unless a Detective has
    * claimed the lead with Set the Pace. Consumed on use.
    */
   overrideNextLeader(defaultSeat: Seat): Seat {
@@ -363,7 +388,7 @@ export class RoleManager {
       return defaultSeat
     }
     this.announce(
-      `🔍 SET THE PACE! The Peeker seizes the lead from ${defaultSeat.name} and opens the next trick.`,
+      `🕵️ SET THE PACE! The Detective seizes the lead from ${defaultSeat.name} and opens the next trick.`,
     )
     return claimant
   }
@@ -651,24 +676,24 @@ export class RoleManager {
     }
 
     switch (abilityId) {
-      // ---- The Peeker -------------------------------------------------------
+      // ---- The Detective ----------------------------------------------------
       case 'peek_high':
       case 'peek_low': {
-        const t = target!
-        if (t.hand.length === 0) return { ok: false, error: 'They have no cards left.' }
-        if (this.blockedByDefenses(t, abilityId)) {
-          this.privateResult(seat, 'Your peek was NULLIFIED by the Guardian.')
-          return { ok: true }
-        }
-        // Two cards, not one: sort a COPY so the target's own hand order is
-        // untouched (the client renders it in the order the server sent).
-        const ranked = [...t.hand].sort((a, b) =>
-          abilityId === 'peek_high' ? b.rank - a.rank : a.rank - b.rank,
-        )
-        const shown = ranked.slice(0, 2).map(cardText).join('   ')
+        // One card from EVERY other hand rather than two from one: breadth over
+        // depth. It aims at nobody in particular, so no defense applies.
+        const others = this.roundSeats.filter((s) => s.id !== id && s.hand.length > 0)
+        if (others.length === 0) return { ok: false, error: 'Nobody has cards left to read.' }
+
+        const high = abilityId === 'peek_high'
+        const lines = others.map((other) => {
+          // Sort a COPY so the target's own hand order is untouched -- the
+          // client renders it in the order the server sent.
+          const ranked = [...other.hand].sort((a, b) => (high ? b.rank - a.rank : a.rank - b.rank))
+          return `${other.name}: ${cardText(ranked[0])}`
+        })
         this.privateResult(
           seat,
-          `${t.name}'s ${abilityId === 'peek_high' ? 'TOP TWO' : 'BOTTOM TWO'}: ${shown}`,
+          `${high ? 'Highest' : 'Lowest'} card in every hand — ${lines.join('   ')}`,
         )
         return { ok: true }
       }
@@ -690,12 +715,53 @@ export class RoleManager {
         return { ok: true }
       }
 
-      case 'fortune': {
-        if (this.deckRemainder.length === 0) {
-          return { ok: false, error: 'No cards left in the deck this round.' }
+      case 'illusion': {
+        const marks = this.roundSeats.filter((s) => s.id !== id && s.hand.length > 0)
+        if (marks.length === 0) return { ok: false, error: 'Nobody has cards left to fool.' }
+
+        // Two shapes of the same trick, decided by the coin: blanket one player,
+        // or put a single dead-looking card in front of everyone. Deliberately
+        // silent -- the whole point is that they don't know why.
+        if (randomInt(0, 1) === 1) {
+          const mark = marks[randomInt(0, marks.length - 1)]
+          this.castIllusion(mark, mark.hand.map(cardKey))
+          this.privateResult(
+            seat,
+            `Illusion cast: ${mark.name}'s ENTIRE hand looks dead to them. Every card still plays perfectly.`,
+          )
+        } else {
+          for (const mark of marks) {
+            const card = mark.hand[randomInt(0, mark.hand.length - 1)]
+            this.castIllusion(mark, [cardKey(card)])
+          }
+          this.privateResult(
+            seat,
+            `Illusion cast: one card in every other hand looks dead. All of them still play perfectly.`,
+          )
         }
-        const peek = this.deckRemainder.slice(0, 5).map(cardText).join('   ')
-        this.privateResult(seat, 'Top of the deck: ' + peek)
+        return { ok: true }
+      }
+
+      case 'fortune': {
+        const suit = payload.suit
+        if (!suit || !FORTUNE_SUITS.includes(suit)) {
+          return { ok: false, error: 'Name a suit first.' }
+        }
+        const matches = this.deckRemainder.filter((card) => card.suit === suit)
+        // An empty result is information too -- often the best information on
+        // the table -- so it still spends the ability.
+        if (matches.length === 0) {
+          this.privateResult(
+            seat,
+            `No undealt ${suit} at all: every single one is in somebody's hand.`,
+          )
+          return { ok: true }
+        }
+        const peek = matches.slice(0, 2).map(cardText).join('   ')
+        this.privateResult(
+          seat,
+          `Undealt ${suit} (${matches.length} in total, top 2): ${peek}`,
+        )
         return { ok: true }
       }
 
@@ -1011,7 +1077,16 @@ export class RoleManager {
         if (this.phase !== 'Bidding') {
           return { ok: false, error: 'Bets close when the first card falls — bet during bidding.' }
         }
-        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        // A Nullify costs the Mirrorer THIS ROUND's bet and nothing more: the
+        // ability itself is permanent, and startRound deals it back next
+        // deal along with a fresh mirrorBetOn.
+        if (this.blockedByDefenses(t, abilityId)) {
+          this.privateResult(
+            seat,
+            'Your bet was NULLIFIED by the Guardian — no bet this round. You get another next deal.',
+          )
+          return { ok: true }
+        }
         this.mirrorBetOn.set(id, t.id)
         this.privateResult(
           seat,

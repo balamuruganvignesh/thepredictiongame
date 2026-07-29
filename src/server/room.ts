@@ -330,6 +330,7 @@ export class Room {
       history: this.history,
       hand: seat.hand,
       roleState: this.roles.getRoleState(seat),
+      illusion: this.roles.getIllusion(seat),
       chat: this.chatLog,
       ...this.tricks.snapshot(),
     }
