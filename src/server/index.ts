@@ -5,6 +5,7 @@
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import compression from 'compression'
 import express from 'express'
 import { Server } from 'socket.io'
 import type { ClientToServerEvents, ServerToClientEvents } from '@shared/protocol'
@@ -130,8 +131,32 @@ io.on('connection', (socket) => {
 // ---- Static client ------------------------------------------------------------
 
 const clientDir = path.resolve(__dirname, '../client')
-app.use(express.static(clientDir))
-app.get('*', (_req, res) => res.sendFile(path.join(clientDir, 'index.html')))
+
+// Socket.IO intercepts /socket.io before Express sees it and does its own
+// framing, so this only ever touches the static client -- where it matters:
+// the bundle is ~3x smaller over the wire gzipped.
+app.use(compression())
+
+app.use(
+  express.static(clientDir, {
+    setHeaders(res, filePath) {
+      // Vite content-hashes everything under /assets, so those URLs can never
+      // point at different bytes -- cache them forever. index.html must NOT be
+      // cached, or a returning player keeps loading a stale bundle after a
+      // deploy and reconnects into a protocol they no longer speak.
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      } else {
+        res.setHeader('Cache-Control', 'no-cache')
+      }
+    },
+  }),
+)
+
+app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache')
+  res.sendFile(path.join(clientDir, 'index.html'))
+})
 
 server.listen(PORT, () => {
   console.log(`The Prediction Game server listening on http://localhost:${PORT}`)
