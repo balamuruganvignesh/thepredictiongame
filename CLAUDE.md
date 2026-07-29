@@ -143,6 +143,12 @@ more than one machine would strand half the players at a table the other
 machine can't see. For the same reason a redeploy drops games in progress —
 ship between rounds.
 
+**Machine count must stay at 1, not just the floor.** `fly deploy`/`fly
+launch` default to 2 machines for HA regardless of `min_machines_running` (that
+setting is only the autoscale floor, not a cap). Always deploy with `fly
+deploy --ha=false`; if a deploy ever leaves 2 machines running, `fly scale
+count 1` fixes it.
+
 Static hosts (Firebase Hosting, Netlify, Pages) CANNOT host this: a catch-all
 rewrite swallows `/socket.io/**` and the socket never connects, which looks
 exactly like players being kicked the moment they join.
