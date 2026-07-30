@@ -62,7 +62,7 @@ export const abilities: Record<string, AbilityDef> = {
   fortune: {
     id: 'fortune',
     name: 'Fortune',
-    desc: 'Name a suit and secretly view the top 2 undealt cards of it — cards nobody was dealt.',
+    desc: 'Name a suit and secretly see its two HIGHEST undealt cards — the top cards nobody at this table is holding. Name trump to find out whether the Ace is even in play.',
     target: 'none',
     extra: 'suit',
     note: 'private — nobody is told. targets no one, so nothing can block it',
@@ -79,28 +79,28 @@ export const abilities: Record<string, AbilityDef> = {
   hand_swap: {
     id: 'hand_swap',
     name: 'The Big Swap',
-    desc: 'Swap your ENTIRE hand with another player’s. Lands 60% of the time, and a failed roll spends it.',
+    desc: 'Swap your ENTIRE hand with another player’s. Lands 75% of the time, and a failed roll spends it.',
     target: 'other',
     note: 'once per game — only while you’re lowest on the scoreboard, never mid-trick. if a Guardian BLOCKS it you get one more try, at someone new',
   },
   card_theft: {
     id: 'card_theft',
     name: 'Sticky Fingers',
-    desc: 'Trade one random card from your hand for one random card of another player’s. Lands 60% of the time, and a failed roll spends it.',
+    desc: 'Trade one random card from your hand for one random card of another player’s. Lands 75% of the time, and a failed roll spends it.',
     target: 'other',
     note: 'never mid-trick. if a Guardian BLOCKS it you get one more try, at someone new',
   },
   bid_chaos: {
     id: 'bid_chaos',
     name: 'Bid Chaos',
-    desc: 'Swap two OTHER players’ bids. Their real bids — scoring follows. Lands 60% of the time, and a failed roll spends it.',
+    desc: 'Swap two OTHER players’ bids. Their real bids — scoring follows. Lands 75% of the time, and a failed roll spends it.',
     target: 'two',
     note: 'play phase only. if a Guardian’s Nullify or Bid Lock BLOCKS it you get one more try, at someone new',
   },
   fate_swap: {
     id: 'fate_swap',
     name: 'Fate Swap',
-    desc: 'Swap YOUR bid with another player’s bid. Lands 60% of the time, and a failed roll spends it.',
+    desc: 'Swap YOUR bid with another player’s bid. Lands 75% of the time, and a failed roll spends it.',
     target: 'other',
     note: 'play phase only. if a Guardian’s Nullify or Bid Lock BLOCKS it you get one more try, at someone new',
   },
@@ -161,9 +161,9 @@ export const abilities: Record<string, AbilityDef> = {
   imposter: {
     id: 'imposter',
     name: 'Imposter',
-    desc: 'Disguise a player’s bid: the table sees a FALSE number until scoring. Silent.',
-    target: 'other',
-    note: 'play phase only. a Guardian’s Nullify or Bid Lock can cancel it',
+    desc: 'Disguise a bid — YOUR OWN or anyone else’s. The table sees a FALSE number until scoring. Use it while bidding is still going and everyone after you bids against a lie.',
+    target: 'any',
+    note: 'usable during bidding or play, on a bid that’s been placed. hide your own and nothing can block it; aim it at someone else and a Guardian’s Nullify or Bid Lock can cancel it',
   },
 
   // ---- The Guardian -------------------------------------------------------
@@ -223,7 +223,7 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🃏',
     tagline: 'Chaos favors the bold.',
     blurb:
-      'The chaos role. Swap cards, hands, and bids — but every swap only lands 60% of the time, and a failed roll is gone. Get BLOCKED by a Guardian, though, and you get one more go at a different player. Strongest from the BOTTOM of the scoreboard.',
+      'The chaos role. Swap cards, hands, and bids — but every swap only lands 75% of the time, and a failed roll is gone. Get BLOCKED by a Guardian, though, and you get one more go at a different player. Strongest from the BOTTOM of the scoreboard.',
     color: '#C47EF0',
     abilities: ['hand_swap', 'card_theft', 'bid_chaos', 'fate_swap'],
   },

@@ -83,9 +83,9 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   tampering. Sabotage cuts both ways: mark hits their bid → −10 them, mark
   misses → −5 the Judge (resolved in `prepareScoring`, called before the
   per-seat loop because the penalty lands on a different seat).
-- ALL FOUR Joker swaps only land 60% of the time (`SWAP_SUCCESS`). Two
+- ALL FOUR Joker swaps only land 75% of the time (`SWAP_SUCCESS`). Two
   different failure paths, deliberately NOT the same:
-  - **Fizzle** (losing the 60% roll) → announced publicly, ability spent
+  - **Fizzle** (losing the 75% roll) → announced publicly, ability spent
     immediately, turn over.
   - **Blocked** (Nullify / Bid Lock) → `retryAfterBlock` grants one more
     attempt at a **fresh** target; `MAX_SWAP_TRIES` (2) makes the second
@@ -104,9 +104,17 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 - Dark "paper note" theme, slight card rotations, no ruled lines. Fonts:
   Bangers (titles) / Fredoka (headings) / Nunito (body) / a serif for card
   indices.
-- Cards are drawn in CSS, never images: white faces, real pip layouts,
-  mirrored corner indices, framed court panels. Everything scales off
-  `--card-w`.
+- **Card faces are Kenney's CC0 pixel-art deck** in `src/client/public/cards/`
+  (~22KB for all 55), cropped to the artwork so each sprite IS the card. They
+  render as `<img class="card__face">` with `image-rendering: pixelated` — the
+  upscale is deliberate, so never "fix" it with smoothing. `--card-h` is pinned
+  to the sprites' 60/42 ratio; changing it stretches the art. Everything AROUND
+  the face (radius, shadow, winner/playable rings, muted + illusion veils) is
+  still CSS on the `.card` wrapper, and everything scales off `--card-w`.
+  (This replaced an earlier all-CSS deck — no pip layouts or court panels now.)
+- Chat is for what PLAYERS say. Game events (doubling, ability announcements)
+  go to the floating feed via `roleAnnounce`, never `systemChat`. Only presence
+  lines — joined / left / watching / took a seat — belong in chat.
 - Score sheet docked LEFT (row per round + trump icon, column per player,
   totals bar), open by default on desktop, on demand on touch; Tab or the
   SCORES button toggles it.
@@ -126,6 +134,11 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   that the player is orphaned and the server auto-plays their hand.
 - `Room.detach` ignores a disconnect whose socket id no longer matches the
   seat, because a reconnect can land before the old socket's disconnect event.
+- **Joining a table mid-game makes you a SPECTATOR, not an error.** Spectators
+  hold no `Seat` — just a `Spectator` in the Socket.IO room, so every broadcast
+  reaches them while `withSeat` silently drops every gameplay event they could
+  send. They get a snapshot with no hand and no role, can chat, and are turned
+  into real seats by `seatSpectators()` when the game loop returns to the lobby.
 - All state is in memory. Restarting the server drops tables in progress.
 
 ## Deployment

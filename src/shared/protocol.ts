@@ -31,6 +31,8 @@ export type LobbyUpdate = {
   hostId: PlayerId | null
   canStart: boolean
   mode: GameMode
+  /** Names of anyone watching a game in progress, waiting for a chair. */
+  spectators: string[]
 }
 
 // ---- Game state -------------------------------------------------------------
@@ -173,9 +175,20 @@ export type Snapshot = {
   illusion: string[]
   /** Recent chat, so a refresh doesn't wipe the conversation. */
   chat: ChatMessage[]
+  /** Watching rather than playing: no hand, no turn, no abilities. */
+  spectating: boolean
 }
 
-export type Joined = { playerId: PlayerId; roomCode: string; name: string }
+export type Joined = {
+  playerId: PlayerId
+  roomCode: string
+  name: string
+  /**
+   * True when the table was mid-game on arrival: you're watching, not seated.
+   * You get a chair automatically when the game ends and the table reopens.
+   */
+  spectating: boolean
+}
 
 // ---- Event maps -------------------------------------------------------------
 

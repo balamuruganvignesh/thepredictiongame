@@ -16,7 +16,7 @@ import type {
   UseAbilityPayload,
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
-import type { Seat } from './types'
+import type { Seat, Spectator } from './types'
 import { sleep } from './types'
 import type { EngineIO } from './engine/io'
 import { dealHands } from './engine/deck'
@@ -30,6 +30,13 @@ type Phase = 'RoundStart' | 'Bidding' | 'Playing'
 export class Room {
   readonly seats: Seat[] = []
   private seatById = new Map<string, Seat>()
+  /**
+   * People who arrived mid-game. They sit in the Socket.IO room so every
+   * broadcast reaches them, but hold no chair -- runGameLoop turns them into
+   * real seats once the table reopens.
+   */
+  private spectators: Spectator[] = []
+  private spectatorById = new Map<string, Spectator>()
   gameState: 'Lobby' | 'InProgress' = 'Lobby'
   lastActivity = Date.now()
 
@@ -68,9 +75,17 @@ export class Room {
         if (!seat.socketId) return
         ;(this.server.to(seat.socketId).emit as (e: string, p: unknown) => void)(event, payload)
       },
+      sendSpectators: (event, payload) => {
+        for (const spectator of this.spectators) {
+          ;(this.server.to(spectator.socketId).emit as (e: string, p: unknown) => void)(
+            event,
+            payload,
+          )
+        }
+      },
     }
     this.roles = new RoleManager(this.io)
-    this.bidding = new BiddingManager(this.io, this.roles, (text) => this.systemChat(text))
+    this.bidding = new BiddingManager(this.io, this.roles)
     this.tricks = new TrickManager(this.io, this.roles)
   }
 
@@ -102,7 +117,11 @@ export class Room {
    * that's already here (a refresh, or a drop mid-game). Returns an error
    * string when the table can't take them.
    */
-  join(name: string, playerId: string | null, socketId: string): { seat: Seat } | { error: string } {
+  join(
+    name: string,
+    playerId: string | null,
+    socketId: string,
+  ): { seat: Seat } | { spectator: Spectator } | { error: string } {
     this.lastActivity = Date.now()
 
     const existing = playerId ? this.seatById.get(playerId) : undefined
@@ -114,8 +133,26 @@ export class Room {
       return { seat: existing }
     }
 
+    // A spectator refreshing mid-game keeps watching rather than being handed
+    // a brand new spectator id every reload.
+    const watching = playerId ? this.spectatorById.get(playerId) : undefined
+    if (watching) {
+      watching.socketId = socketId
+      if (name.trim()) watching.name = name.trim().slice(0, 20)
+      return { spectator: watching }
+    }
+
     if (this.gameState !== 'Lobby') {
-      return { error: 'That game has already started.' }
+      // Mid-game arrivals watch instead of bouncing off an error. They're
+      // seated automatically when this game finishes.
+      const spectator: Spectator = {
+        id: crypto.randomUUID(),
+        socketId,
+        name: name.trim().slice(0, 20) || `Spectator ${this.spectators.length + 1}`,
+      }
+      this.spectators.push(spectator)
+      this.spectatorById.set(spectator.id, spectator)
+      return { spectator }
     }
     if (this.seats.length >= Config.maxPlayers) {
       return { error: `That table is full (${Config.maxPlayers} players max).` }
@@ -186,6 +223,62 @@ export class Room {
     })
   }
 
+  getSpectator(id: string): Spectator | undefined {
+    return this.spectatorById.get(id)
+  }
+
+  /** A watcher closed the tab. Unlike a seat there's nothing to hold open. */
+  detachSpectator(spectator: Spectator, socketId: string) {
+    // Same reconnect-ordering guard as detach(): a reload can bind the new
+    // socket before the old one's disconnect event arrives.
+    if (spectator.socketId !== socketId) return
+    const index = this.spectators.indexOf(spectator)
+    if (index >= 0) this.spectators.splice(index, 1)
+    this.spectatorById.delete(spectator.id)
+    this.lastActivity = Date.now()
+    this.broadcastLobby()
+  }
+
+  /**
+   * Turns everyone who was watching into a real seat. Called once the game
+   * loop drops back to the lobby, so spectators play the next game without
+   * having to rejoin. Anyone who doesn't fit stays a spectator.
+   */
+  private seatSpectators() {
+    for (const spectator of [...this.spectators]) {
+      if (this.seats.length >= Config.maxPlayers) break
+      this.spectators.splice(this.spectators.indexOf(spectator), 1)
+      this.spectatorById.delete(spectator.id)
+
+      const seat: Seat = {
+        id: spectator.id,
+        socketId: spectator.socketId,
+        name: spectator.name,
+        seatIndex: this.seats.length + 1,
+        ready: false,
+        connected: true,
+        hand: [],
+        bid: null,
+        hasDoubled: false,
+        tricksWon: 0,
+        totalScore: 0,
+        lastRoundScore: null,
+        disconnectedAt: null,
+      }
+      this.seats.push(seat)
+      this.seatById.set(seat.id, seat)
+      // Their client is still in spectator mode; this tells it it has a chair
+      // now (same id, so localStorage keeps working).
+      this.io.send(seat, 'joined', {
+        playerId: seat.id,
+        roomCode: this.code,
+        name: seat.name,
+        spectating: false,
+      })
+      this.systemChat(`${seat.name} takes a seat.`)
+    }
+  }
+
   // ---- Lobby ----------------------------------------------------------------
 
   private roster(): RosterEntry[] {
@@ -219,6 +312,7 @@ export class Room {
       hostId: this.host?.id ?? null,
       canStart: this.canStart(),
       mode: this.roles.getMode(),
+      spectators: this.spectators.map((s) => s.name),
     })
   }
 
@@ -302,15 +396,25 @@ export class Room {
 
   // ---- Reconnect ------------------------------------------------------------
 
-  /** Everything this client needs to redraw a game already in progress. */
-  sendState(seat: Seat) {
+  /**
+   * Everything this client needs to redraw a game already in progress. Pass a
+   * Spectator instead of a Seat for a watcher: same table, but no hand and no
+   * role -- the two things a spectator must never be sent.
+   */
+  sendState(viewer: Seat | Spectator) {
     if (this.gameState === 'Lobby') {
       this.broadcastLobby()
       return
     }
 
+    const seat = this.seatById.get(viewer.id) ?? null
+
+    // A seated viewer always sees their OWN bid undisguised; a watcher is an
+    // outsider and gets the fully disguised view.
     const bids = this.roles.isActive()
-      ? this.roles.displayedBids()
+      ? seat
+        ? this.roles.displayedBidsFor(seat)
+        : this.roles.displayedBids()
       : Object.fromEntries(
           this.seats.filter((s) => s.bid != null).map((s) => [s.id, s.bid as number]),
         )
@@ -328,13 +432,45 @@ export class Room {
       tricksWon: Object.fromEntries(this.seats.map((s) => [s.id, s.tricksWon])),
       totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
       history: this.history,
-      hand: seat.hand,
-      roleState: this.roles.getRoleState(seat),
-      illusion: this.roles.getIllusion(seat),
+      hand: seat ? seat.hand : [],
+      roleState: seat ? this.roles.getRoleState(seat) : null,
+      illusion: seat ? this.roles.getIllusion(seat) : [],
       chat: this.chatLog,
+      spectating: seat == null,
       ...this.tricks.snapshot(),
     }
-    this.io.send(seat, 'snapshot', snapshot)
+    // A spectator has no Seat, so address their socket directly.
+    if (seat) {
+      this.io.send(seat, 'snapshot', snapshot)
+    } else {
+      this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
+    }
+  }
+
+  /** Direct-to-socket emit, for viewers who hold no chair. */
+  private sendToSocket<K extends keyof ServerToClientEvents>(
+    socketId: string | null,
+    event: K,
+    payload: Parameters<ServerToClientEvents[K]>[0],
+  ) {
+    if (!socketId) return
+    ;(this.server.to(socketId).emit as (e: string, p: unknown) => void)(event, payload)
+  }
+
+  /** Replays the recent conversation onto a spectator's client. */
+  sendChatHistoryToSocket(socketId: string) {
+    this.sendToSocket(socketId, 'chatHistory', this.chatLog)
+  }
+
+  /** A spectator said something. They can talk; they just can't play. */
+  spectatorChat(spectator: Spectator, text: string) {
+    const clean = text
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, MAX_CHAT_LENGTH)
+    if (!clean) return
+    this.lastActivity = Date.now()
+    this.pushChat({ from: spectator.id, name: `${spectator.name} 👁`, text: clean })
   }
 
   /** Replays the recent conversation onto a client that just connected. */
@@ -462,6 +598,8 @@ export class Room {
     for (const seat of [...this.seats]) {
       if (!seat.connected) this.removeSeat(seat)
     }
+    // ...and anyone who spent the game watching takes one of the free chairs.
+    this.seatSpectators()
     this.broadcastLobby()
   }
 }

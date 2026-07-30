@@ -861,6 +861,19 @@ button.seat:hover {
   animation: turn-pulse 1.8s ease-in-out infinite;
 }
 
+/* Watching, not playing: steady and muted, so it reads as a status line rather
+   than the urgent "it's on you" pulse. The dock (CHAT / SCORES) is fixed to the
+   bottom-right, so leave room for it instead of running underneath. */
+.turn-banner--spectating {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  animation: none;
+  max-width: min(100%, 42rem);
+  margin: 0 auto;
+  padding: 0 clamp(12px, 16vw, 220px) 8px;
+  text-wrap: balance;
+}
+
 @keyframes turn-pulse {
   50% {
     opacity: 0.5;

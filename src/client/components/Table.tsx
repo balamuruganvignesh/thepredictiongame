@@ -123,17 +123,25 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
 
       {isMyTurn && store.phase === 'playing' && <p className="turn-banner">YOUR TURN</p>}
 
-      {/* Your bidding turn is still "your turn", but no card is playable until
-          the play phase -- otherwise the whole hand lights up during bidding. */}
-      <Hand
-        hand={store.hand}
-        isMyTurn={isMyTurn && store.phase === 'playing'}
-        leadSuit={store.leadSuit}
-        onPlay={play}
-      />
+      {/* Spectators have no hand to render -- they watch the trick area and the
+          score sheet, and get a chair when this game ends. */}
+      {store.spectating ? (
+        <p className="turn-banner turn-banner--spectating">
+          👁 SPECTATING — you'll be seated when this game ends
+        </p>
+      ) : (
+        /* Your bidding turn is still "your turn", but no card is playable until
+           the play phase -- otherwise the whole hand lights up during bidding. */
+        <Hand
+          hand={store.hand}
+          isMyTurn={isMyTurn && store.phase === 'playing'}
+          leadSuit={store.leadSuit}
+          onPlay={play}
+        />
+      )}
 
       <div className="dock">
-        {chaosActive && (
+        {chaosActive && !store.spectating && (
           <button
             className={`dock__button dock__button--role${
               store.roleState?.used ? '' : ' is-glowing'
@@ -163,7 +171,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {store.phase === 'bidding' && (
+      {store.phase === 'bidding' && !store.spectating && (
         <BiddingModal
           cardsDealt={store.cardsDealt}
           trumpSuit={store.trumpSuit}
@@ -181,7 +189,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {roleOpen && store.roleState && (
+      {roleOpen && store.roleState && !store.spectating && (
         <RolePanel
           roleState={store.roleState}
           players={players}
@@ -192,7 +200,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {showBanner && store.roleState?.roleId && store.roleState.abilityId && (
+      {showBanner && !store.spectating && store.roleState?.roleId && store.roleState.abilityId && (
         <RoleBanner
           key={store.roleBannerKey}
           roleId={store.roleState.roleId}

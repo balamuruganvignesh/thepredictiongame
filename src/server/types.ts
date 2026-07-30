@@ -21,6 +21,18 @@ export type Seat = {
   disconnectedAt: number | null
 }
 
+/**
+ * Someone watching a game that was already running when they arrived. Not a
+ * chair: no hand, no turn, no abilities. They hold an id so a refresh keeps
+ * them watching, and they're converted into a real Seat when the table
+ * reopens between games.
+ */
+export type Spectator = {
+  id: string
+  socketId: string
+  name: string
+}
+
 export const sleep = (seconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000))
 

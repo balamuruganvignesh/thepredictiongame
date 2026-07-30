@@ -33,6 +33,8 @@ export type Store = {
   roomCode: string | null
   view: View
   lobby: LobbyUpdate | null
+  /** Watching a game that was already running: no hand, no turn, no abilities. */
+  spectating: boolean
 
   names: Record<string, string>
   /** THE display order for every player list, locked in at round 1. */
@@ -89,6 +91,7 @@ const initialStore: Store = {
   roomCode: null,
   view: 'join',
   lobby: null,
+  spectating: false,
   names: {},
   order: [],
   turnOrder: [],
@@ -123,7 +126,7 @@ const initialStore: Store = {
 
 type Action =
   | { type: 'connected'; value: boolean }
-  | { type: 'joined'; playerId: string; roomCode: string; name: string }
+  | { type: 'joined'; playerId: string; roomCode: string; name: string; spectating: boolean }
   | { type: 'joinError'; message: string }
   | { type: 'lobby'; data: LobbyUpdate }
   | { type: 'roundStart'; data: Extract<GameStateUpdate, { phase: 'RoundStart' }> }
@@ -176,6 +179,7 @@ function reducer(state: Store, action: Action): Store {
         meId: action.playerId,
         myName: action.name,
         roomCode: action.roomCode,
+        spectating: action.spectating,
         joinError: null,
         view: state.view === 'join' ? 'lobby' : state.view,
       }
@@ -410,6 +414,7 @@ function reducer(state: Store, action: Action): Store {
         trickWinnerId: null,
         roleState: data.roleState,
         chat: data.chat,
+        spectating: data.spectating,
         standings: null,
       }
     }
@@ -451,6 +456,7 @@ export function useGame() {
         playerId: data.playerId,
         roomCode: data.roomCode,
         name: data.name,
+        spectating: data.spectating,
       }),
     )
     socket.on('joinError', (message) => dispatch({ type: 'joinError', message }))

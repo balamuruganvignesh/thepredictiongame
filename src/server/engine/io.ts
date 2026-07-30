@@ -12,4 +12,11 @@ type Payload<K extends keyof ServerToClientEvents> = Parameters<ServerToClientEv
 export interface EngineIO {
   broadcast<K extends keyof ServerToClientEvents>(event: K, payload: Payload<K>): void
   send<K extends keyof ServerToClientEvents>(seat: Seat, event: K, payload: Payload<K>): void
+  /**
+   * Emit to everyone WATCHING the table (they hold no Seat, so `send` can't
+   * reach them). Needed wherever a payload is personalised per seat -- bids
+   * are, because a disguised bid must still look real to its owner -- since
+   * those paths deliberately skip `broadcast`.
+   */
+  sendSpectators<K extends keyof ServerToClientEvents>(event: K, payload: Payload<K>): void
 }

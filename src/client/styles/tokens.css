@@ -44,10 +44,11 @@
   --font-body: 'Nunito', system-ui, -apple-system, sans-serif;
   --font-card: Georgia, 'Times New Roman', 'Iowan Old Style', serif;
 
-  /* Card geometry. The reference deck is 82x125, a ~0.656 ratio; everything
+  /* Card geometry. The ratio matches the card sprites exactly (42x60 source,
+     so 60/42 = 1.4286) -- anything else stretches the pixel art. Everything
      else (hand, trick area, lifts) derives from --card-w. */
   --card-w: clamp(52px, 6.2vw, 82px);
-  --card-h: calc(var(--card-w) * 1.524);
+  --card-h: calc(var(--card-w) * 1.4286);
   --card-radius: calc(var(--card-w) * 0.075);
 
   /* Motion. */

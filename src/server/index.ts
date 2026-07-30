@@ -10,7 +10,7 @@ import express from 'express'
 import { Server } from 'socket.io'
 import type { ClientToServerEvents, ServerToClientEvents } from '@shared/protocol'
 import { Room } from './room'
-import type { Seat } from './types'
+import type { Seat, Spectator } from './types'
 
 const PORT = Number(process.env.PORT ?? 3001)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -52,7 +52,9 @@ setInterval(() => {
 // ---- Socket wiring -----------------------------------------------------------
 
 io.on('connection', (socket) => {
-  // Which table and chair this socket is currently driving.
+  // Which table and chair this socket is currently driving. A spectator holds
+  // a viewerId but never resolves to a seat, so every gameplay handler below
+  // silently ignores them -- watching is read-only by construction.
   let room: Room | null = null
   let seatId: string | null = null
 
@@ -62,6 +64,16 @@ io.on('connection', (socket) => {
     const currentSeat = currentRoom && seatId ? currentRoom.getSeat(seatId) : undefined
     if (!currentRoom || !currentSeat) return
     fn(currentRoom, currentSeat)
+  }
+
+  /** Resolves to a seat if they have one, otherwise to a spectator. */
+  const withViewer = (fn: (room: Room, seat: Seat | null, spectator: Spectator | null) => void) => {
+    const currentRoom = room
+    if (!currentRoom || !seatId) return
+    const seat = currentRoom.getSeat(seatId) ?? null
+    const spectator = seat ? null : (currentRoom.getSpectator(seatId) ?? null)
+    if (!seat && !spectator) return
+    fn(currentRoom, seat, spectator)
   }
 
   socket.on('join', ({ roomCode, name, playerId }) => {
@@ -81,7 +93,9 @@ io.on('connection', (socket) => {
       rooms.set(target.code, target)
     }
 
-    const known = playerId ? target.getSeat(String(playerId)) != null : false
+    const known = playerId
+      ? target.getSeat(String(playerId)) != null || target.getSpectator(String(playerId)) != null
+      : false
     const result = target.join(String(name ?? ''), playerId ? String(playerId) : null, socket.id)
     if ('error' in result) {
       socket.emit('joinError', result.error)
@@ -89,13 +103,31 @@ io.on('connection', (socket) => {
     }
 
     room = target
-    seatId = result.seat.id
     void socket.join(target.code)
+
+    if ('spectator' in result) {
+      const { spectator } = result
+      seatId = spectator.id
+      socket.emit('joined', {
+        playerId: spectator.id,
+        roomCode: target.code,
+        name: spectator.name,
+        spectating: true,
+      })
+      target.sendChatHistoryToSocket(socket.id)
+      if (!known) target.systemChat(`${spectator.name} is watching.`)
+      target.broadcastLobby()
+      target.sendState(spectator)
+      return
+    }
+
+    seatId = result.seat.id
 
     socket.emit('joined', {
       playerId: result.seat.id,
       roomCode: target.code,
       name: result.seat.name,
+      spectating: false,
     })
     target.sendChatHistory(result.seat)
     target.systemChat(
@@ -113,15 +145,27 @@ io.on('connection', (socket) => {
   socket.on('declareDouble', () => withSeat((r, s) => r.declareDouble(s)))
   socket.on('playCard', (card) => withSeat((r, s) => r.playCard(s, card)))
   socket.on('useAbility', (payload) => withSeat((r, s) => r.useAbility(s, payload ?? {})))
-  socket.on('requestState', () => withSeat((r, s) => r.sendState(s)))
-  socket.on('chat', (text) => withSeat((r, s) => r.chat(s, String(text ?? ''))))
+  // Watching and talking are the two things a spectator CAN do.
+  socket.on('requestState', () =>
+    withViewer((r, seat, spectator) => r.sendState(seat ?? spectator!)),
+  )
+  socket.on('chat', (text) =>
+    withViewer((r, seat, spectator) => {
+      if (seat) r.chat(seat, String(text ?? ''))
+      else r.spectatorChat(spectator!, String(text ?? ''))
+    }),
+  )
 
   socket.on('disconnect', () => {
-    withSeat((r, s) => {
-      // Only announce a real departure -- if this socket has already been
-      // replaced by a reconnect, detach() is a no-op and nobody left.
-      if (s.socketId === socket.id) r.systemChat(`${s.name} left.`)
-      r.detach(s, socket.id)
+    withViewer((r, seat, spectator) => {
+      if (seat) {
+        // Only announce a real departure -- if this socket has already been
+        // replaced by a reconnect, detach() is a no-op and nobody left.
+        if (seat.socketId === socket.id) r.systemChat(`${seat.name} left.`)
+        r.detach(seat, socket.id)
+      } else {
+        r.detachSpectator(spectator!, socket.id)
+      }
     })
     room = null
     seatId = null

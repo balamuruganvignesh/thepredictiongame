@@ -27,9 +27,16 @@ export class BiddingManager {
   constructor(
     private io: EngineIO,
     private roles: RoleManager,
-    /** Announces a public moment in the table chat (used for doubling). */
-    private systemChat: (text: string) => void,
   ) {}
+
+  /**
+   * A public game moment (currently only doubling). This goes to the floating
+   * feed, NOT the chat: chat is for what players say to each other, and bid
+   * numbers scrolling through it drown that out.
+   */
+  private announce(message: string) {
+    this.io.broadcast('roleAnnounce', { message })
+  }
 
   private isValidBid(bid: number, cardsDealt: number, isLastBidder: boolean, sumSoFar: number) {
     if (!Number.isInteger(bid) || bid < 0 || bid > cardsDealt) return false
@@ -52,16 +59,35 @@ export class BiddingManager {
   private broadcastBidState(turnOrder: Seat[]) {
     const bids: Record<string, number> = {}
     for (const seat of turnOrder) {
-      // Chaos mode may be showing a disguised number; classic returns the real
-      // bids untouched.
       if (seat.bid != null) bids[seat.id] = seat.bid
     }
-    const displayed = this.roles.isActive() ? this.roles.displayedBids() : bids
 
-    this.io.broadcast('gameState', {
+    // Classic: one honest map for the whole table. Chaos: a Judge's Imposter
+    // may be disguising bids, and each player must still see their OWN bid
+    // undisguised -- so this goes out per seat rather than as a broadcast.
+    if (!this.roles.isActive()) {
+      this.io.broadcast('gameState', {
+        phase: 'Bidding',
+        currentTurnId: this.currentTurnSeat?.id ?? null,
+        bids,
+        cardsDealt: this.currentCardsDealt,
+      })
+      return
+    }
+
+    for (const seat of turnOrder) {
+      this.io.send(seat, 'gameState', {
+        phase: 'Bidding',
+        currentTurnId: this.currentTurnSeat?.id ?? null,
+        bids: this.roles.displayedBidsFor(seat),
+        cardsDealt: this.currentCardsDealt,
+      })
+    }
+    // Watchers are outsiders: they see every disguise, including its owner's.
+    this.io.sendSpectators('gameState', {
       phase: 'Bidding',
       currentTurnId: this.currentTurnSeat?.id ?? null,
-      bids: displayed,
+      bids: this.roles.displayedBids(),
       cardsDealt: this.currentCardsDealt,
     })
   }
@@ -189,7 +215,7 @@ export class BiddingManager {
 
     // Doubling is public knowledge at a real table, but nothing else on the
     // wire carries it until scoring -- so say it out loud.
-    this.systemChat(
+    this.announce(
       `🔥 ${seat.name} DOUBLES DOWN on a bid of ${seat.bid} — twice the reward, twice the fall.`,
     )
 

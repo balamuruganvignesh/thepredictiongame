@@ -41,9 +41,20 @@ use it or lose it.
 | Role | | What it does |
 | --- | --- | --- |
 | The Detective | 🕵️ | Read hands and the undealt deck. Cast an illusion, or decide who opens the next trick. |
-| The Joker | 🃏 | Swap cards, hands and bids — but only 60% of swaps land. |
+| The Joker | 🃏 | Swap cards, hands and bids — but only 75% of swaps land. |
 | The Gambler | 🎲 | Raise your own stakes and flip coins with fate. |
 | The Judge | ⚖️ | Bend other players' bids, steal their tricks, disguise the truth. |
 | The Guardian | 🛡️ | Nullify anything aimed at you; lock your bid against meddling. |
 | The Mirrorer | 🪞 | **Rare.** Bet on another player and ride their tricks. |
 
+
+## Spectating
+
+Join a table that's already playing and you'll watch instead of bouncing off an
+error: you see the tricks, the score sheet and the chat, but no hand. When that
+game ends you're given a seat automatically, so you're in for the next one.
+
+## Credits
+
+Card faces are the [Playing Cards Pack](https://kenney.nl/assets/playing-cards-pack)
+by [Kenney](https://kenney.nl), released under CC0.

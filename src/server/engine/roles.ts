@@ -30,7 +30,7 @@ import type { EngineIO } from './io'
 const MIRRORER_CHANCE = 0.2
 
 // Every Joker swap is a gamble: this often it actually goes through.
-const SWAP_SUCCESS = 0.6
+const SWAP_SUCCESS = 0.75
 
 // A BLOCKED swap doesn't end the Joker's round: they get one more go at
 // someone new. Two attempts total, then the ability is spent regardless.
@@ -200,7 +200,10 @@ export class RoleManager {
     return this.illusionCards.get(seat.id) ?? []
   }
 
-  /** The bid map clients should DISPLAY: real bids with disguises applied. */
+  /**
+   * The bid map an OUTSIDER should see: real bids with every disguise applied.
+   * This is the spectator view; seated players get displayedBidsFor instead.
+   */
   displayedBids(): Record<string, number> {
     const bids: Record<string, number> = {}
     for (const seat of this.roundSeats) {
@@ -209,8 +212,26 @@ export class RoleManager {
     return bids
   }
 
+  /**
+   * The bid map one SEAT should see. Identical to displayedBids except your own
+   * bid is always the true one -- you have to play to your real number, and a
+   * Judge who disguised their own bid would otherwise be lying to themselves.
+   * (A victim is told their real bid privately as well, but the UI shouldn't
+   * keep contradicting it.)
+   */
+  displayedBidsFor(seat: Seat): Record<string, number> {
+    const bids = this.displayedBids()
+    if (seat.bid != null) bids[seat.id] = seat.bid
+    return bids
+  }
+
+  /** Per-seat, because each player sees their own bid undisguised. */
   private syncBids() {
-    this.io.broadcast('roleSync', { bids: this.displayedBids() })
+    for (const seat of this.roundSeats) {
+      this.io.send(seat, 'roleSync', { bids: this.displayedBidsFor(seat) })
+    }
+    // Watchers are outsiders: they see every disguise, including its owner's.
+    this.io.sendSpectators('roleSync', { bids: this.displayedBids() })
   }
 
   private syncTricks() {
@@ -623,7 +644,7 @@ export class RoleManager {
     this.announce('🃏 ' + flavor)
     this.privateResult(
       seat,
-      "It FAILED. The Joker's swaps only land 60% of the time, and this was the other 40% — your ability is spent.",
+      "It FAILED. The Joker's swaps only land 75% of the time, and this was the other 25% — your ability is spent.",
     )
     return true
   }
@@ -740,20 +761,25 @@ export class RoleManager {
         if (!suit || !FORTUNE_SUITS.includes(suit)) {
           return { ok: false, error: 'Name a suit first.' }
         }
-        const matches = this.deckRemainder.filter((card) => card.suit === suit)
+        // "Top 2" means the two HIGHEST undealt cards of the suit, not the two
+        // that happen to sit earliest in the shuffled remainder -- knowing the
+        // A and K are dead is the whole point of naming a suit.
+        const matches = this.deckRemainder
+          .filter((card) => card.suit === suit)
+          .sort((a, b) => b.rank - a.rank)
         // An empty result is information too -- often the best information on
         // the table -- so it still spends the ability.
         if (matches.length === 0) {
           this.privateResult(
             seat,
-            `No undealt ${suit} at all: every single one is in somebody's hand.`,
+            `No undealt ${suit} at all: every single one is in somebody's hand — the whole suit is live.`,
           )
           return { ok: true }
         }
         const peek = matches.slice(0, 2).map(cardText).join('   ')
         this.privateResult(
           seat,
-          `Undealt ${suit} (${matches.length} in total, top 2): ${peek}`,
+          `Highest undealt ${suit}: ${peek}  (${matches.length} of the suit never got dealt — nobody holds these)`,
         )
         return { ok: true }
       }
@@ -1022,11 +1048,16 @@ export class RoleManager {
 
       case 'imposter': {
         const t = target!
-        if (this.phase !== 'Playing') {
-          return { ok: false, error: 'Disguises only work once play begins.' }
+        const self = t.id === id
+        // Deliberately allowed during BIDDING: a disguise planted before the
+        // rest of the table has bid is the strongest version of this ability,
+        // because everyone after you bids against a number that isn't real.
+        if (t.bid == null) {
+          return { ok: false, error: self ? "You haven't bid yet." : "They haven't bid yet." }
         }
-        if (t.bid == null) return { ok: false, error: "They haven't bid yet." }
-        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        // Hiding your OWN bid aims at nobody, so no defense applies -- you
+        // can't Nullify or Bid Lock yourself out of your own disguise.
+        if (!self && this.blockedByDefenses(t, abilityId)) return { ok: true }
         // Pick a fake bid that differs from the real one. Deliberately silent:
         // no public announcement, the table just sees the wrong number.
         const realBid = t.bid
@@ -1034,6 +1065,13 @@ export class RoleManager {
         while (fake === realBid) fake = randomInt(0, this.roundCardsDealt)
         this.disguisedBids.set(t.id, fake)
         this.syncBids()
+        if (self) {
+          this.privateResult(
+            seat,
+            `Your bid now shows as ${fake} to the table (really ${realBid}). Bid accordingly — only scoring reveals the truth.`,
+          )
+          return { ok: true }
+        }
         this.privateResult(
           seat,
           `${t.name}'s bid now shows as ${fake} to the table (really ${realBid}). Nobody sees through it until scoring.`,
