@@ -15,6 +15,18 @@ import type { Seat, Spectator } from './types'
 const PORT = Number(process.env.PORT ?? 3001)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// One process hosts EVERY table, so Node's default of dying on an unhandled
+// error would drop every game in progress at once. Log and keep serving: a
+// broken round is far better than kicking the whole site off. The round loop's
+// phases are async, so a throw in there surfaces as an unhandled rejection and
+// would otherwise be completely silent.
+process.on('uncaughtException', (error) => {
+  console.error('[uncaughtException]', error)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason)
+})
+
 const app = express()
 const server = http.createServer(app)
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {

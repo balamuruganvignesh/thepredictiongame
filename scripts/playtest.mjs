@@ -54,7 +54,10 @@ function makeBot(name, index) {
       if (index === 0) log(`  round ${data.roundNumber}: ${data.cardsDealt} cards, ${data.trumpSuit}`)
     }
     if (data.phase === 'Bidding' && data.currentTurnId === bot.id && bot.bid == null) {
-      const sum = Object.values(data.bids).reduce((a, b) => a + b, 0)
+      // Use the server's true total: data.bids can carry an Imposter disguise,
+      // and summing that would pick a bid the server rejects (which would hang
+      // this bot forever, since it never retries).
+      const sum = data.bidSum
       const isLast = bot.turnOrder[bot.turnOrder.length - 1] === bot.id
       let want = Math.min(1, data.cardsDealt)
       // The last bidder can't make the bids sum to the trick count.

@@ -429,6 +429,8 @@ export class Room {
       turnOrder: this.turnOrderIds,
       phase: this.phase,
       bids,
+      // The real total, never derived from the (possibly disguised) map above.
+      bidSum: this.seats.reduce((sum, s) => sum + (s.bid ?? 0), 0),
       tricksWon: Object.fromEntries(this.seats.map((s) => [s.id, s.tricksWon])),
       totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
       history: this.history,

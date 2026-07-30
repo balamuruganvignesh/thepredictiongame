@@ -23,7 +23,8 @@ difference.** Bidding 3 and winning 3 pays 13; bidding 3 and winning 1 costs 2.
   number of tricks, so somebody always misses.
 - **Double**: right after you bid you get 5 seconds to double your stake. Hit
   it and you score `2 × (10 + bid)`. Miss it and you lose `10 + bid` flat, no
-  matter how far off you were. One click, and it's final.
+  matter how far off you were. One click, and it's final — and nobody else is
+  told. Your double stays secret until the scores land.
 - **No turn timers, ever.** Nobody is ever skipped for thinking too long. The
   server only plays for a seat that has actually disconnected. That 5-second
   Double window is the one clock in the game, and all it closes is an optional

@@ -51,6 +51,14 @@ export type GameStateUpdate =
       currentTurnId: PlayerId | null
       bids: Record<PlayerId, number>
       cardsDealt: number
+      /**
+       * The TRUE total of every bid placed so far. Sent separately because
+       * `bids` may carry a Judge's Imposter disguise, and the last bidder's
+       * forbidden bid is derived from the real sum -- deriving it from the
+       * displayed numbers would forbid the wrong chip and get the player's
+       * bid rejected by the server.
+       */
+      bidSum: number
     }
   | { phase: 'Playing'; roundNumber: number }
 
@@ -162,6 +170,8 @@ export type Snapshot = {
   turnOrder: PlayerId[]
   phase: Phase
   bids: Record<PlayerId, number>
+  /** TRUE total of bids placed so far -- see the Bidding update's bidSum. */
+  bidSum: number
   tricksWon: Record<PlayerId, number>
   totals: Record<PlayerId, number>
   history: Record<number, Record<PlayerId, number>>

@@ -47,6 +47,8 @@ export type Store = {
   phase: 'bidding' | 'playing' | null
 
   bids: Record<string, number>
+  /** TRUE total of bids placed this round; see protocol's bidSum. */
+  bidSum: number
   tricksWon: Record<string, number>
   totals: Record<string, number>
   history: Record<number, Record<string, number>>
@@ -100,6 +102,7 @@ const initialStore: Store = {
   trumpSuit: '',
   phase: null,
   bids: {},
+  bidSum: 0,
   tricksWon: {},
   totals: {},
   history: {},
@@ -224,6 +227,7 @@ function reducer(state: Store, action: Action): Store {
         order,
         history: data.roundNumber === 1 ? {} : state.history,
         bids: {},
+        bidSum: 0,
         tricksWon: {},
         currentTurnId: null,
         leadSuit: null,
@@ -245,6 +249,7 @@ function reducer(state: Store, action: Action): Store {
         phase: 'bidding',
         currentTurnId: action.data.currentTurnId,
         bids: { ...state.bids, ...action.data.bids },
+        bidSum: action.data.bidSum,
         cardsDealt: action.data.cardsDealt,
       }
 
@@ -402,6 +407,7 @@ function reducer(state: Store, action: Action): Store {
         trumpSuit: data.trumpSuit,
         phase: data.phase === 'Playing' ? 'playing' : 'bidding',
         bids: data.bids,
+        bidSum: data.bidSum,
         tricksWon: data.tricksWon,
         totals: data.totals,
         history: data.history,

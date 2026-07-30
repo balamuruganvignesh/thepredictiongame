@@ -53,9 +53,17 @@ an empty chair.
   fits a standard deck.)
 - Last bidder can't make bids sum to the trick count; exact bid → 10+bid,
   miss → −|diff|.
+- **Never derive the last-bidder constraint from the displayed bids.** In chaos
+  a Judge's Imposter disguises them, so the client is handed a separate
+  `bidSum` (the TRUE total) and must use only that. Summing the displayed map
+  forbids the wrong chip, the server then rejects the bid the UI allowed, and
+  because there are no turn timers the round hangs there forever.
 - **Double**: offered only in a 5s window right after you bid, before the next
   player bids. One click, FINAL. Hit doubled → 2×(10+bid); MISS doubled →
-  −(10+bid) flat, regardless of how far off (not −2×diff).
+  −(10+bid) flat, regardless of how far off (not −2×diff). **Doubling is
+  SILENT** — no chat line, no feed card. It only surfaces in the ScoreUpdate at
+  the end of the round. Don't re-add an announcement: it printed the real bid,
+  which spammed the table and handed away a Judge's Imposter disguise.
 - **No turn timers, ever** (explicit user requirement — never skip a turn on
   time). Auto-play only for disconnected seats. The 5s Double window is the one
   timer, and it only closes an optional side bet.
@@ -139,6 +147,10 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   reaches them while `withSeat` silently drops every gameplay event they could
   send. They get a snapshot with no hand and no role, can chat, and are turned
   into real seats by `seatSpectators()` when the game loop returns to the lobby.
+- `index.ts` installs `uncaughtException` / `unhandledRejection` handlers that
+  LOG and keep serving. One process hosts every table, so Node's default of
+  exiting would drop every game at once — and because the round loop's phases
+  are async, a throw in there is otherwise completely silent.
 - All state is in memory. Restarting the server drops tables in progress.
 
 ## Deployment

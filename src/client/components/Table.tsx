@@ -71,7 +71,10 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
     isCurrentTurn: player.id === store.currentTurnId,
   }))
 
-  const sumSoFar = store.turnOrder.reduce((sum, id) => sum + (store.bids[id] ?? 0), 0)
+  // Straight from the server, NOT summed from store.bids: those may carry a
+  // Judge's Imposter disguise, and a forbidden bid computed off a fake number
+  // disables the wrong chip and gets the real bid rejected.
+  const sumSoFar = store.bidSum
   const isLastBidder =
     store.turnOrder.length > 0 && store.turnOrder[store.turnOrder.length - 1] === store.meId
 

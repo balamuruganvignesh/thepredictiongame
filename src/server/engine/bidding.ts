@@ -29,15 +29,6 @@ export class BiddingManager {
     private roles: RoleManager,
   ) {}
 
-  /**
-   * A public game moment (currently only doubling). This goes to the floating
-   * feed, NOT the chat: chat is for what players say to each other, and bid
-   * numbers scrolling through it drown that out.
-   */
-  private announce(message: string) {
-    this.io.broadcast('roleAnnounce', { message })
-  }
-
   private isValidBid(bid: number, cardsDealt: number, isLastBidder: boolean, sumSoFar: number) {
     if (!Number.isInteger(bid) || bid < 0 || bid > cardsDealt) return false
     // Forces at least one guaranteed miss this round.
@@ -58,8 +49,16 @@ export class BiddingManager {
 
   private broadcastBidState(turnOrder: Seat[]) {
     const bids: Record<string, number> = {}
+    // The TRUE running total, which the client needs to work out the last
+    // bidder's forbidden bid. It must NOT be derived from the displayed bids:
+    // a disguise would forbid the wrong number and the server would then
+    // reject the bid the UI told the player was fine.
+    let bidSum = 0
     for (const seat of turnOrder) {
-      if (seat.bid != null) bids[seat.id] = seat.bid
+      if (seat.bid != null) {
+        bids[seat.id] = seat.bid
+        bidSum += seat.bid
+      }
     }
 
     // Classic: one honest map for the whole table. Chaos: a Judge's Imposter
@@ -71,6 +70,7 @@ export class BiddingManager {
         currentTurnId: this.currentTurnSeat?.id ?? null,
         bids,
         cardsDealt: this.currentCardsDealt,
+        bidSum,
       })
       return
     }
@@ -81,6 +81,7 @@ export class BiddingManager {
         currentTurnId: this.currentTurnSeat?.id ?? null,
         bids: this.roles.displayedBidsFor(seat),
         cardsDealt: this.currentCardsDealt,
+        bidSum,
       })
     }
     // Watchers are outsiders: they see every disguise, including its owner's.
@@ -89,6 +90,7 @@ export class BiddingManager {
       currentTurnId: this.currentTurnSeat?.id ?? null,
       bids: this.roles.displayedBids(),
       cardsDealt: this.currentCardsDealt,
+      bidSum,
     })
   }
 
@@ -213,11 +215,10 @@ export class BiddingManager {
     }
     seat.hasDoubled = true
 
-    // Doubling is public knowledge at a real table, but nothing else on the
-    // wire carries it until scoring -- so say it out loud.
-    this.announce(
-      `🔥 ${seat.name} DOUBLES DOWN on a bid of ${seat.bid} — twice the reward, twice the fall.`,
-    )
+    // Deliberately SILENT -- no chat line, no feed card. The old announcement
+    // printed the real bid, which both spammed the table with numbers and
+    // handed away a Judge's Imposter disguise for free. Doubling now surfaces
+    // at scoring, where the doubled score speaks for itself.
 
     // Committing ends the window early.
     this.closeDoubleWindow()
