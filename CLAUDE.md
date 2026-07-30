@@ -19,6 +19,9 @@ by both. See README.md for the player-facing rules.
   minutes of wall clock, most of it the 5s post-bid Double window.
 - To play against bots in a browser: open a table, then
   `node scripts/joinbots.mjs <CODE> 3`.
+- `node scripts/spectate-test.mjs` (~25s) asserts that neither a spectator
+  joining nor a player reconnecting knocks the table out of a running game.
+  Run it after touching join / reconnect / lobby broadcasting.
 - Commit after each accepted chunk of work (user expects it).
 
 ## Architecture
@@ -147,6 +150,14 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   reaches them while `withSeat` silently drops every gameplay event they could
   send. They get a snapshot with no hand and no role, can chat, and are turned
   into real seats by `seatSpectators()` when the game loop returns to the lobby.
+- **`broadcastLobby()` must never fire mid-game — it early-returns unless
+  `gameState === 'Lobby'`, and that guard is load-bearing.** `lobbyUpdate` goes
+  to the whole room and the client reads it as "we're in the lobby now": it
+  resets `view` and drops the round's history, order and role. Both a spectator
+  joining AND a player reconnecting after a dropped connection call it, so
+  without the guard either one throws the ENTIRE table out of the game — which
+  is exactly the "someone's wifi died and it kicked us all out" bug.
+  `scripts/spectate-test.mjs` covers both paths.
 - `index.ts` installs `uncaughtException` / `unhandledRejection` handlers that
   LOG and keep serving. One process hosts every table, so Node's default of
   exiting would drop every game at once — and because the round loop's phases

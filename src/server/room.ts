@@ -303,7 +303,22 @@ export class Room {
     return this.allGuestsReady()
   }
 
+  /**
+   * NEVER fires while a game is running. `lobbyUpdate` goes to the whole room
+   * and the client treats it as "we're in the lobby now" -- it resets the view
+   * and drops the round's history, order and role. So sending one mid-game
+   * yanks EVERY player out of the game and into the lobby screen.
+   *
+   * That's not hypothetical: both a mid-game join (a spectator arriving) and a
+   * mid-game rejoin (someone's wifi dropping and coming back) call this, and
+   * either one used to kick the whole table out. Mid-game roster changes reach
+   * clients through the snapshot / gameState path instead.
+   *
+   * runGameLoop sets gameState back to 'Lobby' BEFORE its own call here, so
+   * the legitimate return-to-lobby at the end of a game still goes out.
+   */
   broadcastLobby() {
+    if (this.gameState !== 'Lobby') return
     this.io.broadcast('lobbyUpdate', {
       roomCode: this.code,
       roster: this.roster(),
