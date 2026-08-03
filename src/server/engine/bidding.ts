@@ -17,7 +17,14 @@ export class BiddingManager {
   private currentTurnSeat: Seat | null = null
   private currentCardsDealt = 0
   private currentIsLastBidder = false
-  private currentSumSoFar = 0
+  /**
+   * The seats bidding this round, kept so the running total can be recomputed
+   * LIVE rather than accumulated. It has to be live: a Time Traveler's Reverse
+   * Time can rewrite an already-placed bid while people are still bidding, and
+   * a carried-forward running total would then forbid the wrong number for the
+   * last bidder -- the exact desync that hangs a round with no turn timers.
+   */
+  private currentTurnOrder: Seat[] = []
   private resolver: ((bid: number) => void) | null = null
   private doublesLocked = false
   /** Seat whose post-bid Double window is currently open (null otherwise). */
@@ -28,6 +35,14 @@ export class BiddingManager {
     private io: EngineIO,
     private roles: RoleManager,
   ) {}
+
+  /** The true total of every bid placed by someone OTHER than this seat. */
+  private sumExcluding(seat: Seat): number {
+    return this.currentTurnOrder.reduce(
+      (sum, other) => (other.id === seat.id ? sum : sum + (other.bid ?? 0)),
+      0,
+    )
+  }
 
   private isValidBid(bid: number, cardsDealt: number, isLastBidder: boolean, sumSoFar: number) {
     if (!Number.isInteger(bid) || bid < 0 || bid > cardsDealt) return false
@@ -124,7 +139,7 @@ export class BiddingManager {
   onSeatDisconnected(seat: Seat) {
     if (this.currentTurnSeat?.id === seat.id && this.resolver) {
       this.resolver(
-        this.autoChooseBid(this.currentCardsDealt, this.currentIsLastBidder, this.currentSumSoFar),
+        this.autoChooseBid(this.currentCardsDealt, this.currentIsLastBidder, this.sumExcluding(seat)),
       )
     }
     if (this.doubleWindowSeat?.id === seat.id) this.closeDoubleWindow()
@@ -141,17 +156,15 @@ export class BiddingManager {
   async runBiddingPhase(turnOrder: Seat[], cardsDealt: number) {
     this.doublesLocked = false
     this.currentCardsDealt = cardsDealt
-    let sumSoFar = 0
+    this.currentTurnOrder = turnOrder
 
     for (let i = 0; i < turnOrder.length; i++) {
       const seat = turnOrder[i]
       this.currentTurnSeat = seat
       this.currentIsLastBidder = i === turnOrder.length - 1
-      this.currentSumSoFar = sumSoFar
       this.broadcastBidState(turnOrder)
-      const bid = await this.waitForBid(seat, cardsDealt, this.currentIsLastBidder, sumSoFar)
+      const bid = await this.waitForBid(seat, cardsDealt, this.currentIsLastBidder, this.sumExcluding(seat))
       seat.bid = bid
-      sumSoFar += bid
       this.broadcastBidState(turnOrder)
 
       // Post-bid Double window: the bidder gets a few seconds to commit before
@@ -182,7 +195,9 @@ export class BiddingManager {
     }
     if (
       typeof bid !== 'number' ||
-      !this.isValidBid(bid, this.currentCardsDealt, this.currentIsLastBidder, this.currentSumSoFar)
+      // Recomputed here, not cached: an ability may have rewritten someone
+      // else's bid since this player's turn opened.
+      !this.isValidBid(bid, this.currentCardsDealt, this.currentIsLastBidder, this.sumExcluding(seat))
     ) {
       this.io.send(seat, 'actionError', "That bid isn't allowed.")
       return

@@ -4,17 +4,36 @@
 
 import { Config } from '@shared/config'
 import type { Card } from '@shared/cards'
-import { isLegalPlay, isSameCard, resolveTrickWinnerIndex } from '@shared/cards'
+import { isLegalPlay, isSameCard, resolveTrickWinnerIndex, sortHand } from '@shared/cards'
 import type { PlayEntry } from '@shared/protocol'
 import type { Seat } from '../types'
 import { sleep } from '../types'
-import type { EngineIO } from './io'
+import type { EngineIO, TrickHost } from './io'
 import type { RoleManager } from './roles'
 
-export class TrickManager {
+/**
+ * What waitForCardPlay resolves with when the wait was ABORTED rather than
+ * answered -- a Time Traveler's Rewind pulling the previous play back off the
+ * table. The play loop steps backwards instead of recording a card.
+ */
+const REWIND = Symbol('rewind')
+
+export class TrickManager implements TrickHost {
   private currentTurnSeat: Seat | null = null
   private currentLeadSuit: string | null = null
-  private resolver: ((card: Card) => void) | null = null
+  private resolver: ((card: Card | typeof REWIND) => void) | null = null
+
+  /**
+   * The current trick, live. An instance field rather than a local in
+   * runPlayPhase because Rewind reaches in from outside the loop to pop it.
+   */
+  private trickPlays: { seat: Seat; card: Card }[] = []
+  /**
+   * Set by a Rewind: this seat may not replay this exact card. Cleared the
+   * moment they play something (anything else is fair game, including a card
+   * that leaves them worse off).
+   */
+  private replayBan: { seatId: string; card: Card } | null = null
 
   // Mirrored for the reconnect snapshot: what's on the table right now.
   private livePlays: PlayEntry[] = []
@@ -39,6 +58,50 @@ export class TrickManager {
     this.currentLeadSuit = null
     this.livePlays = []
     this.liveTrickNumber = 0
+    this.trickPlays = []
+    this.replayBan = null
+  }
+
+  // ---- TrickHost: the Time Traveler's Rewind --------------------------------
+
+  currentTrickNumber(): number {
+    return this.liveTrickNumber
+  }
+
+  lastPlayer(): Seat | null {
+    // Only while a play is actually pending. Between tricks the resolver is
+    // null and the cards on the table have already been scored into a winner.
+    if (!this.resolver || this.trickPlays.length === 0) return null
+    return this.trickPlays[this.trickPlays.length - 1].seat
+  }
+
+  /**
+   * Only ever the MOST RECENT play, and that restriction is load-bearing:
+   * undoing an earlier card could change the lead suit under players who have
+   * already followed it, retroactively making their legal plays illegal.
+   */
+  canRewind(): { ok: boolean; error?: string } {
+    const last = this.trickPlays[this.trickPlays.length - 1]
+    if (!this.resolver || !last) {
+      return { ok: false, error: 'There is no card on the table to pull back right now.' }
+    }
+
+    // The lead suit as it applied to THEM: if theirs was the opening card there
+    // was nothing to follow, so every card in the restored hand is legal.
+    const restored = [...last.seat.hand, last.card]
+    const leadForThem = this.trickPlays.length === 1 ? null : this.currentLeadSuit
+    const alternatives = restored.filter(
+      (card) => !isSameCard(card, last.card) && isLegalPlay(card, restored, leadForThem),
+    )
+    if (alternatives.length === 0) {
+      return { ok: false, error: 'That card was their only legal play — there is nothing else.' }
+    }
+    return { ok: true }
+  }
+
+  /** Aborts the pending wait; runPlayPhase owns the loop index, so it unwinds. */
+  rewindLastPlay(): void {
+    this.resolver?.(REWIND)
   }
 
   private rotateToStart(seatOrder: Seat[], startSeat: Seat): Seat[] {
@@ -60,8 +123,23 @@ export class TrickManager {
     this.io.send(seat, 'dealHand', { hand: seat.hand })
   }
 
-  private findAutoPlayCard(hand: Card[], leadSuit: string | null): Card {
-    return hand.find((card) => isLegalPlay(card, hand, leadSuit)) ?? hand[0]
+  /**
+   * `banned` is a card a Rewind forbids this seat from replaying -- an empty
+   * chair still has to obey the rewind, or the loop would step back onto the
+   * same card forever.
+   */
+  private findAutoPlayCard(hand: Card[], leadSuit: string | null, banned: Card | null): Card {
+    // Legality is judged against the WHOLE hand -- filtering first would hide a
+    // card of the lead suit and make a discard look legal.
+    const legal = hand.filter((card) => isLegalPlay(card, hand, leadSuit))
+    const pool = legal.length > 0 ? legal : hand
+    const allowed = banned ? pool.filter((card) => !isSameCard(card, banned)) : pool
+    return (allowed.length > 0 ? allowed : pool)[0]
+  }
+
+  /** The card this seat is currently barred from replaying, if any. */
+  private bannedFor(seat: Seat): Card | null {
+    return this.replayBan?.seatId === seat.id ? this.replayBan.card : null
   }
 
   private broadcastTrickState(
@@ -82,10 +160,10 @@ export class TrickManager {
     })
   }
 
-  private waitForCardPlay(seat: Seat, leadSuit: string | null): Promise<Card> {
-    return new Promise<Card>((resolve) => {
+  private waitForCardPlay(seat: Seat, leadSuit: string | null): Promise<Card | typeof REWIND> {
+    return new Promise<Card | typeof REWIND>((resolve) => {
       let settled = false
-      const finish = (card: Card) => {
+      const finish = (card: Card | typeof REWIND) => {
         if (settled) return
         settled = true
         this.resolver = null
@@ -97,14 +175,16 @@ export class TrickManager {
       // The only auto-play is for a seat that has actually left, because
       // otherwise the round would hang forever on an empty chair.
       if (!seat.connected) {
-        setImmediate(() => finish(this.findAutoPlayCard(seat.hand, leadSuit)))
+        setImmediate(() => finish(this.findAutoPlayCard(seat.hand, leadSuit, this.bannedFor(seat))))
       }
     })
   }
 
   onSeatDisconnected(seat: Seat) {
     if (this.currentTurnSeat?.id === seat.id && this.resolver) {
-      this.resolver(this.findAutoPlayCard(seat.hand, this.currentLeadSuit))
+      this.resolver(
+        this.findAutoPlayCard(seat.hand, this.currentLeadSuit, this.bannedFor(seat)),
+      )
     }
   }
 
@@ -127,14 +207,38 @@ export class TrickManager {
     for (let trickNumber = 1; trickNumber <= cardsDealt; trickNumber++) {
       const order = this.rotateToStart(seatOrder, leader)
       const plays: { seat: Seat; card: Card }[] = []
+      this.trickPlays = plays
+      this.replayBan = null
       let leadSuit: string | null = null
       this.roles.noteTrickProgress(0)
-      for (const seat of order) {
+      // Indexed rather than for-of because a Rewind steps the index BACKWARDS.
+      for (let i = 0; i < order.length; i++) {
+        const seat = order[i]
         this.currentTurnSeat = seat
         this.currentLeadSuit = leadSuit
         this.broadcastTrickState(plays, leadSuit, trickNumber, cardsDealt)
 
         const card = await this.waitForCardPlay(seat, leadSuit)
+
+        // A Time Traveler pulled the previous play back off the table. Undo it
+        // and hand the turn back to whoever played it -- always the seat at
+        // i - 1, which is why Rewind can only ever reach the most recent card.
+        if (card === REWIND) {
+          const undone = plays.pop()
+          if (undone) {
+            undone.seat.hand.push(undone.card)
+            sortHand(undone.seat.hand)
+            this.io.send(undone.seat, 'dealHand', { hand: undone.seat.hand })
+            this.replayBan = { seatId: undone.seat.id, card: undone.card }
+            // Their card WAS the lead: the trick reopens with no suit set.
+            if (plays.length === 0) leadSuit = null
+            this.roles.noteTrickProgress(plays.length)
+            i -= 2 // the loop's ++ lands back on the seat that must replay
+          }
+          continue
+        }
+
+        this.replayBan = null
         this.removeCardFromHand(seat, card)
         plays.push({ seat, card })
         this.roles.noteTrickProgress(plays.length)
@@ -147,6 +251,7 @@ export class TrickManager {
       }
 
       this.currentTurnSeat = null
+      this.replayBan = null
       const winnerIndex = resolveTrickWinnerIndex(plays, leadSuit as string, trumpSuit)
       const winner = plays[winnerIndex].seat
 
@@ -193,6 +298,11 @@ export class TrickManager {
     }
     if (!isLegalPlay(card, seat.hand, this.currentLeadSuit)) {
       this.io.send(seat, 'actionError', 'You must follow suit if you can.')
+      return
+    }
+    const banned = this.bannedFor(seat)
+    if (banned && isSameCard(card, banned)) {
+      this.io.send(seat, 'actionError', 'That play was rewound — you must play something else.')
       return
     }
 

@@ -20,3 +20,26 @@ export interface EngineIO {
    */
   sendSpectators<K extends keyof ServerToClientEvents>(event: K, payload: Payload<K>): void
 }
+
+/**
+ * The slice of TrickManager the Time Traveler's Rewind needs. Declared here
+ * rather than imported so RoleManager never depends on TrickManager directly --
+ * TrickManager already depends on RoleManager, and this keeps that one-way.
+ */
+export interface TrickHost {
+  /** Which trick is on the table (0 between tricks). Rewind is once per trick. */
+  currentTrickNumber(): number
+  /** The seat whose card is currently the LAST one on the table, if any. */
+  lastPlayer(): Seat | null
+  /**
+   * Whether the last play COULD be pulled back, without doing it. Split from
+   * the execution so the caller can reject an impossible rewind before it has
+   * burned the target's shield on it.
+   */
+  canRewind(): { ok: boolean; error?: string }
+  /**
+   * Pulls that card back off the table: it returns to their hand and they play
+   * again, barred from repeating it. Only call after canRewind() said yes.
+   */
+  rewindLastPlay(): void
+}

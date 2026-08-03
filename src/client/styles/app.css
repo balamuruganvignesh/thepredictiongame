@@ -1012,6 +1012,13 @@ button.seat:hover {
   transform: scale(1.16);
 }
 
+/* The bid you're already on, in a reopened-bid prompt: picking it is a no-op,
+   so it reads as "this is where you are" rather than as a choice. */
+.bid-chip.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .bid-chip.is-forbidden {
   position: relative;
   border-color: transparent;
@@ -1283,6 +1290,37 @@ button.seat:hover {
 .role__target.is-selected {
   background: var(--primary);
   border-color: var(--accent);
+}
+
+/* Time Branches picks a card out of your own hand. Scaled down from --card-w so
+   a five-card hand fits the modal without wrapping into a wall. */
+.role__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.role__card {
+  padding: 0;
+  border: none;
+  background: none;
+  line-height: 0;
+  border-radius: var(--card-radius);
+  scale: 0.78;
+  transform-origin: top left;
+  margin: 0 calc(-0.22 * var(--card-w)) calc(-0.22 * var(--card-h)) 0;
+  transition: scale var(--t-quick) ease-out;
+}
+
+.role__card.is-selected {
+  scale: 0.86;
+}
+
+.role__card.is-selected .card {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 4px 10px rgb(0 0 0 / 50%);
 }
 
 .role__result {

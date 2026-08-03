@@ -22,6 +22,15 @@ by both. See README.md for the player-facing rules.
 - `node scripts/spectate-test.mjs` (~25s) asserts that neither a spectator
   joining nor a player reconnecting knocks the table out of a running game.
   Run it after touching join / reconnect / lobby broadcasting.
+- **In-process tests, no server needed, all under a second — prefer these to a
+  playtest when the change is to chaos mode.** A playtest only exercises the
+  roles the deal happened to hand out (a 6-player game doesn't contain all 7),
+  so it can pass while a whole role is untouched.
+  - `npx tsx scripts/roles-test.ts` — role assignment: no duplicates while the
+    table fits the pool, and every role still gets dealt.
+  - `npx tsx scripts/abilities-test.ts` — the Time Traveler's and Angel's
+    abilities, by re-rolling the deal until the seat holds the exact ability.
+  - `npx tsx scripts/rewind-test.ts` — Rewind unwinding the live play loop.
 - Commit after each accepted chunk of work (user expects it).
 
 ## Architecture
@@ -79,16 +88,24 @@ Host toggles classic/chaos on a lobby card. All role logic lives in
 `server/engine/roles.ts` + `shared/roleDefs.ts` (data) + `client/components/
 RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 
-- **EVERY seat gets a role**, dealt round-robin from a shuffled pool, so past
-  the pool size roles repeat. 5 standard roles (Detective/Joker/Gambler/Judge/
-  Guardian) + RARE Mirrorer, which only joins the pool 20% of games.
+- **EVERY seat gets a role**, dealt round-robin from a shuffled pool. 7 standard
+  roles (Detective/Joker/Gambler/Judge/Guardian/Time Traveler/Angel) + RARE
+  Mirrorer, which only joins the pool 20% of games.
+- **Round-robin off a shuffled pool IS the no-duplicates rule** — `pool[i %
+  pool.length]` is distinct for as long as the pool lasts, so any table of 7 or
+  fewer is guaranteed no repeated roles, and only 8+ players see one twice.
+  Never replace it with an independent random pick per seat.
 - **Duplicate role holders are supported and must stay that way.** Every
   per-player effect is keyed by player id. The two effects keyed by TARGET must
   ACCUMULATE, never overwrite: `armedSabotageBy` is a LIST of saboteurs per
-  target and `armedGravekeeper` is a COUNT. `disguisedBids` is deliberately
+  target, `armedGravekeeper` is a COUNT, `armedNullify` is a COUNT (an Angel's
+  Intercede arms the same shield a Guardian's Nullify does, and two shields must
+  block two abilities), and `armedBlessingBy` / `armedHaloBy` are lists. `disguisedBids` is deliberately
   last-write-wins — a bid can only display one number.
 - One ability per round, use-it-or-lose-it (two-target abilities never dealt
-  with <3 seats). All options start equally likely, but the ability you were
+  with <3 seats). The Time Traveler's **Alternate Universe is the one exception**:
+  it REPLACES your ability (a random one from a role you name) and returns
+  `keepAbility`, so the round's action is still ahead of you. All options start equally likely, but the ability you were
   just dealt is weighted `0.4^streak` against 1.0 for the rest.
 - Conflict order: Nullify beats all targeted abilities, Bid Lock beats bid
   tampering. Sabotage cuts both ways: mark hits their bid → −10 them, mark
@@ -106,6 +123,24 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   its `handSwapUsed` gate is only set when the sequence actually ends, so a
   blocked retry keeps it. Gambler's All In is a true 50/50 with a pity floor:
   3 losses in a row forces the next win.
+- **The Angel's Grace is a SECRET mechanic.** Its abilities only ever help other
+  players; +5 to the Angel per kindness that actually landed (+15 for
+  Sacrifice), told privately at scoring and NEVER announced. Grace is only
+  banked when the effect changed something — blessing a player who was never in
+  danger pays nothing, which is what stops an Angel farming one safe ally. It
+  settles in `settleGrace` AFTER every seat has been through `adjustScore`,
+  because a blessing is only banked as the BLESSED seat is scored and the Angel
+  may sit earlier in seat order.
+- **Rewind only ever undoes the MOST RECENT play**, and that is load-bearing:
+  undoing an earlier card could change the lead suit under players who already
+  followed it. Who it hits is decided by timing, not by a picker. `canRewind()`
+  is checked BEFORE the target's shield so an impossible rewind can't strip a
+  Nullify for free.
+- **Reverse Time can rewrite a bid while bidding is still going**, so the last
+  bidder's forbidden number must never come off a cached running total.
+  `BiddingManager.sumExcluding()` recomputes it live, and `syncBids()` ships the
+  true `bidSum` on every `roleSync`. Get this wrong and the UI forbids the wrong
+  chip, the server rejects the bid the UI allowed, and the round hangs forever.
 - Every ability's `note` states whether a Guardian can cancel it — keep that
   accurate when adding or changing abilities. Announcements name the role,
   never the player; roles are revealed on the final standings.

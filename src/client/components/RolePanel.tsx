@@ -4,8 +4,10 @@
 
 import { useEffect, useState } from 'react'
 import * as RoleDefs from '@shared/roleDefs'
-import type { Suit } from '@shared/cards'
+import type { Card, Suit } from '@shared/cards'
+import { cardKey } from '@shared/cards'
 import type { RoleState, UseAbilityPayload } from '@shared/protocol'
+import { PlayingCard, cardLabel } from './PlayingCard'
 
 /** The suits Fortune can name -- no Jokers, they aren't a suit anyone bids around. */
 const SUITS: { suit: Suit; glyph: string }[] = [
@@ -20,12 +22,14 @@ type Props = {
   /** The whole table, in the same fixed order as the top bar / score sheet. */
   players: { id: string; name: string }[]
   meId: string | null
+  /** Your own hand -- Time Branches picks the card to put back. */
+  hand: Card[]
   lastResult: string | null
   onUse: (payload: UseAbilityPayload) => void
   onClose: () => void
 }
 
-export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose }: Props) {
+export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, onClose }: Props) {
   const role = RoleDefs.getRole(roleState.roleId)
   const def = RoleDefs.getAbility(roleState.abilityId)
 
@@ -34,14 +38,21 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
   const [suit, setSuit] = useState<Suit | null>(null)
   const [peek, setPeek] = useState<'high' | 'low' | null>(null)
   const [scope, setScope] = useState<'one' | 'all' | null>(null)
+  const [pickedRole, setPickedRole] = useState<string | null>(null)
+  const [pickedCard, setPickedCard] = useState<string | null>(null)
   const [nag, setNag] = useState(false)
 
   // A new ability (new round, or a retry that kept it live) clears the pickers.
+  // Alternate Universe relies on this: it swaps abilityId out from under the
+  // panel without spending the turn, and the new ability's pickers must be
+  // empty rather than carrying the role you just named.
   useEffect(() => {
     setSelected([])
     setSuit(null)
     setPeek(null)
     setScope(null)
+    setPickedRole(null)
+    setPickedCard(null)
     setNag(false)
   }, [roleState.abilityId, roleState.used, lastResult])
 
@@ -79,6 +90,8 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
       selected.length < needed ||
       (def?.extra === 'suit' && !suit) ||
       (def?.extra === 'peek' && !peek) ||
+      (def?.extra === 'role' && !pickedRole) ||
+      (def?.extra === 'card' && !pickedCard) ||
       (scoped && !scope)
     ) {
       setNag(true)
@@ -92,6 +105,8 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
       suit: suit ?? undefined,
       peek: peek ?? undefined,
       scope: scope ?? undefined,
+      roleId: pickedRole ?? undefined,
+      cardKey: pickedCard ?? undefined,
     })
   }
 
@@ -219,6 +234,55 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
                   {end === 'high' ? 'HIGHEST' : 'LOWEST'}
                 </button>
               ))}
+            </div>
+          </>
+        )}
+
+        {def?.extra === 'role' && !roleState.used && (
+          <>
+            <p className={`role__picker-label${nag && !pickedRole ? ' is-nagging' : ''}`}>
+              {nag && !pickedRole ? 'name a role first!' : 'name a role — you get a RANDOM one of its abilities'}
+            </p>
+            <div className="role__targets is-big">
+              {RoleDefs.roleOrder.map((id) => {
+                const option = RoleDefs.getRole(id)
+                if (!option) return null
+                return (
+                  <button
+                    key={id}
+                    className={`role__target${pickedRole === id ? ' is-selected' : ''}`}
+                    style={pickedRole === id ? { color: option.color } : undefined}
+                    onClick={() => setPickedRole(id)}
+                  >
+                    {option.emoji} {option.name.replace('The ', '')}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {def?.extra === 'card' && !roleState.used && (
+          <>
+            <p className={`role__picker-label${nag && !pickedCard ? ' is-nagging' : ''}`}>
+              {nag && !pickedCard ? 'pick a card first!' : 'pick the card to put back'}
+            </p>
+            <div className="role__cards">
+              {hand.map((card) => {
+                const key = cardKey(card)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`role__card${pickedCard === key ? ' is-selected' : ''}`}
+                    onClick={() => setPickedCard(key)}
+                    aria-label={`Put back the ${cardLabel(card)}`}
+                    aria-pressed={pickedCard === key}
+                  >
+                    <PlayingCard card={card} />
+                  </button>
+                )
+              })}
             </div>
           </>
         )}

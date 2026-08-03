@@ -87,6 +87,10 @@ export class Room {
     this.roles = new RoleManager(this.io)
     this.bidding = new BiddingManager(this.io, this.roles)
     this.tricks = new TrickManager(this.io, this.roles)
+    // The Time Traveler's Rewind reaches back into the live trick. Injected
+    // after construction because TrickManager already depends on RoleManager,
+    // and this keeps that dependency one-way.
+    this.roles.attachTricks(this.tricks)
   }
 
   // ---- Roster ---------------------------------------------------------------
@@ -369,6 +373,12 @@ export class Room {
     this.bidding.handleBidSubmission(seat, bid)
   }
 
+  /** Answering a Time Traveler's Reverse Time. Not a turn -- nothing waits. */
+  submitRebid(seat: Seat, bid: number) {
+    this.lastActivity = Date.now()
+    this.roles.handleRebid(seat, bid)
+  }
+
   declareDouble(seat: Seat) {
     this.lastActivity = Date.now()
     this.bidding.handleDeclareDouble(seat)
@@ -452,6 +462,7 @@ export class Room {
       hand: seat ? seat.hand : [],
       roleState: seat ? this.roles.getRoleState(seat) : null,
       illusion: seat ? this.roles.getIllusion(seat) : [],
+      rebid: seat ? this.roles.getRebidPrompt(seat) : null,
       chat: this.chatLog,
       spectating: seat == null,
       ...this.tricks.snapshot(),

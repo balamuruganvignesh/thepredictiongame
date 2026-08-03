@@ -10,6 +10,7 @@ import type {
   GameStateUpdate,
   LobbyUpdate,
   PlayEntry,
+  RebidPrompt,
   RoleState,
   RoleSync,
   ScoreUpdate,
@@ -61,6 +62,11 @@ export type Store = {
    * only -- every one of them is still perfectly legal to play.
    */
   illusionCards: string[]
+  /**
+   * A Time Traveler's Reverse Time reopened your bid. NOT a turn -- the round
+   * carries on around it, and dismissing it just keeps the bid you had.
+   */
+  rebid: RebidPrompt | null
   plays: PlayEntry[]
   trickNumber: number
   totalTricks: number
@@ -110,6 +116,7 @@ const initialStore: Store = {
   leadSuit: null,
   hand: [],
   illusionCards: [],
+  rebid: null,
   plays: [],
   trickNumber: 0,
   totalTricks: 0,
@@ -137,6 +144,7 @@ type Action =
   | { type: 'playing' }
   | { type: 'hand'; hand: Card[] }
   | { type: 'illusion'; cards: string[] }
+  | { type: 'rebidPrompt'; data: RebidPrompt | null }
   | { type: 'trickUpdate'; data: TrickUpdate }
   | { type: 'trickResolved'; data: TrickResolved }
   | { type: 'score'; data: ScoreUpdate }
@@ -233,6 +241,7 @@ function reducer(state: Store, action: Action): Store {
         leadSuit: null,
         hand: [],
         illusionCards: [],
+        rebid: null,
         plays: [],
         trickNumber: 0,
         trickWinnerId: null,
@@ -261,6 +270,9 @@ function reducer(state: Store, action: Action): Store {
 
     case 'illusion':
       return { ...state, illusionCards: action.cards }
+
+    case 'rebidPrompt':
+      return { ...state, rebid: action.data }
 
     case 'trickUpdate':
       return {
@@ -337,6 +349,8 @@ function reducer(state: Store, action: Action): Store {
       const next = { ...state }
       if (action.data.bids) next.bids = { ...state.bids, ...action.data.bids }
       if (action.data.tricks) next.tricksWon = { ...state.tricksWon, ...action.data.tricks }
+      // Never derived from the bids above: those may carry a Judge's disguise.
+      if (action.data.bidSum != null) next.bidSum = action.data.bidSum
       return next
     }
 
@@ -415,6 +429,7 @@ function reducer(state: Store, action: Action): Store {
         leadSuit: data.leadSuit,
         hand: data.hand,
         illusionCards: data.illusion,
+        rebid: data.rebid,
         plays: data.plays,
         trickNumber: data.trickNumber,
         trickWinnerId: null,
@@ -476,6 +491,7 @@ export function useGame() {
 
     socket.on('dealHand', (data) => dispatch({ type: 'hand', hand: data.hand }))
     socket.on('illusion', (data) => dispatch({ type: 'illusion', cards: data.cards }))
+    socket.on('rebidPrompt', (data) => dispatch({ type: 'rebidPrompt', data }))
     socket.on('trickUpdate', (data) => dispatch({ type: 'trickUpdate', data }))
     socket.on('trickResolved', (data) => dispatch({ type: 'trickResolved', data }))
     socket.on('scoreUpdate', (data) => dispatch({ type: 'score', data }))
@@ -541,6 +557,16 @@ export function useGame() {
       },
       submitBid(bid: number) {
         socket.emit('submitBid', bid)
+      },
+      submitRebid(bid: number) {
+        // Closed optimistically: nothing on the server is waiting on this, so
+        // leaving the modal up until a broadcast lands would just feel stuck.
+        dispatch({ type: 'rebidPrompt', data: null })
+        socket.emit('submitRebid', bid)
+      },
+      /** Walk away from the do-over and keep the bid you already had. */
+      dismissRebid() {
+        dispatch({ type: 'rebidPrompt', data: null })
       },
       declareDouble() {
         dispatch({ type: 'doubleCommitted' })

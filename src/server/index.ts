@@ -154,6 +154,7 @@ io.on('connection', (socket) => {
   socket.on('startGame', () => withSeat((r, s) => r.startGame(s)))
   socket.on('setMode', (mode) => withSeat((r, s) => r.setMode(s, mode)))
   socket.on('submitBid', (bid) => withSeat((r, s) => r.submitBid(s, Number(bid))))
+  socket.on('submitRebid', (bid) => withSeat((r, s) => r.submitRebid(s, Number(bid))))
   socket.on('declareDouble', () => withSeat((r, s) => r.declareDouble(s)))
   socket.on('playCard', (card) => withSeat((r, s) => r.playCard(s, card)))
   socket.on('useAbility', (payload) => withSeat((r, s) => r.useAbility(s, payload ?? {})))

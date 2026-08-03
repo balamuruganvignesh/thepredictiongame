@@ -21,7 +21,41 @@ const announcements = []
 
 function makeBot(name, index) {
   const socket = io(URL, { transports: ['websocket'] })
-  const bot = { name, socket, hand: [], id: null, roleState: null, abilityTried: false }
+  const bot = { name, socket, hand: [], id: null, roleState: null, abilityTried: null, abilityAttempt: 0 }
+
+  // Fire this round's ability, aimed at whoever isn't us. Keyed on the ability
+  // ID rather than a flag, because the Time Traveler's Alternate Universe
+  // REPLACES the ability without spending the turn -- a boolean would leave the
+  // replacement unused and never exercise it.
+  //
+  // Called from three places on purpose. Firing only on roleState lands every
+  // attempt in the BIDDING phase, where Rewind ("no cards on the table") and
+  // Reverse Time ("they haven't bid yet") can only ever be rejected -- so the
+  // play phase and mid-trick moments get a go too.
+  function tryAbility() {
+    const state = bot.roleState
+    if (!state?.active || !state.abilityId || state.used) return
+    if (bot.abilityTried === state.abilityId + bot.abilityAttempt) return
+    bot.abilityTried = state.abilityId + bot.abilityAttempt
+    setTimeout(() => {
+      const others = (bot.lobby?.roster ?? []).filter((r) => r.id !== bot.id).map((r) => r.id)
+      const suits = ['Spades', 'Diamonds', 'Clubs', 'Hearts']
+      const roleIds = ['detective', 'joker', 'gambler', 'judge', 'guardian', 'time_traveler', 'angel', 'mirrorer']
+      const card = bot.hand[Math.floor(Math.random() * bot.hand.length)]
+      // Every picker in one payload: the server ignores the fields the current
+      // ability doesn't ask for.
+      socket.emit('useAbility', {
+        targetId: others[0],
+        targetId2: others[1],
+        direction: Math.random() < 0.5 ? 1 : -1,
+        suit: suits[Math.floor(Math.random() * suits.length)],
+        peek: Math.random() < 0.5 ? 'high' : 'low',
+        scope: Math.random() < 0.5 ? 'one' : 'all',
+        roleId: roleIds[Math.floor(Math.random() * roleIds.length)],
+        cardKey: card ? `${card.suit}-${card.rank}` : undefined,
+      })
+    }, 60 + Math.random() * 300)
+  }
 
   socket.on('connect', () => {
     socket.emit('join', { name, roomCode: index === 0 ? null : roomCode, playerId: null })
@@ -48,10 +82,15 @@ function makeBot(name, index) {
   socket.on('gameState', (data) => {
     if (data.phase === 'RoundStart') {
       bot.bid = null
-      bot.abilityTried = false
+      bot.abilityTried = null
+      bot.abilityAttempt = 0
       bot.turnOrder = data.turnOrder
       bot.cardsDealt = data.cardsDealt
       if (index === 0) log(`  round ${data.roundNumber}: ${data.cardsDealt} cards, ${data.trumpSuit}`)
+    }
+    if (data.phase === 'Playing') {
+      bot.abilityAttempt++
+      tryAbility()
     }
     if (data.phase === 'Bidding' && data.currentTurnId === bot.id && bot.bid == null) {
       // Use the server's true total: data.bids can carry an Imposter disguise,
@@ -74,6 +113,12 @@ function makeBot(name, index) {
 
   socket.on('trickUpdate', (data) => {
     bot.lastTrick = data
+    // Mid-trick, with a card already on the table: the only moment a Rewind can
+    // actually land, so give the ability another go here.
+    if (data.plays.length > 0 && data.currentTurnId != null) {
+      bot.abilityAttempt++
+      tryAbility()
+    }
     if (data.currentTurnId !== bot.id) return
     const legal = bot.hand.filter(
       (c) =>
@@ -88,21 +133,17 @@ function makeBot(name, index) {
 
   socket.on('roleState', (data) => {
     bot.roleState = data
-    // Fire the ability once per round, aimed at whoever isn't us.
-    if (data.active && data.abilityId && !data.used && !bot.abilityTried) {
-      bot.abilityTried = true
-      setTimeout(() => {
-        const others = (bot.lobby?.roster ?? []).filter((r) => r.id !== bot.id).map((r) => r.id)
-        const suits = ['Spades', 'Diamonds', 'Clubs', 'Hearts']
-        socket.emit('useAbility', {
-          targetId: others[0],
-          targetId2: others[1],
-          direction: Math.random() < 0.5 ? 1 : -1,
-          suit: suits[Math.floor(Math.random() * suits.length)],
-          peek: Math.random() < 0.5 ? 'high' : 'low',
-        })
-      }, 300 + Math.random() * 900)
-    }
+    tryAbility()
+  })
+
+  // A Time Traveler reopened this bot's bid. Answering keeps Reverse Time
+  // exercised end to end; a rewrite isn't bound by the last-bidder rule, so
+  // any number in range is legal here.
+  socket.on('rebidPrompt', (data) => {
+    setTimeout(
+      () => socket.emit('submitRebid', Math.floor(Math.random() * (data.cardsDealt + 1))),
+      120,
+    )
   })
 
   socket.on('roleAnnounce', (d) => announcements.push(d.message))
@@ -159,8 +200,18 @@ if (!finished) {
   }
 }
 
+// Grouped by their leading emoji + SHOUTED headline rather than listed raw:
+// with 100+ announcements a flat list is unreadable, and what you actually
+// want to know is WHICH abilities fired at all this game.
 log(`\nannouncements: ${announcements.length}`)
-for (const a of announcements.slice(0, 12)) log('  ' + a)
+const byKind = new Map()
+for (const a of announcements) {
+  const kind = a.match(/^(\S+\s+[A-Z][A-Za-z' ]*)/)?.[1].trim() ?? a.slice(0, 28)
+  byKind.set(kind, (byKind.get(kind) ?? 0) + 1)
+}
+for (const [kind, n] of [...byKind].sort((a, b) => b[1] - a[1])) {
+  log(`  ${String(n).padStart(3)}x ${kind}`)
+}
 if (errors.length) {
   log(`\nerrors (${errors.length}):`)
   for (const e of errors.slice(0, 20)) log('  ' + e)

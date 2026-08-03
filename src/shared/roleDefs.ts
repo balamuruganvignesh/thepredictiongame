@@ -20,9 +20,10 @@ export type AbilityDef = {
    * Extra input the ability needs beyond a target: "direction" shows a
    * +1 / -1 picker, "suit" shows a ♠ ♦ ♣ ♥ picker, "peek" shows a
    * HIGHEST / LOWEST picker, "scope" shows ONE PLAYER / EVERYONE and only
-   * opens the target picker when ONE PLAYER is chosen.
+   * opens the target picker when ONE PLAYER is chosen, "role" shows the role
+   * gallery, "card" shows your own hand.
    */
-  extra?: 'direction' | 'suit' | 'peek' | 'scope'
+  extra?: 'direction' | 'suit' | 'peek' | 'scope' | 'role' | 'card'
   /** Short usability note surfaced in the UI ("play phase only" etc.). */
   note?: string
 }
@@ -198,6 +199,68 @@ export const abilities: Record<string, AbilityDef> = {
     note: 'triggers on their next trick win. a Guardian’s Nullify can cancel it',
   },
 
+  // ---- The Time Traveler --------------------------------------------------
+  reverse_time: {
+    id: 'reverse_time',
+    name: 'Reverse Time',
+    desc: 'Reopen a bid — your own or anyone else’s. THEY pick the new number, not you, and the usual last-bidder rule doesn’t apply to a rewrite.',
+    target: 'any',
+    note: 'they must have bid already. reopen your own and nothing can block it; reopen someone else’s and a Guardian’s Nullify or Bid Lock can cancel it',
+  },
+  rewind: {
+    id: 'rewind',
+    name: 'Rewind',
+    desc: 'Pull the card that was JUST played back off the table. It returns to their hand and they must play something DIFFERENT. You don’t choose who — timing does.',
+    target: 'none',
+    note: 'play phase only, mid-trick, once per trick. a Guardian’s Nullify on whoever just played can cancel it',
+  },
+  alternate_universe: {
+    id: 'alternate_universe',
+    name: 'Alternate Universe',
+    desc: 'Step sideways into another life. Name any ROLE and you’re dealt a random ability from ITS set — and this does NOT spend your turn. The new ability is the one you actually get to use.',
+    target: 'none',
+    extra: 'role',
+    note: 'free — it replaces your ability instead of spending it. targets no one, so nothing can block it',
+  },
+  time_branches: {
+    id: 'time_branches',
+    name: 'Time Branches',
+    desc: 'Rewind the deal itself: put ONE card back into the cards that were never dealt, and draw one of them at random in its place. Sight unseen — the branch you get may be worse.',
+    target: 'none',
+    extra: 'card',
+    note: 'never mid-trick. the card you discard joins the undealt pile, where a Detective’s Fortune can read it. targets no one, so nothing can block it',
+  },
+
+  // ---- The Angel ----------------------------------------------------------
+  guardian_angel: {
+    id: 'guardian_angel',
+    name: 'Guardian Angel',
+    desc: 'Watch over another player: if they miss their bid by exactly 1 this round, they score as if they hit it.',
+    target: 'other',
+    note: 'resolves at end of round, and only if they actually needed it. a Guardian’s Nullify can cancel it',
+  },
+  intercede: {
+    id: 'intercede',
+    name: 'Intercede',
+    desc: 'Step in front of another player: the next ability aimed at THEM this round fizzles into nothing.',
+    target: 'other',
+    note: 'one-time shield, given away. a Guardian’s Nullify can cancel it',
+  },
+  halo: {
+    id: 'halo',
+    name: 'Halo',
+    desc: 'Hold a player up: their round score can’t go below zero this round, however badly it goes for them.',
+    target: 'other',
+    note: 'resolves at end of round. a Guardian’s Nullify can cancel it',
+  },
+  sacrifice: {
+    id: 'sacrifice',
+    name: 'Sacrifice',
+    desc: 'Give another player 10 of your own points, no strings, no conditions. It always lands, and it always costs you.',
+    target: 'other',
+    note: 'resolves at end of round. a Guardian’s Nullify can cancel it',
+  },
+
   // ---- The Mirrorer (rare) ------------------------------------------------
   mirror_bet: {
     id: 'mirror_bet',
@@ -259,6 +322,26 @@ export const roles: Record<string, RoleDef> = {
     color: '#7ADE8E',
     abilities: ['shield', 'lock', 'nullify', 'gravekeeper'],
   },
+  time_traveler: {
+    id: 'time_traveler',
+    name: 'The Time Traveler',
+    emoji: '⏳',
+    tagline: 'None of this is final.',
+    blurb:
+      'The undo role. Nothing that has already happened has to stay happened: reopen a bid, pull a played card back off the table, or rewind the deal itself and trade a card for one that was never dealt. And when your own ability is the wrong one, step into a universe where you drew a different role entirely.',
+    color: '#5FD3C0',
+    abilities: ['reverse_time', 'rewind', 'alternate_universe', 'time_branches'],
+  },
+  angel: {
+    id: 'angel',
+    name: 'The Angel',
+    emoji: '😇',
+    tagline: 'After you.',
+    blurb:
+      'The selfless role. Every ability you have spends itself on somebody ELSE — a save, a shield, a floor under their score, even a handful of your own points. Nothing here helps you win directly. They say kindness has a way of coming back around.',
+    color: '#F2E3A6',
+    abilities: ['guardian_angel', 'intercede', 'halo', 'sacrifice'],
+  },
   mirrorer: {
     id: 'mirrorer',
     name: 'The Mirrorer',
@@ -273,10 +356,32 @@ export const roles: Record<string, RoleDef> = {
 }
 
 /** Stable order for the lobby gallery. */
-export const roleOrder = ['detective', 'joker', 'gambler', 'judge', 'guardian', 'mirrorer']
+export const roleOrder = [
+  'detective',
+  'joker',
+  'gambler',
+  'judge',
+  'guardian',
+  'time_traveler',
+  'angel',
+  'mirrorer',
+]
 
-/** The non-rare roles RoleManager deals from by default. */
-export const standardRoleOrder = ['detective', 'joker', 'gambler', 'judge', 'guardian']
+/**
+ * The non-rare roles RoleManager deals from by default. Its LENGTH is the
+ * table's duplicate-free capacity: assignRoles deals round-robin, so any table
+ * with this many seats or fewer gets all-distinct roles, and only a table
+ * bigger than the pool sees a role repeat.
+ */
+export const standardRoleOrder = [
+  'detective',
+  'joker',
+  'gambler',
+  'judge',
+  'guardian',
+  'time_traveler',
+  'angel',
+]
 
 export function getRole(roleId: string | null | undefined): RoleDef | null {
   if (!roleId) return null

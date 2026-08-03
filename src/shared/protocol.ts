@@ -1,11 +1,13 @@
 // The wire protocol: every server<->client message the game sends.
 //
 // Client -> Server: join, toggleReady, startGame, setMode, submitBid,
-//                   declareDouble, playCard, useAbility, requestState
+//                   submitRebid, declareDouble, playCard, useAbility,
+//                   requestState
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
-//                   abilityResult, roleAnnounce, roleSync, snapshot
+//                   abilityResult, roleAnnounce, roleSync, rebidPrompt,
+//                   snapshot
 
 import type { Card, Suit } from './cards'
 
@@ -135,6 +137,15 @@ export type RoleAnnounce = { message: string }
 export type RoleSync = {
   bids?: Record<PlayerId, number>
   tricks?: Record<PlayerId, number>
+  /**
+   * The TRUE total of every bid placed, resent whenever an ability changed a
+   * REAL bid. Load-bearing during the bidding phase: a Time Traveler's Reverse
+   * Time can rewrite an earlier bid while people are still bidding, and the
+   * last bidder's forbidden chip comes off this number. Leave it stale and the
+   * UI forbids the wrong chip, the server rejects the bid the UI allowed, and
+   * with no turn timers the round hangs there forever.
+   */
+  bidSum?: number
 }
 
 export type UseAbilityPayload = {
@@ -149,7 +160,19 @@ export type UseAbilityPayload = {
    * EVERY other hand. With 'one' the payload also carries a targetId.
    */
   scope?: 'one' | 'all'
+  /** Alternate Universe: whose ability set to draw a new ability from. */
+  roleId?: string
+  /** Time Branches: the card in YOUR hand to put back, as a cardKey. */
+  cardKey?: string
 }
+
+/**
+ * The Time Traveler's Reverse Time reopened your bid: pick a new one. Unlike
+ * the opening bid this is NOT a turn -- the round carries on around you, and
+ * dismissing the prompt simply keeps the bid you already had. Every number from 0
+ * to cardsDealt is offered: a rewrite isn't bound by the last-bidder sum rule.
+ */
+export type RebidPrompt = { cardsDealt: number; currentBid: number }
 
 /**
  * The Detective's Illusion: card keys in YOUR hand to render as if they were
@@ -188,6 +211,8 @@ export type Snapshot = {
   roleState: RoleState | null
   /** Any Illusion currently cast on this player's hand. */
   illusion: string[]
+  /** A Reverse Time prompt still waiting on this player, so a refresh keeps it. */
+  rebid: RebidPrompt | null
   /** Recent chat, so a refresh doesn't wipe the conversation. */
   chat: ChatMessage[]
   /** Watching rather than playing: no hand, no turn, no abilities. */
@@ -227,6 +252,7 @@ export interface ServerToClientEvents {
   roleAnnounce: (data: RoleAnnounce) => void
   roleSync: (data: RoleSync) => void
   illusion: (data: Illusion) => void
+  rebidPrompt: (data: RebidPrompt) => void
   snapshot: (data: Snapshot) => void
 }
 
@@ -236,6 +262,8 @@ export interface ClientToServerEvents {
   startGame: () => void
   setMode: (mode: GameMode) => void
   submitBid: (bid: number) => void
+  /** Answering a Reverse Time prompt. Not a turn -- nothing waits on it. */
+  submitRebid: (bid: number) => void
   declareDouble: () => void
   playCard: (card: Card) => void
   useAbility: (payload: UseAbilityPayload) => void

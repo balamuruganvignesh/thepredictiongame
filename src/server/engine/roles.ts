@@ -24,7 +24,7 @@ import * as RoleDefs from '@shared/roleDefs'
 import type { GameMode, RoleState, UseAbilityPayload } from '@shared/protocol'
 import type { Seat } from '../types'
 import { randomInt, shuffle } from '../types'
-import type { EngineIO } from './io'
+import type { EngineIO, TrickHost } from './io'
 
 // Chance per chaos game that the rare Mirrorer joins the role pool at all.
 const MIRRORER_CHANCE = 0.2
@@ -45,6 +45,18 @@ const ALL_IN_PITY = 3
 // Suits the Detective's Fortune can name. Jokers aren't nameable: they're not
 // a suit anybody bids around.
 const FORTUNE_SUITS: Suit[] = ['Spades', 'Diamonds', 'Clubs', 'Hearts']
+
+// The Angel's SECRET mechanic. Every ability the Angel has spends itself on
+// somebody else and does nothing for them directly -- this is the payback, and
+// it is deliberately never announced and never written in the ability text.
+// Grace is only ever banked when the kindness ACTUALLY did something: blessing
+// a player who was never in danger earns nothing, which is what stops an Angel
+// farming one safe ally every round.
+const GRACE_VALUE = 5
+// Sacrifice hands away 10 points with no conditions attached, so it pays the
+// most Grace by some way -- 15 back on 10 given. The most generous play being
+// the strongest play IS the mechanic.
+const GRACE_FOR_SACRIFICE = 3
 
 // How much rarer a repeat gets each time it lands again. Weight is
 // DECAY^streak against 1.0 for every other option: with four abilities a first
@@ -103,7 +115,18 @@ export class RoleManager {
   private armedAllIn = new Set<string>()
   private armedCrown = new Set<string>()
   private armedLock = new Set<string>()
-  private armedNullify = new Set<string>()
+  /**
+   * TARGET id -> how many shields are stacked on them, because an Angel's
+   * Intercede arms the same defense a Guardian's Nullify does. A COUNT, not a
+   * set: two shields on one player must block two abilities, not one.
+   */
+  private armedNullify = new Map<string, number>()
+  /**
+   * TARGET id -> the Angels who paid for a shield on them (a list, so duplicate
+   * Angels each get credited). A Guardian's own Nullify contributes nothing
+   * here, so it earns nobody any Grace.
+   */
+  private nullifyCreditBy = new Map<string, string[]>()
   /** TARGET id -> every saboteur who marked them (a list, so duplicate Judges each collect). */
   private armedSabotageBy = new Map<string, string[]>()
   /** Cross-seat score deltas resolved before scoring (Sabotage's backfire hits the Judge). */
@@ -125,8 +148,35 @@ export class RoleManager {
    * play, so an illusioned card is still perfectly legal.
    */
   private illusionCards = new Map<string, string[]>()
+  /**
+   * The Angel's targeted blessings, all keyed by TARGET and all ACCUMULATING
+   * lists of the Angels who cast them -- duplicate Angels must each be able to
+   * bless the same player and each be credited their own Grace for it.
+   */
+  private armedBlessingBy = new Map<string, string[]>()
+  private armedHaloBy = new Map<string, string[]>()
+  /** Angel id -> Grace banked this round. Cashed out privately at scoring. */
+  private graceEarned = new Map<string, number>()
+  /**
+   * The Time Traveler's Reverse Time: TARGET id -> the Time Traveler waiting on
+   * their answer. Nothing blocks on this -- the round carries on, and an
+   * unanswered prompt simply expires with the round.
+   */
+  private openRebids = new Map<string, string>()
+  /** Trick numbers a Rewind has already been spent on -- once per trick. */
+  private rewoundTricks = new Set<number>()
 
   constructor(private io: EngineIO) {}
+
+  /**
+   * Set by Room once the managers exist. Only Rewind needs it, and only to
+   * reach into the trick that's live right now.
+   */
+  private trickHost: TrickHost | null = null
+
+  attachTricks(host: TrickHost) {
+    this.trickHost = host
+  }
 
   // ---- Mode -----------------------------------------------------------------
 
@@ -158,6 +208,25 @@ export class RoleManager {
 
   private actionError(seat: Seat, message: string) {
     this.io.send(seat, 'actionError', message)
+  }
+
+  /**
+   * Banks Grace for an Angel whose kindness actually landed. NEVER announced --
+   * the whole point is that the table watches the Angel climb without being
+   * told why. It surfaces once, privately, at scoring.
+   */
+  private bankGrace(angelId: string, amount = 1) {
+    if (!this.findSeat(angelId)) return
+    this.graceEarned.set(angelId, (this.graceEarned.get(angelId) ?? 0) + amount)
+  }
+
+  /** Arms a Nullify-style shield on a seat, optionally crediting an Angel. */
+  private armShield(targetId: string, angelId?: string) {
+    this.armedNullify.set(targetId, (this.armedNullify.get(targetId) ?? 0) + 1)
+    if (!angelId) return
+    const credits = this.nullifyCreditBy.get(targetId) ?? []
+    credits.push(angelId)
+    this.nullifyCreditBy.set(targetId, credits)
   }
 
   sendRoleState(seat: Seat, roundIntro = false) {
@@ -200,6 +269,55 @@ export class RoleManager {
     return this.illusionCards.get(seat.id) ?? []
   }
 
+  /** An unanswered Reverse Time prompt, so a refresh doesn't swallow it. */
+  getRebidPrompt(seat: Seat): { cardsDealt: number; currentBid: number } | null {
+    if (!this.rolesActive || !this.openRebids.has(seat.id) || seat.bid == null) return null
+    return { cardsDealt: this.roundCardsDealt, currentBid: seat.bid }
+  }
+
+  /**
+   * Client answered a Reverse Time prompt. Nothing is waiting on this -- it's
+   * not a turn -- so a late or absent answer costs nobody anything. The
+   * last-bidder sum rule deliberately does NOT apply: the constraint exists to
+   * force one guaranteed miss during bidding, and a rewrite is the Time
+   * Traveler spending an ability to undo exactly that.
+   */
+  handleRebid(seat: Seat, bid: number) {
+    const travelerId = this.openRebids.get(seat.id)
+    if (!travelerId) {
+      this.actionError(seat, 'Nothing is waiting on a new bid from you.')
+      return
+    }
+    if (this.phase !== 'Bidding' && this.phase !== 'Playing') {
+      this.openRebids.delete(seat.id)
+      this.actionError(seat, 'That moment has passed — the round is over.')
+      return
+    }
+    if (!Number.isInteger(bid) || bid < 0 || bid > this.roundCardsDealt) {
+      this.actionError(seat, "That bid isn't allowed.")
+      return
+    }
+    // A locked bid can't be rewritten even by its owner: Bid Lock froze it.
+    if (this.armedLock.has(seat.id)) {
+      this.openRebids.delete(seat.id)
+      this.actionError(seat, 'Your own bid is locked for the round.')
+      return
+    }
+    this.openRebids.delete(seat.id)
+    const oldBid = seat.bid
+    seat.bid = bid
+    this.syncBids()
+
+    const traveler = this.findSeat(travelerId)
+    if (traveler && traveler.id !== seat.id) {
+      this.privateResult(traveler, `${seat.name} took the do-over: ${oldBid} → ${bid}.`)
+    }
+    // No numbers in the public line: syncBids has already pushed whatever each
+    // client is entitled to see, and a Judge's Imposter may be disguising this
+    // very bid -- printing the real one here would hand the disguise away.
+    this.announce(`⏳ The rewritten bid is in — ${seat.name} chose again.`)
+  }
+
   /**
    * The bid map an OUTSIDER should see: real bids with every disguise applied.
    * This is the spectator view; seated players get displayedBidsFor instead.
@@ -227,11 +345,16 @@ export class RoleManager {
 
   /** Per-seat, because each player sees their own bid undisguised. */
   private syncBids() {
+    // The TRUE total rides along on every bid sync. It has to: an ability can
+    // rewrite a real bid WHILE bidding is still going (Reverse Time does), and
+    // the last bidder's forbidden chip comes off this number, never off the
+    // displayed map -- which may be carrying a Judge's disguise.
+    const bidSum = this.roundSeats.reduce((sum, seat) => sum + (seat.bid ?? 0), 0)
     for (const seat of this.roundSeats) {
-      this.io.send(seat, 'roleSync', { bids: this.displayedBidsFor(seat) })
+      this.io.send(seat, 'roleSync', { bids: this.displayedBidsFor(seat), bidSum })
     }
     // Watchers are outsiders: they see every disguise, including its owner's.
-    this.io.sendSpectators('roleSync', { bids: this.displayedBids() })
+    this.io.sendSpectators('roleSync', { bids: this.displayedBids(), bidSum })
   }
 
   private syncTricks() {
@@ -243,10 +366,17 @@ export class RoleManager {
   // ---- Game / round lifecycle ----------------------------------------------
 
   /**
-   * Called when a chaos game starts. EVERY seat gets a role. Roles are dealt
-   * round-robin from a shuffled pool, so past the pool size they repeat -- with
-   * 10 players over 6 roles, four roles appear twice and two appear once, and
-   * which ones double up is random every game.
+   * Called when a chaos game starts. EVERY seat gets a role.
+   *
+   * Dealt round-robin from a SHUFFLED pool, and that shape is the whole
+   * duplicate rule: `pool[i % pool.length]` hands out distinct roles for as
+   * long as the pool lasts, so any table that fits inside the pool is
+   * guaranteed no repeats at all. Only a table BIGGER than the pool sees a role
+   * twice -- with 7 standard roles that means 8+ players, and which ones double
+   * up is random every game.
+   *
+   * The seats are shuffled too, so the duplicated roles aren't always the ones
+   * held by the earliest chairs.
    */
   assignRoles(seats: Seat[]) {
     this.rolesActive = true
@@ -261,8 +391,6 @@ export class RoleManager {
     if (Math.random() < MIRRORER_CHANCE) pool.push('mirrorer')
     shuffle(pool)
 
-    // Shuffle the seats too, so the roles that end up duplicated aren't always
-    // the ones held by the earliest seats.
     const seatPicks = shuffle([...seats])
     seatPicks.forEach((seat, i) => {
       this.roleBySeat.set(seat.id, pool[i % pool.length])
@@ -354,6 +482,12 @@ export class RoleManager {
     this.swapTriedTargets.clear()
     this.pendingLeadId = null
     this.illusionCards.clear()
+    this.nullifyCreditBy.clear()
+    this.armedBlessingBy.clear()
+    this.armedHaloBy.clear()
+    this.graceEarned.clear()
+    this.openRebids.clear()
+    this.rewoundTricks.clear()
 
     for (const seat of seats) {
       // Last round's Illusion dies with the deal.
@@ -387,6 +521,9 @@ export class RoleManager {
     if (!this.rolesActive) return
     this.phase = 'Idle'
     this.disguisedBids.clear()
+    // An unanswered Reverse Time expires with the round rather than letting a
+    // late click rewrite a bid that has already been scored.
+    this.openRebids.clear()
   }
 
   // ---- TrickManager hooks ---------------------------------------------------
@@ -449,7 +586,8 @@ export class RoleManager {
    */
   prepareScoring() {
     if (!this.rolesActive) return
-    this.pendingDeltas.clear()
+    // NOT cleared here: an Angel's Sacrifice writes into pendingDeltas the
+    // moment it's used, and startRound is what wipes it between deals.
 
     for (const [targetId, saboteurIds] of this.armedSabotageBy) {
       const target = this.findSeat(targetId)
@@ -480,9 +618,19 @@ export class RoleManager {
     const diff = Math.abs(bid - seat.tricksWon)
     let score = baseScore
 
+    // An Angel's blessing is checked in the same chain as the Guardian's own
+    // Shield and only AFTER it: a player already saved by their own Shield was
+    // never in danger, so the Angel's kindness did nothing and earns no Grace.
+    const blessings = this.armedBlessingBy.get(id)
     if (this.armedShield.has(id) && diff === 1) {
       score = calculateScore(bid, bid, seat.hasDoubled)
       this.announce(`🛡️ The Guardian's Shield saves ${name} — scored as a hit!`)
+    } else if (blessings && blessings.length > 0 && diff === 1) {
+      score = calculateScore(bid, bid, seat.hasDoubled)
+      // Only the first Angel is credited -- the second one's blessing landed on
+      // a player who was already saved, so it bought nothing.
+      this.bankGrace(blessings[0])
+      this.announce(`😇 Something is watching over ${name} — a miss by 1 scores as a hit!`)
     } else if (this.armedLastChance.has(id) && diff === 1) {
       if (randomInt(0, 1) === 1) {
         score = calculateScore(bid, bid, seat.hasDoubled)
@@ -554,7 +702,41 @@ export class RoleManager {
       }
     }
 
+    // An Angel's Halo is the last thing applied, so it catches everything above
+    // it -- a doubled miss, a backfired sabotage, a lost All In. It only earns
+    // Grace if the score was actually going to be negative.
+    const halos = this.armedHaloBy.get(id)
+    if (halos && halos.length > 0 && score < 0) {
+      score = 0
+      this.bankGrace(halos[0])
+      this.announce(`😇 Something is holding ${name} up — their round can't go below zero.`)
+    }
+
     return score
+  }
+
+  /**
+   * Cashes out the Angels' Grace, AFTER every seat has been through adjustScore.
+   * It has to run there rather than inside adjustScore: a blessing only banks
+   * Grace when the BLESSED seat is scored, and that seat may sit after the Angel
+   * in seat order -- scoring the Angel inline would pay out a total that hadn't
+   * finished being earned.
+   *
+   * Applied to the score map in place, and reported PRIVATELY. The table just
+   * watches the Angel's total climb with nothing to explain it.
+   */
+  settleGrace(scores: Map<string, number>) {
+    if (!this.rolesActive) return
+    for (const [angelId, grace] of this.graceEarned) {
+      const angel = this.findSeat(angelId)
+      if (!angel || grace <= 0) continue
+      const payout = GRACE_VALUE * grace
+      scores.set(angelId, (scores.get(angelId) ?? 0) + payout)
+      this.privateResult(
+        angel,
+        `😇 Grace: what you gave away came back to you. +${payout} this round, and nobody was told.`,
+      )
+    }
   }
 
   /** Role info for the final standings reveal. */
@@ -572,7 +754,8 @@ export class RoleManager {
       abilityId === 'verdict' ||
       abilityId === 'fate_swap' ||
       abilityId === 'bid_chaos' ||
-      abilityId === 'imposter'
+      abilityId === 'imposter' ||
+      abilityId === 'reverse_time'
     )
   }
 
@@ -581,9 +764,18 @@ export class RoleManager {
    * ability either way (the caller marks it used on any return).
    */
   private blockedByDefenses(target: Seat, abilityId: string): boolean {
-    if (this.armedNullify.has(target.id)) {
-      this.armedNullify.delete(target.id)
-      this.announce(`🛡️ The Guardian's Nullify shattered an ability aimed at ${target.name}!`)
+    const shields = this.armedNullify.get(target.id) ?? 0
+    if (shields > 0) {
+      // Shields stack, and exactly one is burned per blocked ability.
+      this.armedNullify.set(target.id, shields - 1)
+      // An Angel who paid for this shield banks Grace: it actually stopped
+      // something, which is the only way Grace is ever earned.
+      const angels = this.nullifyCreditBy.get(target.id)
+      if (angels && angels.length > 0) {
+        this.bankGrace(angels.pop() as string)
+        if (angels.length === 0) this.nullifyCreditBy.delete(target.id)
+      }
+      this.announce(`🛡️ A shield shattered an ability aimed at ${target.name}!`)
       return true
     }
     if (this.isBidAffecting(abilityId) && this.armedLock.has(target.id)) {
@@ -1119,7 +1311,7 @@ export class RoleManager {
       }
 
       case 'nullify': {
-        this.armedNullify.add(id)
+        this.armShield(id)
         this.privateResult(seat, 'Nullify armed: the next ability aimed at you this round fizzles.')
         return { ok: true }
       }
@@ -1132,6 +1324,183 @@ export class RoleManager {
           seat,
           `Curse placed on ${t.name}: the next trick they win doesn't count. They'll find out the hard way.`,
         )
+        return { ok: true }
+      }
+
+      // ---- The Time Traveler ------------------------------------------------
+      case 'reverse_time': {
+        const t = target!
+        const self = t.id === id
+        if (t.bid == null) {
+          return { ok: false, error: self ? "You haven't bid yet." : "They haven't bid yet." }
+        }
+        if (this.openRebids.has(t.id)) {
+          return { ok: false, error: 'Their bid is already reopened.' }
+        }
+        // Reopening your OWN bid aims at nobody, so no defense applies.
+        if (!self && this.blockedByDefenses(t, abilityId)) return { ok: true }
+
+        // Deliberately does NOT block the round. There are no turn timers here,
+        // and a bid rewrite is optional -- so the prompt just sits on their
+        // client while play continues, and dying unanswered costs nobody a turn.
+        this.openRebids.set(t.id, id)
+        this.io.send(t, 'rebidPrompt', { cardsDealt: this.roundCardsDealt, currentBid: t.bid })
+        this.announce(
+          `⏳ REVERSE TIME! The Time Traveler reopened ${t.name}'s bid — they get to choose again.`,
+        )
+        this.privateResult(
+          seat,
+          self
+            ? "Your bid is reopened — pick a new one. The last-bidder rule doesn't bind a rewrite."
+            : `${t.name}'s bid is reopened. THEY pick the new number, not you — you just gave them the do-over.`,
+        )
+        return { ok: true }
+      }
+
+      case 'rewind': {
+        if (this.phase !== 'Playing') {
+          return { ok: false, error: 'There are no cards on the table yet.' }
+        }
+        const host = this.trickHost
+        if (!host) return { ok: false, error: "Nothing to rewind right now." }
+        const trickNumber = host.currentTrickNumber()
+        if (this.rewoundTricks.has(trickNumber)) {
+          return { ok: false, error: 'This trick has already been rewound once.' }
+        }
+        const victim = host.lastPlayer()
+        if (!victim) {
+          return { ok: false, error: 'There is no card on the table to pull back right now.' }
+        }
+        // Checked BEFORE the shield, so an impossible rewind costs nobody
+        // anything -- burning the target's Nullify on a rewind that could never
+        // have happened would hand the Time Traveler a free shield-stripper.
+        const { ok, error } = host.canRewind()
+        if (!ok) return { ok: false, error }
+        // Who it hits is decided by TIMING, not by a picker -- but it still
+        // lands on a specific player, so their shield still gets to answer it.
+        if (this.blockedByDefenses(victim, abilityId)) {
+          this.privateResult(seat, 'Your rewind was BLOCKED — the moment stands.')
+          return { ok: true }
+        }
+        host.rewindLastPlay()
+        this.rewoundTricks.add(trickNumber)
+        this.announce(
+          `⏳ REWIND! The Time Traveler pulled ${victim.name}'s card back off the table — they must play something else.`,
+        )
+        this.privateResult(victim, 'Your play was REWOUND. That card is back in your hand, and you have to play a different one.')
+        return { ok: true }
+      }
+
+      case 'alternate_universe': {
+        const pickedRole = RoleDefs.getRole(payload.roleId)
+        if (!pickedRole) return { ok: false, error: 'Name a role first.' }
+
+        let options = pickedRole.abilities.filter((option) => {
+          // No chaining: stepping sideways can't land you back on the step.
+          if (option === 'alternate_universe') return false
+          // The Big Swap stays once per game, whoever is holding it.
+          if (option === 'hand_swap' && this.handSwapUsed.has(id)) return false
+          return true
+        })
+        if (this.roundSeats.length < 3) {
+          options = options.filter((option) => RoleDefs.getAbility(option)?.target !== 'two')
+        }
+        if (options.length === 0) {
+          return { ok: false, error: 'Nothing in that role is usable at this table right now.' }
+        }
+
+        const newAbility = options[randomInt(0, options.length - 1)]
+        this.abilityBySeat.set(id, newAbility)
+        // keepAbility: this REPLACES your ability rather than spending it, so
+        // the round's one action is still ahead of you.
+        this.privateResult(
+          seat,
+          `The timeline shifts — you're living the ${pickedRole.name}'s life now. Your ability this round is ${
+            RoleDefs.getAbility(newAbility)?.name ?? newAbility
+          }, and you still have your turn to use it.`,
+        )
+        return { ok: true, keepAbility: true }
+      }
+
+      case 'time_branches': {
+        if (this.phase === 'Playing' && this.playsInCurrentTrick > 0) {
+          return { ok: false, error: 'Wait for the current trick to finish.' }
+        }
+        if (seat.hand.length === 0) return { ok: false, error: 'You have no cards to put back.' }
+        if (this.deckRemainder.length === 0) {
+          return { ok: false, error: 'Every card was dealt this round — there is no branch to take.' }
+        }
+        const key = payload.cardKey
+        const handIndex = seat.hand.findIndex((card) => cardKey(card) === key)
+        if (handIndex < 0) return { ok: false, error: 'Pick a card from your hand first.' }
+
+        // The discard genuinely joins the undealt pile, so a Detective's
+        // Fortune can read it afterwards. That's the cost of rewriting a deal:
+        // you leave a fingerprint in the cards nobody was supposed to hold.
+        const given = seat.hand[handIndex]
+        const drawIndex = randomInt(0, this.deckRemainder.length - 1)
+        const drawn = this.deckRemainder[drawIndex]
+        this.deckRemainder[drawIndex] = given
+        seat.hand.splice(handIndex, 1, drawn)
+        sortHand(seat.hand)
+        this.resendHand(seat)
+        this.privateResult(
+          seat,
+          `The deal rewinds: you put ${cardText(given)} back and the branch handed you ${cardText(drawn)}.`,
+        )
+        return { ok: true }
+      }
+
+      // ---- The Angel --------------------------------------------------------
+      case 'guardian_angel': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        const angels = this.armedBlessingBy.get(t.id) ?? []
+        angels.push(id)
+        this.armedBlessingBy.set(t.id, angels)
+        this.privateResult(
+          seat,
+          `You're watching over ${t.name}: miss by exactly 1 and they score as a hit. They'll never know it was you.`,
+        )
+        return { ok: true }
+      }
+
+      case 'intercede': {
+        const t = target!
+        // Aimed at them, so their OWN shield can refuse it -- a player who
+        // already armed a Nullify gains nothing from a second one.
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        this.armShield(t.id, id)
+        this.privateResult(
+          seat,
+          `You've stepped in front of ${t.name}: the next ability aimed at them fizzles.`,
+        )
+        return { ok: true }
+      }
+
+      case 'halo': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        const angels = this.armedHaloBy.get(t.id) ?? []
+        angels.push(id)
+        this.armedHaloBy.set(t.id, angels)
+        this.privateResult(
+          seat,
+          `A halo over ${t.name}: however badly this round goes for them, they can't finish it below zero.`,
+        )
+        return { ok: true }
+      }
+
+      case 'sacrifice': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        // Unconditional, which is exactly why it pays the most Grace: there is
+        // no version of this where the Angel comes out ahead on the ledger.
+        this.pendingDeltas.set(id, (this.pendingDeltas.get(id) ?? 0) - 10)
+        this.pendingDeltas.set(t.id, (this.pendingDeltas.get(t.id) ?? 0) + 10)
+        this.bankGrace(id, GRACE_FOR_SACRIFICE)
+        this.privateResult(seat, `You gave ${t.name} 10 of your points. No strings. It's done.`)
+        this.privateResult(t, 'Somebody at this table just handed you 10 of their own points.')
         return { ok: true }
       }
 

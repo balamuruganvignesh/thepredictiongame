@@ -9,6 +9,7 @@ import { ChatPanel } from './ChatPanel'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
+import { RebidModal } from './RebidModal'
 import { RolePanel } from './RolePanel'
 import { Scoreboard } from './Scoreboard'
 import { TopBar, type ChipData } from './TopBar'
@@ -197,9 +198,18 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           roleState={store.roleState}
           players={players}
           meId={store.meId}
+          hand={store.hand}
           lastResult={store.lastAbilityResult}
           onUse={actions.useAbility}
           onClose={() => setRoleOpen(false)}
+        />
+      )}
+
+      {store.rebid && !store.spectating && (
+        <RebidModal
+          prompt={store.rebid}
+          onBid={actions.submitRebid}
+          onDismiss={actions.dismissRebid}
         />
       )}
 
