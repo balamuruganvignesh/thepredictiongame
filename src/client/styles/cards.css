@@ -101,6 +101,26 @@
   background: rgb(10 10 14 / 55%);
 }
 
+/* A Detective's Illusion. Deliberately pixel-identical to the muted veil above:
+   the whole trick is that a perfectly LEGAL card reads as "you can't play
+   that". The accent ring is stripped for the same reason -- leaving it on would
+   give the lie away instantly. The button stays enabled, so calling the bluff is
+   always possible; it just doesn't lift under the cursor the way a card you can
+   obviously play does. */
+.card-button--illusion .card {
+  box-shadow:
+    0 0 0 1px var(--card-edge),
+    0 2px 6px rgb(0 0 0 / 45%);
+}
+
+.card-button--illusion .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgb(10 10 14 / 55%);
+}
+
 /* Trick winner / losers. */
 .card-slot--winner .card {
   box-shadow:

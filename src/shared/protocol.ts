@@ -144,6 +144,11 @@ export type UseAbilityPayload = {
   suit?: Suit
   /** Read the Table: which end of the hand to read. */
   peek?: 'high' | 'low'
+  /**
+   * Illusion: blanket ONE player's whole hand, or put one dead-looking card in
+   * EVERY other hand. With 'one' the payload also carries a targetId.
+   */
+  scope?: 'one' | 'all'
 }
 
 /**

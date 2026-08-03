@@ -730,29 +730,40 @@ export class RoleManager {
       }
 
       case 'illusion': {
+        // Two shapes of the same trick, and the Detective picks which: blanket
+        // ONE player, or put a single dead-looking card in front of EVERYONE.
+        // Deliberately silent, and deliberately unblockable -- a Nullify
+        // announcement would out the Detective, which is the one thing this
+        // ability is built never to do.
+        const scope = payload.scope
+        if (scope !== 'one' && scope !== 'all') {
+          return { ok: false, error: 'Call it — ONE PLAYER or EVERYONE.' }
+        }
         const marks = this.roundSeats.filter((s) => s.id !== id && s.hand.length > 0)
         if (marks.length === 0) return { ok: false, error: 'Nobody has cards left to fool.' }
 
-        // Two shapes of the same trick, decided by the coin: blanket one player,
-        // or put a single dead-looking card in front of everyone. Deliberately
-        // silent -- the whole point is that they don't know why.
-        if (randomInt(0, 1) === 1) {
-          const mark = marks[randomInt(0, marks.length - 1)]
+        if (scope === 'one') {
+          const targetId = payload.targetId
+          if (!targetId) return { ok: false, error: 'Pick who sees the illusion.' }
+          if (targetId === id) return { ok: false, error: 'Pick another player as the target.' }
+          const mark = marks.find((s) => s.id === targetId)
+          if (!mark) return { ok: false, error: 'They have no cards left to fool.' }
           this.castIllusion(mark, mark.hand.map(cardKey))
           this.privateResult(
             seat,
             `Illusion cast: ${mark.name}'s ENTIRE hand looks dead to them. Every card still plays perfectly.`,
           )
-        } else {
-          for (const mark of marks) {
-            const card = mark.hand[randomInt(0, mark.hand.length - 1)]
-            this.castIllusion(mark, [cardKey(card)])
-          }
-          this.privateResult(
-            seat,
-            `Illusion cast: one card in every other hand looks dead. All of them still play perfectly.`,
-          )
+          return { ok: true }
         }
+
+        for (const mark of marks) {
+          const card = mark.hand[randomInt(0, mark.hand.length - 1)]
+          this.castIllusion(mark, [cardKey(card)])
+        }
+        this.privateResult(
+          seat,
+          'Illusion cast: one card in every other hand looks dead. All of them still play perfectly.',
+        )
         return { ok: true }
       }
 
@@ -1094,8 +1105,16 @@ export class RoleManager {
       }
 
       case 'lock': {
+        // SILENT, like Shield and Nullify. Announcing the lock told the table
+        // both that a Guardian was sitting there and exactly whose bid was now
+        // pointless to attack -- it burned the ability before it did anything.
+        // The block message in blockedByDefenses is what reveals it, and only
+        // once somebody has actually wasted an ability on it.
         this.armedLock.add(id)
-        this.announce(`🛡️ The Guardian LOCKED ${myName}'s bid. Hands off.`)
+        this.privateResult(
+          seat,
+          "Bid Lock armed: your bid can't be changed, swapped or disguised for the rest of the round.",
+        )
         return { ok: true }
       }
 

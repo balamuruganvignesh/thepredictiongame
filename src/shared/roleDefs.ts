@@ -19,9 +19,10 @@ export type AbilityDef = {
   /**
    * Extra input the ability needs beyond a target: "direction" shows a
    * +1 / -1 picker, "suit" shows a ♠ ♦ ♣ ♥ picker, "peek" shows a
-   * HIGHEST / LOWEST picker.
+   * HIGHEST / LOWEST picker, "scope" shows ONE PLAYER / EVERYONE and only
+   * opens the target picker when ONE PLAYER is chosen.
    */
-  extra?: 'direction' | 'suit' | 'peek'
+  extra?: 'direction' | 'suit' | 'peek' | 'scope'
   /** Short usability note surfaced in the UI ("play phase only" etc.). */
   note?: string
 }
@@ -55,9 +56,10 @@ export const abilities: Record<string, AbilityDef> = {
   illusion: {
     id: 'illusion',
     name: 'Illusion',
-    desc: 'Misdirection. Either ONE player sees their whole hand greyed out, or EVERY player sees one card greyed. The cards still play perfectly — they just look dead.',
+    desc: 'Misdirection, and YOU choose the shape: blanket ONE player so their whole hand looks dead to them, or put one dead-looking card in EVERY other hand. The cards still play perfectly — they just look unplayable.',
     target: 'none',
-    note: 'silent — nobody is told it was you. purely cosmetic, so all it costs them is nerve',
+    extra: 'scope',
+    note: 'silent — nobody is told it was you, and nothing can block it. purely cosmetic, so all it costs them is nerve',
   },
   fortune: {
     id: 'fortune',
@@ -179,7 +181,7 @@ export const abilities: Record<string, AbilityDef> = {
     name: 'Bid Lock',
     desc: 'Your bid can’t be changed, swapped, or disguised for the rest of the round.',
     target: 'none',
-    note: 'protects your bid',
+    note: 'silent — the table only finds out if someone wastes an ability on you',
   },
   nullify: {
     id: 'nullify',

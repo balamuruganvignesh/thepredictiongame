@@ -33,6 +33,7 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
   const [direction, setDirection] = useState<1 | -1>(1)
   const [suit, setSuit] = useState<Suit | null>(null)
   const [peek, setPeek] = useState<'high' | 'low' | null>(null)
+  const [scope, setScope] = useState<'one' | 'all' | null>(null)
   const [nag, setNag] = useState(false)
 
   // A new ability (new round, or a retry that kept it live) clears the pickers.
@@ -40,12 +41,24 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
     setSelected([])
     setSuit(null)
     setPeek(null)
+    setScope(null)
     setNag(false)
   }, [roleState.abilityId, roleState.used, lastResult])
 
   if (!role) return null
 
-  const needed = def?.target === 'two' ? 2 : def?.target === 'other' || def?.target === 'any' ? 1 : 0
+  // A scoped ability targets nobody until you say ONE PLAYER -- picking
+  // EVERYONE is the whole answer on its own, so the target picker stays shut.
+  const scoped = def?.extra === 'scope'
+  const needed = scoped
+    ? scope === 'one'
+      ? 1
+      : 0
+    : def?.target === 'two'
+      ? 2
+      : def?.target === 'other' || def?.target === 'any'
+        ? 1
+        : 0
   // "any" abilities can be aimed at yourself, so you stay in the picker.
   const pickable = def?.target === 'any' ? players : players.filter((p) => p.id !== meId)
 
@@ -65,7 +78,8 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
     if (
       selected.length < needed ||
       (def?.extra === 'suit' && !suit) ||
-      (def?.extra === 'peek' && !peek)
+      (def?.extra === 'peek' && !peek) ||
+      (scoped && !scope)
     ) {
       setNag(true)
       return
@@ -77,6 +91,7 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
       direction,
       suit: suit ?? undefined,
       peek: peek ?? undefined,
+      scope: scope ?? undefined,
     })
   }
 
@@ -104,6 +119,30 @@ export function RolePanel({ roleState, players, meId, lastResult, onUse, onClose
         <h3 className="role__ability">{def?.name ?? '—'}</h3>
         <p className="role__desc">{def?.desc}</p>
         {def?.note && <p className="role__note">⚙️ {def.note}</p>}
+
+        {scoped && !roleState.used && (
+          <>
+            <p className={`role__picker-label${nag && !scope ? ' is-nagging' : ''}`}>
+              {nag && !scope ? 'call it first!' : 'who sees it'}
+            </p>
+            <div className="role__extra">
+              {(['one', 'all'] as const).map((option) => (
+                <button
+                  key={option}
+                  className={`role__target${scope === option ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setScope(option)
+                    // EVERYONE takes no target; drop anything already picked so
+                    // a stale selection can't ride along in the payload.
+                    if (option === 'all') setSelected([])
+                  }}
+                >
+                  {option === 'one' ? 'ONE PLAYER' : 'EVERYONE'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {needed > 0 && !roleState.used && (
           <>
