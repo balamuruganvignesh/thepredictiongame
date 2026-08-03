@@ -19,7 +19,19 @@ import { TrickManager } from '../src/server/engine/tricks'
 import type { Seat } from '../src/server/types'
 import type { EngineIO } from '../src/server/engine/io'
 
-const silentIO: EngineIO = { broadcast: () => {}, send: () => {}, sendSpectators: () => {} }
+// Captures dealHand, so the `barred` signal the client renders off can be
+// asserted -- without it a human clicks the rewound card and only finds out
+// from a rejection toast.
+const dealt: { to: string; barred?: string | null }[] = []
+const silentIO: EngineIO = {
+  broadcast: () => {},
+  send: (seat, event, payload) => {
+    if (event === 'dealHand') {
+      dealt.push({ to: seat.id, barred: (payload as { barred?: string | null }).barred })
+    }
+  },
+  sendSpectators: () => {},
+}
 const tick = () => new Promise((r) => setTimeout(r, 5))
 
 let failures = 0
@@ -91,6 +103,10 @@ async function run() {
     b.hand.some((card) => cardKey(card) === 'Spades-12') && b.hand.length === 3,
   )
   check('the turn is back on Bo', tricks.snapshot().currentTurnId === b.id)
+  check(
+    'Bo’s client is told WHICH card is barred, so the UI can grey it',
+    dealt.at(-1)?.to === b.id && dealt.at(-1)?.barred === 'Spades-12',
+  )
   check('the table shows only Ada’s card again', tricks.snapshot().plays.length === 1)
 
   // Replaying the same card must bounce; a different legal one must land.
@@ -101,6 +117,7 @@ async function run() {
   tricks.handleCardPlay(b, { suit: 'Spades', rank: 3 })
   await tick()
   check('a different card is accepted', tricks.snapshot().plays.length === 2)
+  check('and the bar is explicitly cleared once they play', dealt.at(-1)?.barred === null)
 
   tricks.handleCardPlay(c, { suit: 'Spades', rank: 5 })
   await tick()

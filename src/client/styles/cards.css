@@ -121,6 +121,23 @@
   background: rgb(10 10 14 / 55%);
 }
 
+/* A card a Rewind has barred. Deliberately NOT the illusion veil: this one is
+   real, so it reads as firmly out of play rather than as a card you might risk
+   clicking. */
+.card-button--barred .card {
+  box-shadow:
+    0 0 0 2px var(--danger),
+    0 2px 6px rgb(0 0 0 / 45%);
+}
+
+.card-button--barred .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgb(40 12 16 / 62%);
+}
+
 /* Trick winner / losers. */
 .card-slot--winner .card {
   box-shadow:

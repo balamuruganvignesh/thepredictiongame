@@ -69,7 +69,27 @@ function makeBot(name, index) {
   socket.on('joinError', (m) => errors.push(`${name} joinError: ${m}`))
   socket.on('disconnect', (reason, detail) => log(`!! ${name} DISCONNECTED: ${reason} ${detail?.description ?? ''}`))
   socket.on('connect_error', (e) => log(`!! ${name} connect_error: ${e.message}`))
-  socket.on('actionError', (m) => errors.push(`${name}: ${m}`))
+  socket.on('actionError', (m) => {
+    errors.push(`${name}: ${m}`)
+    // A refused PLAY must be retried with a different card, or this bot stops
+    // and takes the round with it.
+    if (!/play|follow suit|rewound/i.test(m)) return
+    const data = bot.lastTrick
+    if (!data || data.currentTurnId !== bot.id) return
+    bot.refused = bot.refused ?? new Set()
+    const legal = bot.hand.filter(
+      (c) =>
+        data.leadSuit == null ||
+        c.suit === data.leadSuit ||
+        c.suit === 'Joker' ||
+        !bot.hand.some((h) => h.suit === data.leadSuit),
+    )
+    const key = (c) => `${c.suit}-${c.rank}`
+    const next = legal.find((c) => !bot.refused.has(key(c)))
+    if (next) bot.refused.add(key(next))
+    const retry = legal.find((c) => !bot.refused.has(key(c)))
+    if (retry) setTimeout(() => socket.emit('playCard', retry), 20)
+  })
 
   socket.on('lobbyUpdate', (data) => {
     bot.lobby = data
@@ -113,6 +133,7 @@ function makeBot(name, index) {
 
   socket.on('trickUpdate', (data) => {
     bot.lastTrick = data
+    if (data.currentTurnId !== bot.id) bot.refused = new Set()
     // Mid-trick, with a card already on the table: the only moment a Rewind can
     // actually land, so give the ability another go here.
     if (data.plays.length > 0 && data.currentTurnId != null) {
@@ -127,7 +148,11 @@ function makeBot(name, index) {
         c.suit === 'Joker' ||
         !bot.hand.some((h) => h.suit === data.leadSuit),
     )
-    const card = legal[0] ?? bot.hand[0]
+    // Skip anything the server already refused this turn: a Rewind bars the
+    // card you just played, and re-picking legal[0] would pick that same card
+    // forever -- with no turn timers, that hangs the whole table.
+    const key = (c) => `${c.suit}-${c.rank}`
+    const card = legal.find((c) => !bot.refused?.has(key(c))) ?? legal[0] ?? bot.hand[0]
     if (card) setTimeout(() => socket.emit('playCard', card), 20)
   })
 

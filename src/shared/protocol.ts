@@ -64,7 +64,21 @@ export type GameStateUpdate =
     }
   | { phase: 'Playing'; roundNumber: number }
 
-export type DealHand = { hand: Card[]; roundNumber?: number; trumpSuit?: string }
+export type DealHand = {
+  hand: Card[]
+  roundNumber?: number
+  trumpSuit?: string
+  /**
+   * A card in this hand that CANNOT be played right now -- a Time Traveler's
+   * Rewind bars the card you just played, and you have to choose differently.
+   *
+   * Three states on purpose: a cardKey sets the bar, `null` clears it, and
+   * OMITTING it leaves whatever the client has alone. Hands get re-sent for
+   * reasons unrelated to the bar (a Joker swap, Time Branches), and those must
+   * not quietly unbar a card the server is still refusing.
+   */
+  barred?: string | null
+}
 
 export type PlayEntry = { id: PlayerId; card: Card }
 
@@ -213,6 +227,8 @@ export type Snapshot = {
   illusion: string[]
   /** A Reverse Time prompt still waiting on this player, so a refresh keeps it. */
   rebid: RebidPrompt | null
+  /** A card a Rewind is currently barring this player from replaying. */
+  barred: string | null
   /** Recent chat, so a refresh doesn't wipe the conversation. */
   chat: ChatMessage[]
   /** Watching rather than playing: no hand, no turn, no abilities. */

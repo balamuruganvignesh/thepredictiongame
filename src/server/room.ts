@@ -463,6 +463,7 @@ export class Room {
       roleState: seat ? this.roles.getRoleState(seat) : null,
       illusion: seat ? this.roles.getIllusion(seat) : [],
       rebid: seat ? this.roles.getRebidPrompt(seat) : null,
+      barred: seat ? this.tricks.barredFor(seat) : null,
       chat: this.chatLog,
       spectating: seat == null,
       ...this.tricks.snapshot(),

@@ -4,7 +4,7 @@
 
 import { Config } from '@shared/config'
 import type { Card } from '@shared/cards'
-import { isLegalPlay, isSameCard, resolveTrickWinnerIndex, sortHand } from '@shared/cards'
+import { cardKey, isLegalPlay, isSameCard, resolveTrickWinnerIndex, sortHand } from '@shared/cards'
 import type { PlayEntry } from '@shared/protocol'
 import type { Seat } from '../types'
 import { sleep } from '../types'
@@ -120,7 +120,8 @@ export class TrickManager implements TrickHost {
   private removeCardFromHand(seat: Seat, card: Card) {
     const index = seat.hand.findIndex((c) => isSameCard(c, card))
     if (index >= 0) seat.hand.splice(index, 1)
-    this.io.send(seat, 'dealHand', { hand: seat.hand })
+    // barred: null clears any Rewind bar -- they've played, so it's spent.
+    this.io.send(seat, 'dealHand', { hand: seat.hand, barred: null })
   }
 
   /**
@@ -140,6 +141,12 @@ export class TrickManager implements TrickHost {
   /** The card this seat is currently barred from replaying, if any. */
   private bannedFor(seat: Seat): Card | null {
     return this.replayBan?.seatId === seat.id ? this.replayBan.card : null
+  }
+
+  /** The same bar as a cardKey, for the reconnect snapshot. */
+  barredFor(seat: Seat): string | null {
+    const banned = this.bannedFor(seat)
+    return banned ? cardKey(banned) : null
   }
 
   private broadcastTrickState(
@@ -228,7 +235,13 @@ export class TrickManager implements TrickHost {
           if (undone) {
             undone.seat.hand.push(undone.card)
             sortHand(undone.seat.hand)
-            this.io.send(undone.seat, 'dealHand', { hand: undone.seat.hand })
+            // The same message that hands the card back marks it unplayable,
+            // so the UI greys it instead of letting them click it and collect
+            // a rejection toast.
+            this.io.send(undone.seat, 'dealHand', {
+              hand: undone.seat.hand,
+              barred: cardKey(undone.card),
+            })
             this.replayBan = { seatId: undone.seat.id, card: undone.card }
             // Their card WAS the lead: the trick reopens with no suit set.
             if (plays.length === 0) leadSuit = null

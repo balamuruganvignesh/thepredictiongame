@@ -67,6 +67,11 @@ export type Store = {
    * carries on around it, and dismissing it just keeps the bid you had.
    */
   rebid: RebidPrompt | null
+  /**
+   * A card a Rewind is barring you from replaying. Unlike an Illusion this is
+   * REAL -- the server refuses it -- so the hand renders it as unplayable.
+   */
+  barredCard: string | null
   plays: PlayEntry[]
   trickNumber: number
   totalTricks: number
@@ -117,6 +122,7 @@ const initialStore: Store = {
   hand: [],
   illusionCards: [],
   rebid: null,
+  barredCard: null,
   plays: [],
   trickNumber: 0,
   totalTricks: 0,
@@ -142,7 +148,7 @@ type Action =
   | { type: 'roundStart'; data: Extract<GameStateUpdate, { phase: 'RoundStart' }> }
   | { type: 'bidding'; data: Extract<GameStateUpdate, { phase: 'Bidding' }> }
   | { type: 'playing' }
-  | { type: 'hand'; hand: Card[] }
+  | { type: 'hand'; hand: Card[]; barred?: string | null }
   | { type: 'illusion'; cards: string[] }
   | { type: 'rebidPrompt'; data: RebidPrompt | null }
   | { type: 'trickUpdate'; data: TrickUpdate }
@@ -242,6 +248,7 @@ function reducer(state: Store, action: Action): Store {
         hand: [],
         illusionCards: [],
         rebid: null,
+        barredCard: null,
         plays: [],
         trickNumber: 0,
         trickWinnerId: null,
@@ -266,7 +273,14 @@ function reducer(state: Store, action: Action): Store {
       return { ...state, phase: 'playing', doubleDeadline: null }
 
     case 'hand':
-      return { ...state, hand: action.hand }
+      return {
+        ...state,
+        hand: action.hand,
+        // Omitted means "leave it alone": hands are re-sent for reasons that
+        // have nothing to do with the bar (a Joker swap, Time Branches), and
+        // those must not unbar a card the server is still refusing.
+        barredCard: action.barred === undefined ? state.barredCard : action.barred,
+      }
 
     case 'illusion':
       return { ...state, illusionCards: action.cards }
@@ -430,6 +444,7 @@ function reducer(state: Store, action: Action): Store {
         hand: data.hand,
         illusionCards: data.illusion,
         rebid: data.rebid,
+        barredCard: data.barred,
         plays: data.plays,
         trickNumber: data.trickNumber,
         trickWinnerId: null,
@@ -489,7 +504,9 @@ export function useGame() {
       else dispatch({ type: 'playing' })
     })
 
-    socket.on('dealHand', (data) => dispatch({ type: 'hand', hand: data.hand }))
+    socket.on('dealHand', (data) =>
+      dispatch({ type: 'hand', hand: data.hand, barred: data.barred }),
+    )
     socket.on('illusion', (data) => dispatch({ type: 'illusion', cards: data.cards }))
     socket.on('rebidPrompt', (data) => dispatch({ type: 'rebidPrompt', data }))
     socket.on('trickUpdate', (data) => dispatch({ type: 'trickUpdate', data }))

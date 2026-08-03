@@ -140,6 +140,8 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           hand={store.hand}
           isMyTurn={isMyTurn && store.phase === 'playing'}
           leadSuit={store.leadSuit}
+          illusionCards={store.illusionCards}
+          barredCard={store.barredCard}
           onPlay={play}
         />
       )}
