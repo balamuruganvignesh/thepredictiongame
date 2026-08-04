@@ -127,8 +127,13 @@ export type Store = {
   roleState: RoleState | null
   /** Bumped every time a fresh round intro should replay the reveal banner. */
   roleBannerKey: number
-  /** The most recent private ability result, kept for the role modal. */
-  lastAbilityResult: string | null
+  /**
+   * EVERY private line this round, oldest first: what you did to the table and
+   * what the table did to you. A list rather than "the latest one" because both
+   * kinds arrive on the same channel — being handed points by an Angel used to
+   * overwrite the hand-reading you spent your own ability on.
+   */
+  abilityLog: string[]
 
   /** Epoch ms the post-bid Double window closes, or null when it isn't open. */
   doubleDeadline: number | null
@@ -179,7 +184,7 @@ const initialStore: Store = {
   standings: null,
   roleState: null,
   roleBannerKey: 0,
-  lastAbilityResult: null,
+  abilityLog: [],
   doubleDeadline: null,
   doubled: false,
   chat: [],
@@ -312,7 +317,8 @@ function reducer(state: Store, action: Action): Store {
         phase: 'bidding',
         doubled: false,
         doubleDeadline: null,
-        lastAbilityResult: null,
+        // A new deal, a clean private log.
+        abilityLog: [],
       }
     }
 
@@ -537,7 +543,10 @@ function reducer(state: Store, action: Action): Store {
       return {
         ...state,
         nextId: state.nextId + 1,
-        lastAbilityResult: action.message,
+        // APPENDED, never replaced: your own ability's result and whatever
+        // somebody else quietly did to you both arrive here, and the panel has
+        // to show all of it.
+        abilityLog: [...state.abilityLog, action.message],
         feed: [
           ...state.feed,
           { id: state.nextId, message: action.message, secret: true, createdAt: Date.now() },

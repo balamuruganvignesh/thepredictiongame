@@ -8,6 +8,7 @@ import type { Card, Suit } from '@shared/cards'
 import { cardKey } from '@shared/cards'
 import type { RoleState, UseAbilityPayload } from '@shared/protocol'
 import { PlayingCard, cardLabel } from './PlayingCard'
+import { RolesGallery } from './RolesGallery'
 
 /** The suits Fortune can name -- no Jokers, they aren't a suit anyone bids around. */
 const SUITS: { suit: Suit; glyph: string }[] = [
@@ -24,12 +25,17 @@ type Props = {
   meId: string | null
   /** Your own hand -- Time Branches picks the card to put back. */
   hand: Card[]
-  lastResult: string | null
+  /**
+   * Every private line this round, oldest first: what your ability found or
+   * did, AND what other players' abilities quietly did to you. Both arrive on
+   * the same channel, so both belong here.
+   */
+  log: string[]
   onUse: (payload: UseAbilityPayload) => void
   onClose: () => void
 }
 
-export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, onClose }: Props) {
+export function RolePanel({ roleState, players, meId, hand, log, onUse, onClose }: Props) {
   const role = RoleDefs.getRole(roleState.roleId)
   const def = RoleDefs.getAbility(roleState.abilityId)
 
@@ -41,6 +47,7 @@ export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, o
   const [pickedRole, setPickedRole] = useState<string | null>(null)
   const [pickedCard, setPickedCard] = useState<string | null>(null)
   const [nag, setNag] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   // A new ability (new round, or a retry that kept it live) clears the pickers.
   // Alternate Universe relies on this: it swaps abilityId out from under the
@@ -54,7 +61,7 @@ export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, o
     setPickedRole(null)
     setPickedCard(null)
     setNag(false)
-  }, [roleState.abilityId, roleState.used, lastResult])
+  }, [roleState.abilityId, roleState.used, log.length])
 
   if (!role) return null
 
@@ -111,6 +118,7 @@ export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, o
   }
 
   return (
+    <>
     <div className="backdrop" onClick={onClose} role="presentation">
       <div
         className="note modal modal--role"
@@ -287,7 +295,22 @@ export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, o
           </>
         )}
 
-        {lastResult && <p className="role__result">{lastResult}</p>}
+        {/* Everything private that has happened to you this round, in order.
+            Kept as a list because your own result and somebody else's effect
+            on you land on the same channel -- showing only the newest meant a
+            secret Sacrifice could wipe out the hand-read you just paid for. */}
+        {log.length > 0 && (
+          <>
+            <p className="role__kicker">WHAT ONLY YOU KNOW — THIS ROUND</p>
+            <div className="role__log">
+              {log.map((line, i) => (
+                <p key={i} className="role__result">
+                  {line}
+                </p>
+              ))}
+            </div>
+          </>
+        )}
 
         <button
           className={`button ${roleState.used ? 'button--spent' : 'button--primary'} role__use`}
@@ -296,7 +319,19 @@ export function RolePanel({ roleState, players, meId, hand, lastResult, onUse, o
         >
           {roleState.used ? 'USED THIS ROUND ✓' : 'USE ABILITY'}
         </button>
+
+        {/* The lobby's role browser, reachable mid-round: knowing what the
+            other roles can do is half of playing against them. */}
+        <button className="role__gallery-link" onClick={() => setGalleryOpen(true)}>
+          🎭 all the roles & abilities ›
+        </button>
       </div>
     </div>
+
+    {/* A SIBLING of the panel's backdrop, not a child: nested backdrops mean
+        one click closes both, and dismissing the gallery shouldn't also throw
+        away the panel behind it. */}
+    {galleryOpen && <RolesGallery onClose={() => setGalleryOpen(false)} />}
+    </>
   )
 }

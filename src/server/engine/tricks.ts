@@ -42,6 +42,12 @@ export class TrickManager implements TrickHost {
   constructor(
     private io: EngineIO,
     private roles: RoleManager,
+    /**
+     * Seconds between one card landing and the next player's turn opening.
+     * Injected rather than read straight off Config so the in-process tests can
+     * drive the loop at zero -- they assert the state machine, not the pacing.
+     */
+    private playPause: number = Config.playPause,
   ) {}
 
   snapshot() {
@@ -261,6 +267,12 @@ export class TrickManager implements TrickHost {
         // second click earns them a rejection toast.
         this.currentTurnSeat = null
         this.broadcastTrickState(plays, leadSuit, trickNumber, cardsDealt)
+
+        // A beat before the next player's turn opens, so the card that was just
+        // played can be seen. The turn is already cleared above, so during the
+        // pause nobody is on the clock and no hand is live -- and the last card
+        // of a trick doesn't need it, trickResolvePause covers that moment.
+        if (plays.length < order.length && this.playPause > 0) await sleep(this.playPause)
       }
 
       this.currentTurnSeat = null

@@ -948,6 +948,91 @@ button.seat:hover {
   }
 }
 
+/* The round's private log: your own results and anything done TO you, oldest
+   first, so nothing is ever overwritten by the next secret to arrive. */
+.role__log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.role__gallery-link {
+  margin-top: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.role__gallery-link:hover {
+  color: var(--text);
+}
+
+/* ---- Quick ability (chaos) -------------------------------------------------- */
+
+/* Sits directly above the dock, same right edge. Deliberately NOT a modal and
+   deliberately without a backdrop: the whole point is that the trick stays
+   visible while you aim. */
+.quick {
+  position: fixed;
+  right: 14px;
+  bottom: 60px;
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dock__button--quick {
+  color: var(--text);
+  border-color: var(--accent);
+  animation: role-glow 1.8s ease-in-out infinite;
+}
+
+.quick__pop {
+  --tilt: 0deg;
+  width: min(320px, calc(100vw - 28px));
+  padding: 12px 14px 10px;
+  text-align: left;
+}
+
+.quick__name {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+}
+
+.quick__label {
+  margin: 8px 0 5px;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.quick__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick__more {
+  margin-top: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 0.74rem;
+}
+
+.quick__more:hover {
+  color: var(--text);
+}
+
 /* ---- Bidding modal --------------------------------------------------------- */
 
 .backdrop--bidding {

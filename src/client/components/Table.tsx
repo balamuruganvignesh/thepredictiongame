@@ -9,6 +9,7 @@ import { ChatPanel } from './ChatPanel'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
+import { QuickAbility } from './QuickAbility'
 import { RebidModal } from './RebidModal'
 import { RolePanel } from './RolePanel'
 import { Scoreboard } from './Scoreboard'
@@ -146,17 +147,23 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
+      {/* Fire the ability without the modal covering the trick. Sits just above
+          the dock; the full panel is still a tap away for the ones that need
+          more room. */}
+      {chaosActive && !store.spectating && store.roleState && (
+        <QuickAbility
+          roleState={store.roleState}
+          players={players}
+          meId={store.meId}
+          onUse={actions.useAbility}
+          onOpenPanel={() => setRoleOpen(true)}
+        />
+      )}
+
       <div className="dock">
-        {chaosActive && !store.spectating && (
-          <button
-            className={`dock__button dock__button--role${
-              store.roleState?.used ? '' : ' is-glowing'
-            }`}
-            onClick={() => setRoleOpen(true)}
-          >
-            🎭 ROLE
-          </button>
-        )}
+        {/* No ROLE button here: QuickAbility above the dock is the one door to
+            the ability AND to the panel, so there's only ever one thing to
+            press. */}
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (
@@ -201,7 +208,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           players={players}
           meId={store.meId}
           hand={store.hand}
-          lastResult={store.lastAbilityResult}
+          log={store.abilityLog}
           onUse={actions.useAbility}
           onClose={() => setRoleOpen(false)}
         />

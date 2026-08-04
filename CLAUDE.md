@@ -98,6 +98,12 @@ an empty chair.
 - **No turn timers, ever** (explicit user requirement — never skip a turn on
   time). Auto-play only for disconnected seats. The 5s Double window is the one
   timer, and it only closes an optional side bet.
+- **`Config.playPause` (3s) sits between a card landing and the next player's
+  turn opening**, so a trick can be watched. It is a PAUSE, never a skip: the
+  turn is already cleared when it starts, so nobody is on the clock and no hand
+  is live. `TrickManager` takes it as a constructor arg (default `Config.playPause`)
+  purely so `rewind-test.ts` can pass 0 — it asserts the state machine, not the
+  pacing. Hearts does NOT have it: its rounds are 4x longer already.
 - Host = first joiner: guests ready up, the host has the only START button. No
   auto-start countdown.
 
@@ -121,6 +127,11 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   Intercede arms the same shield a Guardian's Nullify does, and two shields must
   block two abilities), and `armedBlessingBy` / `armedHaloBy` are lists. `disguisedBids` is deliberately
   last-write-wins — a bid can only display one number.
+- **Never deal an ability this round can't use.** `startRound` filters the
+  options: two-target abilities with <3 seats, a spent Big Swap, and **Rewind in
+  a 1-card round** (pulling the play back leaves that seat holding the one card
+  they just played, so `canRewind` always refuses). The two paths that HAND OVER
+  an ability — Alternate Universe and the Mirrorer's Mimic — filter the same way.
 - One ability per round, use-it-or-lose-it (two-target abilities never dealt
   with <3 seats). The Time Traveler's **Alternate Universe is the one exception**:
   it REPLACES your ability (a random one from a role you name) and returns
@@ -236,6 +247,20 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   SCORES button toggles it.
 - Top bar: trump glyph, Round X/Y, Hand K/M, per-player "won / bid" chips
   (green on-target / red off, accent ring = turn).
+- **One chaos button, not two.** `QuickAbility` sits just above the dock and is
+  the ONLY door: `⚡ <ABILITY>` while it's live, collapsing to `🎭 ROLE` once
+  spent. Its popover has NO backdrop on purpose — the whole point is that the
+  trick stays visible while you aim. It punts to the full `RolePanel` for the
+  two-target abilities and the two that need a gallery (Alternate Universe's
+  roles, Time Branches' hand); everything else fires straight from the popover.
+  Don't put a second ROLE button back in the dock.
+- **The panel's private log is a LIST (`store.abilityLog`), never "the latest
+  one".** Your own ability's result and whatever another player quietly did TO
+  you both arrive on the same `abilityResult` channel — keeping one slot meant a
+  secret Sacrifice landing on you erased the hand-read you spent your ability
+  on. It clears on each new deal, and a refresh loses it (private lines aren't
+  stored server-side). The roles gallery opens from inside the panel too, as a
+  SIBLING of its backdrop so one click doesn't dismiss both.
 - Bidding = centered modal, circular bid chips, forbidden bid crossed out,
   DOUBLE DOWN pill. Trick area: display name above each card, crown + green
   ring on winner, losers veiled.

@@ -516,6 +516,12 @@ export class RoleManager {
       if (seats.length < 3) {
         options = options.filter((id) => RoleDefs.getAbility(id)?.target !== 'two')
       }
+      // A one-card round has nothing to Rewind INTO: pulling the play back
+      // leaves that seat holding the single card they just played, so canRewind
+      // always refuses. Dealing it would be dealing a dead round.
+      if (cardsDealt < 2) {
+        options = options.filter((id) => id !== 'rewind')
+      }
       if (options.length > 0) {
         this.abilityBySeat.set(seat.id, this.rollAbility(seat.id, options))
       }
@@ -1454,6 +1460,9 @@ export class RoleManager {
           if (option === 'alternate_universe') return false
           // The Big Swap stays once per game, whoever is holding it.
           if (option === 'hand_swap' && this.handSwapUsed.has(id)) return false
+          // Same dead-ability rule startRound applies: a Rewind in a one-card
+          // round can never be used.
+          if (option === 'rewind' && this.roundCardsDealt < 2) return false
           return true
         })
         if (this.roundSeats.length < 3) {
@@ -1598,6 +1607,10 @@ export class RoleManager {
         }
         if (this.roundSeats.length < 3 && RoleDefs.getAbility(theirs)?.target === 'two') {
           return { ok: false, error: 'What they hold needs more players than this table has.' }
+        }
+        // Never hand over an ability this round can't use (see startRound).
+        if (theirs === 'rewind' && this.roundCardsDealt < 2) {
+          return { ok: false, error: 'What they hold is unusable in a one-card round.' }
         }
 
         // Copied, not stolen: they keep theirs. keepAbility, exactly like the

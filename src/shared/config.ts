@@ -30,6 +30,11 @@ export const Config = {
   // disconnected, so a round can't hang on an empty chair.
 
   // Pacing between phases.
+  // Beat between one card hitting the table and the next player's turn opening,
+  // so a trick can actually be watched rather than snapping past. Nobody holds
+  // the turn during it -- the hand is simply not clickable yet -- so it is a
+  // pause, never a skip.
+  playPause: 3,
   trickResolvePause: 1.5, // after a trick resolves, before the next lead
   roundEndPause: 4, // scoreboard reading time between rounds
   gameEndPause: 12, // final standings display before returning to lobby

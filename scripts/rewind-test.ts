@@ -80,7 +80,9 @@ async function run() {
   const seats = [a, b, c]
 
   const roles = new RoleManager(silentIO)
-  const tricks = new TrickManager(silentIO, roles)
+  // playPause 0: this test asserts the rewind state machine, and waiting out
+  // three real seconds per card would turn a sub-second test into a minute.
+  const tricks = new TrickManager(silentIO, roles, 0)
   roles.attachTricks(tricks)
 
   const done = tricks.runPlayPhase(seats, a, 3, 'Hearts')

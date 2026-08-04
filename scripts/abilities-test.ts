@@ -373,6 +373,37 @@ function testIntercede() {
   check('the Angel banks Grace for the block', (scores.get(angel.id) ?? 0) === 5)
 }
 
+function testRewindNotDealtInOneCardRounds() {
+  console.log('\n⏳ Rewind is never dealt in a one-card round')
+  const bus = makeIO()
+  const roles = new RoleManager(bus.io)
+  const seats = [seat('A'), seat('B'), seat('C'), seat('D')]
+
+  // Find a game where seat A is the Time Traveler, then deal one-card rounds at
+  // them until the odds of missing a live 'rewind' are negligible.
+  let found = false
+  for (let attempt = 0; attempt < 4000 && !found; attempt++) {
+    roles.assignRoles(seats)
+    found = roles.getRoleReveal(seats[0].id)?.roleName === RoleDefs.getRole('time_traveler')?.name
+  }
+  check('a Time Traveler was found to test', found)
+
+  const dealtAbilities = new Set<string>()
+  for (let round = 0; round < 400; round++) {
+    for (const s of seats) {
+      s.hand = [{ suit: 'Spades', rank: 9 }]
+      s.bid = null
+      s.tricksWon = 0
+    }
+    roles.startRound(seats, 1, freshRemainder())
+    const ability = roles.getRoleState(seats[0])?.abilityId
+    if (ability) dealtAbilities.add(ability)
+  }
+
+  check('Rewind is never dealt — it could only ever be refused', !dealtAbilities.has('rewind'))
+  check('and the other abilities still are, so the seat is never left empty', dealtAbilities.size >= 2)
+}
+
 // ---- The Mirrorer -----------------------------------------------------------
 
 function testMimic() {
@@ -494,6 +525,7 @@ testGuardianAngel()
 testGraceOnlyWhenItHelps()
 testHaloAndSacrifice()
 testIntercede()
+testRewindNotDealtInOneCardRounds()
 testMimic()
 testTwinFate()
 testTwoWayMirror()
