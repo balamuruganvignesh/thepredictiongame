@@ -88,7 +88,7 @@ io.on('connection', (socket) => {
     fn(currentRoom, seat, spectator)
   }
 
-  socket.on('join', ({ roomCode, name, playerId }) => {
+  socket.on('join', ({ roomCode, name, playerId, gameType }) => {
     if (room) return // already seated on this socket
 
     let target: Room
@@ -102,6 +102,10 @@ io.on('connection', (socket) => {
       target = existing
     } else {
       target = new Room(newRoomCode(), io)
+      // Only ever on a table that doesn't exist yet: the creator picked the
+      // game on the landing screen. Joiners by code inherit whatever the table
+      // already is.
+      if (gameType) target.openOn(gameType)
       rooms.set(target.code, target)
     }
 

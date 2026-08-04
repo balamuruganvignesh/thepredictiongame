@@ -7,9 +7,10 @@ prediction and you score big. Miss and your score drops.
 2–10 players, in the browser, no accounts. Open a table, share the 4-letter
 code, deal.
 
-**Two games at one table.** The host picks between The Prediction Game and
-[Hearts](#hearts) on a card in the lobby. Same table, same code, same chat —
-different game.
+**Two games at one table.** Pick The Prediction Game or [Hearts](#hearts) on
+the landing screen when you open a table, and the host can still switch it from
+a card in the lobby. Joining by code puts you in whatever that table is already
+playing. Same table, same code, same chat — different game.
 
 ## How to play
 

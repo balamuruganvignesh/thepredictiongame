@@ -1,21 +1,26 @@
-// Landing screen: pick a name, then either open a new table or type a friend's
-// 4-letter code.
+// Landing screen: pick a name and a game, then either open a new table or type
+// a friend's 4-letter code. The game choice only applies to a NEW table --
+// joining by code puts you in whatever game that table is already set to.
 
 import { useEffect, useState } from 'react'
-import { Config } from '@shared/config'
+import { Config, HeartsConfig } from '@shared/config'
+import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
 
 type Props = {
   connected: boolean
   error: string | null
-  onJoin: (name: string, roomCode: string | null) => void
+  onJoin: (name: string, roomCode: string | null, gameType?: GameType) => void
 }
 
 export function Join({ connected, error, onJoin }: Props) {
   const [name, setName] = useState(storedName)
   const [code, setCode] = useState('')
   const [mode, setMode] = useState<'create' | 'join'>('create')
+  const [game, setGame] = useState<GameType>('prediction')
+  const isHearts = game === 'hearts'
+  const creating = mode === 'create'
 
   // A shared link like /ABCD drops you straight into the join form.
   useEffect(() => {
@@ -32,7 +37,8 @@ export function Join({ connected, error, onJoin }: Props) {
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!ready) return
-    onJoin(trimmedName, mode === 'join' ? code.toUpperCase() : null)
+    // The game is only ours to choose when we're the ones opening the table.
+    onJoin(trimmedName, mode === 'join' ? code.toUpperCase() : null, mode === 'create' ? game : undefined)
   }
 
   return (
@@ -42,15 +48,56 @@ export function Join({ connected, error, onJoin }: Props) {
           <DeckStack />
         </div>
 
-        <h1 className="join__title">THE PREDICTION GAME</h1>
-        <p className="join__subtitle">5 up 5 down</p>
-        <p className="join__blurb">
-          Predict exactly how many tricks you’ll win. Hit it and you score big; miss and your score
-          drops. {Config.minPlayers}–{Config.maxPlayers} players.
+        {/* Joining by code: the table already has a game, so this screen
+            stops advertising one and says so instead. */}
+        <h1 className="join__title">
+          {creating ? (isHearts ? 'HEARTS' : 'THE PREDICTION GAME') : 'JOIN A TABLE'}
+        </h1>
+        <p className="join__subtitle">
+          {creating ? (isHearts ? 'take no tricks worth taking' : '5 up 5 down') : 'two games, one table'}
         </p>
         <p className="join__blurb">
-          …or switch the table to <b>Hearts ♥</b> once you’re in — the host picks the game.
+          {!creating ? (
+            <>
+              You’ll land in whichever game that table is playing — The Prediction Game or Hearts.
+              The host picks.
+            </>
+          ) : isHearts ? (
+            <>
+              Every ♥ is a point and the Q♠ is thirteen — and points are BAD. Duck them all, or take
+              every one and shoot the moon. {HeartsConfig.minPlayers}–{HeartsConfig.maxPlayers}{' '}
+              players.
+            </>
+          ) : (
+            <>
+              Predict exactly how many tricks you’ll win. Hit it and you score big; miss and your
+              score drops. {Config.minPlayers}–{Config.maxPlayers} players.
+            </>
+          )}
         </p>
+
+        {creating && (
+        <div className="segmented" role="tablist" aria-label="Game">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isHearts}
+            className={`segmented__option${!isHearts ? ' is-active' : ''}`}
+            onClick={() => setGame('prediction')}
+          >
+            prediction
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isHearts}
+            className={`segmented__option${isHearts ? ' is-active' : ''}`}
+            onClick={() => setGame('hearts')}
+          >
+            hearts ♥
+          </button>
+        </div>
+        )}
 
         <label className="field">
           <span className="field__label">your name</span>

@@ -362,7 +362,16 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  join: (data: { roomCode: string | null; name: string; playerId: string | null }) => void
+  join: (data: {
+    roomCode: string | null
+    name: string
+    playerId: string | null
+    /**
+     * Which game a NEW table opens on. Ignored when joining an existing table:
+     * the game is a property of the table, and the host changes it in the lobby.
+     */
+    gameType?: GameType
+  }) => void
   toggleReady: (ready: boolean) => void
   startGame: () => void
   setMode: (mode: GameMode) => void

@@ -397,6 +397,17 @@ export class Room {
     this.broadcastLobby()
   }
 
+  /**
+   * The game a brand new table opens on, chosen by whoever created it. Only
+   * valid before anyone has sat down -- after that it's `setGameType`, which is
+   * host-only.
+   */
+  openOn(gameType: GameType) {
+    if (this.seats.length > 0 || this.gameState !== 'Lobby') return
+    if (gameType !== 'prediction' && gameType !== 'hearts') return
+    this.gameType = gameType
+  }
+
   /** Switches the table between the two games. Host only, lobby only. */
   setGameType(seat: Seat, gameType: GameType) {
     if (this.gameState !== 'Lobby') return

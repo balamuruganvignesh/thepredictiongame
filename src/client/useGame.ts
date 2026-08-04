@@ -737,9 +737,10 @@ export function useGame() {
 
   const actions = useMemo(
     () => ({
-      join(name: string, roomCode: string | null) {
+      /** `gameType` only means anything when opening a new table. */
+      join(name: string, roomCode: string | null, gameType?: GameType) {
         rememberName(name)
-        socket.emit('join', { name, roomCode, playerId: storedPlayerId() })
+        socket.emit('join', { name, roomCode, playerId: storedPlayerId(), gameType })
       },
       toggleReady(ready: boolean) {
         socket.emit('toggleReady', ready)

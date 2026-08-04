@@ -4,7 +4,9 @@
 tricks they'll win each round, then play them out. Hit the prediction, score
 big; miss, and the score drops.
 
-**Two games live here.** A lobby card lets the host switch the table between
+**Two games live here.** The landing screen picks which game a NEW table opens
+on (carried on the `join` payload, applied by `Room.openOn` — only valid before
+anyone is seated), and a lobby card lets the host switch it afterwards between
 The Prediction Game and **Hearts** — see the Hearts section below. They share
 the table (roster, codes, chat, spectators, reconnect) and nothing else; the
 round loop forks once, in `Room.runGameLoop`.
