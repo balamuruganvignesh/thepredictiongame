@@ -9,7 +9,7 @@
 // wall clock -- most of it the 5s post-bid Double window, once per bidder.
 import { io } from 'socket.io-client'
 
-const URL = 'http://localhost:3001'
+const URL = `http://localhost:${process.env.PORT ?? 3001}`
 const MODE = process.argv[2] ?? 'chaos'
 const PLAYERS = Number(process.argv[3] ?? 3)
 

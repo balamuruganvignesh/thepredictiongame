@@ -7,6 +7,10 @@ prediction and you score big. Miss and your score drops.
 2–10 players, in the browser, no accounts. Open a table, share the 4-letter
 code, deal.
 
+**Two games at one table.** The host picks between The Prediction Game and
+[Hearts](#hearts) on a card in the lobby. Same table, same code, same chat —
+different game.
+
 ## How to play
 
 Each round you bid how many tricks you think you'll win, from 0 up to the
@@ -32,6 +36,36 @@ difference.** Bidding 3 and winning 3 pays 13; bidding 3 and winning 1 costs 2.
 
 The first player at a table is the host: everyone else readies up, the host
 picks the mode and starts. No auto-start countdown.
+
+## Hearts
+
+The other game on the menu, and the opposite instinct: **points are bad here,
+and the lowest score wins.** 3–7 players.
+
+Every card in the deck is dealt out, so a round is as long as your hand. Each
+♥ you collect is 1 point and the Q♠ is 13 — 26 points on the table every round.
+
+- **Pass three.** Before each round you give three cards away: left, then
+  right, then across, then a round with no passing at all, repeating. (At three
+  players the "across" round is a no-pass round — across is already your
+  neighbour.) Everyone chooses at the same time.
+- **The 2♣ opens**, and whoever holds it must lead it. At table sizes where the
+  deck doesn't divide evenly, the lowest non-scoring cards are removed to make
+  it fit — every heart and the queen always stay in — so the opening card is
+  simply the lowest club dealt.
+- **Follow suit if you can.** No trump: the highest card of the led suit takes
+  the trick, and the winner leads the next.
+- **Hearts must be broken** before anyone can lead one. They break the first
+  time somebody discards a heart because they couldn't follow suit.
+- **Nothing painful on the first trick**: no hearts, no queen, unless penalty
+  cards are all you hold.
+- **Shoot the moon.** Take all 13 hearts *and* the queen and you score nothing
+  while everyone else takes 26.
+- **The game ends** after the round in which somebody crosses the target score
+  (the host picks 50, 100 or 200). Lowest total wins — reaching the target
+  isn't losing by itself, it just calls time.
+
+Chaos roles are a Prediction Game feature; a Hearts table is always straight.
 
 ## Chaos mode
 

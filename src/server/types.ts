@@ -15,6 +15,10 @@ export type Seat = {
   bid: number | null
   hasDoubled: boolean
   tricksWon: number
+  /** Hearts: every card in every trick this seat has won this round. */
+  collected: Card[]
+  /** Hearts: the three cards chosen for the pass, until the pass resolves. */
+  passSelection: Card[] | null
   totalScore: number
   lastRoundScore: number | null
   /** ms timestamp of the disconnect, for the lobby's reconnect grace period. */

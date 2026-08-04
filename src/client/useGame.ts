@@ -8,7 +8,13 @@ import type {
   ChatMessage,
   GameMode,
   GameStateUpdate,
+  GameType,
+  HeartsRoundStart,
+  HeartsScoreUpdate,
+  HeartsState,
   LobbyUpdate,
+  PassPrompt,
+  PassResult,
   PlayEntry,
   RebidPrompt,
   RoleState,
@@ -20,11 +26,46 @@ import type {
   TrickUpdate,
   UseAbilityPayload,
 } from '@shared/protocol'
+import { displayName } from '@shared/cards'
+import type { PassDirection } from '@shared/heartsRules'
 import { rememberName, rememberPlayerId, socket, storedPlayerId } from './socket'
 
 export type FeedCard = { id: number; message: string; secret: boolean; createdAt: number }
 
 export type View = 'join' | 'lobby' | 'game' | 'gameover'
+
+/**
+ * The Hearts slice of the store. Only meaningful while `gameType === 'hearts'`;
+ * the Prediction Game never reads it and never writes it.
+ */
+export type HeartsStore = {
+  targetScore: number
+  direction: PassDirection
+  /** Who your three cards go to, or null on a no-pass round. */
+  passToId: string | null
+  /** The pass modal is up: you still owe three cards. */
+  passPending: boolean
+  heartsBroken: boolean
+  isFirstTrick: boolean
+  /** Penalty points taken so far THIS round, per player. */
+  penalties: Record<string, number>
+  /** The card that must open the round, while it's still unplayed. */
+  mustLeadCard: Card | null
+  /** The three cards that came your way, for the round-start toast. */
+  received: Card[]
+}
+
+const emptyHearts: HeartsStore = {
+  targetScore: 100,
+  direction: 'none',
+  passToId: null,
+  passPending: false,
+  heartsBroken: false,
+  isFirstTrick: true,
+  penalties: {},
+  mustLeadCard: null,
+  received: [],
+}
 
 export type Store = {
   connected: boolean
@@ -34,6 +75,11 @@ export type Store = {
   roomCode: string | null
   view: View
   lobby: LobbyUpdate | null
+  /** Which game this table is playing. Everything below branches off it. */
+  gameType: GameType
+  hearts: HeartsStore
+  /** Hearts standings read the other way up: fewest penalty points wins. */
+  lowestWins: boolean
   /** Watching a game that was already running: no hand, no turn, no abilities. */
   spectating: boolean
 
@@ -45,7 +91,7 @@ export type Store = {
   roundNumber: number
   cardsDealt: number
   trumpSuit: string
-  phase: 'bidding' | 'playing' | null
+  phase: 'bidding' | 'passing' | 'playing' | null
 
   bids: Record<string, number>
   /** TRUE total of bids placed this round; see protocol's bidSum. */
@@ -104,6 +150,9 @@ const initialStore: Store = {
   roomCode: null,
   view: 'join',
   lobby: null,
+  gameType: 'prediction',
+  hearts: emptyHearts,
+  lowestWins: false,
   spectating: false,
   names: {},
   order: [],
@@ -155,7 +204,13 @@ type Action =
   | { type: 'trickResolved'; data: TrickResolved }
   | { type: 'score'; data: ScoreUpdate }
   | { type: 'roundEnded' }
-  | { type: 'gameEnded'; standings: Standing[] }
+  | { type: 'gameEnded'; standings: Standing[]; lowestWins: boolean }
+  | { type: 'heartsRoundStart'; data: HeartsRoundStart }
+  | { type: 'passPrompt'; data: PassPrompt }
+  | { type: 'passResult'; data: PassResult }
+  | { type: 'passSubmitted' }
+  | { type: 'heartsState'; data: HeartsState }
+  | { type: 'heartsScore'; data: HeartsScoreUpdate }
   | { type: 'roleState'; data: RoleState }
   | { type: 'roleSync'; data: RoleSync }
   | { type: 'announce'; message: string }
@@ -214,6 +269,8 @@ function reducer(state: Store, action: Action): Store {
       return {
         ...state,
         lobby: action.data,
+        gameType: action.data.gameType,
+        hearts: { ...emptyHearts, targetScore: action.data.targetScore },
         names,
         totals,
         history: {},
@@ -347,9 +404,107 @@ function reducer(state: Store, action: Action): Store {
         ...state,
         view: 'gameover',
         standings: action.standings,
+        lowestWins: action.lowestWins,
         phase: null,
         roleState: null,
       }
+
+    // ---- Hearts -------------------------------------------------------------
+
+    case 'heartsRoundStart': {
+      const { data } = action
+      const order = data.roundNumber === 1 || state.order.length === 0 ? [...data.turnOrder] : state.order
+      return {
+        ...state,
+        view: 'game',
+        gameType: 'hearts',
+        standings: null,
+        roundNumber: data.roundNumber,
+        cardsDealt: data.cardsEach,
+        totalTricks: data.cardsEach,
+        trumpSuit: '',
+        turnOrder: data.turnOrder,
+        order,
+        history: data.roundNumber === 1 ? {} : state.history,
+        tricksWon: {},
+        currentTurnId: null,
+        leadSuit: null,
+        hand: [],
+        plays: [],
+        trickNumber: 0,
+        trickWinnerId: null,
+        phase: 'passing',
+        hearts: {
+          ...emptyHearts,
+          targetScore: data.targetScore,
+          direction: data.direction,
+        },
+      }
+    }
+
+    case 'passPrompt':
+      return {
+        ...state,
+        phase: 'passing',
+        hearts: {
+          ...state.hearts,
+          direction: action.data.direction,
+          passToId: action.data.passToId,
+          // count 0 is the no-pass round: nothing to choose, no modal.
+          passPending: action.data.count > 0,
+        },
+      }
+
+    case 'passSubmitted':
+      return { ...state, hearts: { ...state.hearts, passPending: false } }
+
+    case 'passResult':
+      return {
+        ...state,
+        hearts: { ...state.hearts, passPending: false, received: action.data.cards },
+        // Private, like an ability result: only you know what you were handed.
+        ...(action.data.cards.length > 0
+          ? {
+              nextId: state.nextId + 1,
+              feed: [
+                ...state.feed,
+                {
+                  id: state.nextId,
+                  message: `you were passed ${action.data.cards.map(displayName).join('  ')}`,
+                  secret: true,
+                  createdAt: Date.now(),
+                },
+              ],
+            }
+          : {}),
+      }
+
+    case 'heartsState':
+      return {
+        ...state,
+        hearts: {
+          ...state.hearts,
+          heartsBroken: action.data.heartsBroken,
+          isFirstTrick: action.data.isFirstTrick,
+          penalties: action.data.penalties,
+          mustLeadCard: action.data.mustLeadCard,
+        },
+      }
+
+    case 'heartsScore': {
+      const { data } = action
+      const totals = { ...state.totals }
+      const roundScores: Record<string, number> = {}
+      for (const line of data.results) {
+        totals[line.id] = line.totalScore
+        roundScores[line.id] = line.roundScore
+      }
+      return {
+        ...state,
+        totals,
+        history: { ...state.history, [data.roundNumber]: roundScores },
+      }
+    }
 
     case 'roleState': {
       // A fresh round intro replays the reveal banner + ability slot roll.
@@ -433,7 +588,22 @@ function reducer(state: Store, action: Action): Store {
         cardsDealt: data.cardsDealt,
         totalTricks: data.cardsDealt,
         trumpSuit: data.trumpSuit,
-        phase: data.phase === 'Playing' ? 'playing' : 'bidding',
+        gameType: data.gameType,
+        hearts: data.hearts
+          ? {
+              ...emptyHearts,
+              targetScore: data.hearts.targetScore,
+              direction: data.hearts.direction,
+              passToId: data.hearts.passToId,
+              passPending: data.hearts.passPending,
+              heartsBroken: data.hearts.heartsBroken,
+              isFirstTrick: data.hearts.isFirstTrick,
+              penalties: data.hearts.penalties,
+              mustLeadCard: data.hearts.mustLeadCard,
+            }
+          : emptyHearts,
+        phase:
+          data.phase === 'Playing' ? 'playing' : data.phase === 'Passing' ? 'passing' : 'bidding',
         bids: data.bids,
         bidSum: data.bidSum,
         tricksWon: data.tricksWon,
@@ -513,7 +683,15 @@ export function useGame() {
     socket.on('trickResolved', (data) => dispatch({ type: 'trickResolved', data }))
     socket.on('scoreUpdate', (data) => dispatch({ type: 'score', data }))
     socket.on('roundEnded', () => dispatch({ type: 'roundEnded' }))
-    socket.on('gameEnded', (data) => dispatch({ type: 'gameEnded', standings: data.standings }))
+    socket.on('gameEnded', (data) =>
+      dispatch({ type: 'gameEnded', standings: data.standings, lowestWins: data.lowestWins }),
+    )
+
+    socket.on('heartsRoundStart', (data) => dispatch({ type: 'heartsRoundStart', data }))
+    socket.on('passPrompt', (data) => dispatch({ type: 'passPrompt', data }))
+    socket.on('passResult', (data) => dispatch({ type: 'passResult', data }))
+    socket.on('heartsState', (data) => dispatch({ type: 'heartsState', data }))
+    socket.on('heartsScoreUpdate', (data) => dispatch({ type: 'heartsScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
@@ -571,6 +749,21 @@ export function useGame() {
       },
       setMode(mode: GameMode) {
         socket.emit('setMode', mode)
+      },
+      setGameType(gameType: GameType) {
+        socket.emit('setGameType', gameType)
+      },
+      setTargetScore(score: number) {
+        socket.emit('setTargetScore', score)
+      },
+      /**
+       * Hearts: give three cards away. Closed optimistically -- the server
+       * answers with passResult only once EVERYONE has chosen, and leaving the
+       * modal up until then would look like the click didn't land.
+       */
+      passCards(cards: Card[]) {
+        dispatch({ type: 'passSubmitted' })
+        socket.emit('passCards', cards)
       },
       submitBid(bid: number) {
         socket.emit('submitBid', bid)

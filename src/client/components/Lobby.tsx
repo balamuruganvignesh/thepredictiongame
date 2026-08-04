@@ -7,7 +7,8 @@
 // The table code and share link live here: players arrive by URL.
 
 import { useState } from 'react'
-import type { ChatMessage, LobbyUpdate } from '@shared/protocol'
+import { HeartsConfig } from '@shared/config'
+import type { ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { RolesGallery } from './RolesGallery'
 
@@ -19,6 +20,8 @@ type Props = {
   onToggleReady: (ready: boolean) => void
   onStart: () => void
   onSetMode: (mode: 'classic' | 'chaos') => void
+  onSetGameType: (gameType: GameType) => void
+  onSetTargetScore: (score: number) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -31,6 +34,8 @@ export function Lobby({
   onToggleReady,
   onStart,
   onSetMode,
+  onSetGameType,
+  onSetTargetScore,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -42,9 +47,16 @@ export function Lobby({
   const me = lobby.roster.find((entry) => entry.id === meId)
   const missing = lobby.minPlayers - lobby.roster.length
   const isChaos = lobby.mode === 'chaos'
+  const isHearts = lobby.gameType === 'hearts'
+  const tooMany = lobby.roster.length > lobby.maxPlayers
   const compact = lobby.roster.length > 6
 
   const status = () => {
+    // Hearts seats fewer players than the Prediction Game, so a big table can
+    // be over the limit rather than under it.
+    if (tooMany) {
+      return `too many players for ${isHearts ? 'hearts' : 'this game'} — ${lobby.maxPlayers} max`
+    }
     if (missing > 0) return `waiting for ${missing} more player${missing === 1 ? '' : 's'}`
     if (!lobby.canStart) return 'waiting for everyone to ready up…'
     return isHost ? "everyone's in. hit start!" : 'waiting for the host to start…'
@@ -67,8 +79,8 @@ export function Lobby({
     <div className="lobby">
       <div className="lobby__left">
         <section className="note lobby__title-card">
-          <h1 className="lobby__title">THE PREDICTION GAME</h1>
-          <p className="lobby__subtitle">5 up 5 down</p>
+          <h1 className="lobby__title">{isHearts ? 'HEARTS' : 'THE PREDICTION GAME'}</h1>
+          <p className="lobby__subtitle">{isHearts ? 'take no tricks worth taking' : '5 up 5 down'}</p>
 
           <button className="code-chip" onClick={share} title="Copy the invite link">
             <span className="code-chip__label">table code</span>
@@ -84,34 +96,81 @@ export function Lobby({
 
         <section className="note lobby__how">
           <header className="note__header">how to play</header>
-          <p>
-            bid how many hands you’ll win each round.
-            <br />
-            hit your bid exactly to score big.
-            <br />
-            miss it and you lose points.
-            <br />
-            feeling brave? double down — 5 seconds to decide.
-          </p>
+          {isHearts ? (
+            <p>
+              pass three cards, then duck every trick worth points.
+              <br />
+              each ♥ is 1 point, the Q♠ is 13 — and points are BAD.
+              <br />
+              take all 26 and you shoot the moon: everyone else eats them.
+              <br />
+              lowest score when someone hits {lobby.targetScore} wins.
+            </p>
+          ) : (
+            <p>
+              bid how many hands you’ll win each round.
+              <br />
+              hit your bid exactly to score big.
+              <br />
+              miss it and you lose points.
+              <br />
+              feeling brave? double down — 5 seconds to decide.
+            </p>
+          )}
         </section>
 
         <div className="lobby__small-cards">
           <button
-            className={`note lobby__mode${isChaos ? ' is-chaos' : ''}`}
-            onClick={() => isHost && onSetMode(isChaos ? 'classic' : 'chaos')}
+            className={`note lobby__mode${isHearts ? ' is-hearts' : ''}`}
+            onClick={() => isHost && onSetGameType(isHearts ? 'prediction' : 'hearts')}
             disabled={!isHost}
           >
-            <span className="lobby__mode-kicker">game mode</span>
-            <span className="lobby__mode-value">{isChaos ? 'CHAOS 🃏' : 'CLASSIC'}</span>
+            <span className="lobby__mode-kicker">game</span>
+            <span className="lobby__mode-value">{isHearts ? 'HEARTS ♥' : 'PREDICTION'}</span>
             <span className="lobby__mode-hint">
-              {isHost ? 'tap to switch' : 'host picks the mode'}
+              {isHost ? 'tap to switch' : 'host picks the game'}
             </span>
           </button>
 
-          <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>
-            <span className="lobby__roles-title">🎭 THE ROLES</span>
-            <span className="lobby__mode-hint">tap to browse chaos roles</span>
-          </button>
+          {/* Chaos roles are a Prediction Game feature; a hearts table swaps
+              that card for the score the game plays to. */}
+          {isHearts ? (
+            <button
+              className="note lobby__mode"
+              onClick={() => {
+                if (!isHost) return
+                const options = HeartsConfig.targetScoreOptions as readonly number[]
+                const next = options[(options.indexOf(lobby.targetScore) + 1) % options.length]
+                onSetTargetScore(next)
+              }}
+              disabled={!isHost}
+            >
+              <span className="lobby__mode-kicker">play to</span>
+              <span className="lobby__mode-value">{lobby.targetScore}</span>
+              <span className="lobby__mode-hint">
+                {isHost ? 'tap to change' : 'lowest score wins'}
+              </span>
+            </button>
+          ) : (
+            <button
+              className={`note lobby__mode${isChaos ? ' is-chaos' : ''}`}
+              onClick={() => isHost && onSetMode(isChaos ? 'classic' : 'chaos')}
+              disabled={!isHost}
+            >
+              <span className="lobby__mode-kicker">game mode</span>
+              <span className="lobby__mode-value">{isChaos ? 'CHAOS 🃏' : 'CLASSIC'}</span>
+              <span className="lobby__mode-hint">
+                {isHost ? 'tap to switch' : 'host picks the mode'}
+              </span>
+            </button>
+          )}
+
+          {!isHearts && (
+            <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>
+              <span className="lobby__roles-title">🎭 THE ROLES</span>
+              <span className="lobby__mode-hint">tap to browse chaos roles</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -163,7 +222,11 @@ export function Lobby({
               </button>
               {!lobby.canStart && (
                 <p className="lobby__hint">
-                  {missing > 0 ? 'need more players…' : 'everyone must ready up first'}
+                  {tooMany
+                    ? `hearts seats ${lobby.maxPlayers} at most`
+                    : missing > 0
+                      ? 'need more players…'
+                      : 'everyone must ready up first'}
                 </p>
               )}
             </>

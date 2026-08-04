@@ -138,6 +138,18 @@
   background: rgb(40 12 16 / 62%);
 }
 
+/* Picked for the pass: lifted out of the hand and ringed, so the three cards
+   on their way out read as a group you can still change your mind about. */
+.card-button--picked {
+  transform: translateY(-14px);
+}
+
+.card-button--picked .card {
+  box-shadow:
+    0 0 0 3px var(--positive),
+    0 8px 18px rgb(0 0 0 / 55%);
+}
+
 /* Trick winner / losers. */
 .card-slot--winner .card {
   box-shadow:

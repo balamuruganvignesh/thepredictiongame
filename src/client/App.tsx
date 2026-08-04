@@ -3,6 +3,7 @@ import { BackgroundFX } from './components/BackgroundFX'
 import { Feed } from './components/Feed'
 import { Join } from './components/Join'
 import { Lobby } from './components/Lobby'
+import { HeartsTable } from './components/HeartsTable'
 import { Table } from './components/Table'
 import { useGame } from './useGame'
 
@@ -32,14 +33,19 @@ export default function App() {
           onToggleReady={actions.toggleReady}
           onStart={actions.startGame}
           onSetMode={actions.setMode}
+          onSetGameType={actions.setGameType}
+          onSetTargetScore={actions.setTargetScore}
           onSendChat={actions.sendChat}
           onChatRead={actions.markChatRead}
         />
       )}
 
-      {(store.view === 'game' || store.view === 'gameover') && (
-        <Table store={store} actions={actions} />
-      )}
+      {(store.view === 'game' || store.view === 'gameover') &&
+        (store.gameType === 'hearts' ? (
+          <HeartsTable store={store} actions={actions} />
+        ) : (
+          <Table store={store} actions={actions} />
+        ))}
 
       <Feed cards={store.feed} />
 

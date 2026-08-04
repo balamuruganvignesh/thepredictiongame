@@ -3,12 +3,14 @@
 // because a single process hosts many tables at once.
 
 import type { Server as SocketServer } from 'socket.io'
-import { Config, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
+import { Config, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
 import type { Card } from '@shared/cards'
 import type {
   ChatMessage,
   ClientToServerEvents,
   GameMode,
+  GameType,
+  HeartsSnapshot,
   RosterEntry,
   ServerToClientEvents,
   Snapshot,
@@ -16,6 +18,7 @@ import type {
   UseAbilityPayload,
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
+import { passDirection, passTargetIndex } from '@shared/heartsRules'
 import type { Seat, Spectator } from './types'
 import { sleep } from './types'
 import type { EngineIO } from './engine/io'
@@ -24,8 +27,12 @@ import { RoleManager } from './engine/roles'
 import { BiddingManager } from './engine/bidding'
 import { TrickManager } from './engine/tricks'
 import { scoreRound } from './engine/scoring'
+import { dealHearts } from './engine/hearts/deck'
+import { PassManager } from './engine/hearts/passing'
+import { HeartsTrickManager } from './engine/hearts/play'
+import { scoreHeartsRoundForSeats } from './engine/hearts/scoring'
 
-type Phase = 'RoundStart' | 'Bidding' | 'Playing'
+type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
 export class Room {
   readonly seats: Seat[] = []
@@ -44,6 +51,15 @@ export class Room {
   private roles: RoleManager
   private bidding: BiddingManager
   private tricks: TrickManager
+
+  /**
+   * Which game this table is playing. Host-chosen in the lobby; the two games
+   * share the table, the chat and the reconnect machinery and nothing else.
+   */
+  private gameType: GameType = 'prediction'
+  private targetScore: number = HeartsConfig.defaultTargetScore
+  private passing: PassManager
+  private heartsTricks: HeartsTrickManager
 
   // Round state, kept so a reconnecting client can be handed a full snapshot.
   private roundNumber = 0
@@ -91,6 +107,25 @@ export class Room {
     // after construction because TrickManager already depends on RoleManager,
     // and this keeps that dependency one-way.
     this.roles.attachTricks(this.tricks)
+
+    // Hearts. No RoleManager: chaos roles are a Prediction Game feature, and
+    // these two managers talk to clients through the same EngineIO, so a
+    // Hearts-specific role manager could be injected here later the same way.
+    this.passing = new PassManager(this.io)
+    this.heartsTricks = new HeartsTrickManager(this.io)
+  }
+
+  // ---- Which game --------------------------------------------------------
+
+  private get isHearts(): boolean {
+    return this.gameType === 'hearts'
+  }
+
+  /** Table size limits for the game currently selected. */
+  private get limits(): { min: number; max: number } {
+    return this.isHearts
+      ? { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
+      : { min: Config.minPlayers, max: Config.maxPlayers }
   }
 
   // ---- Roster ---------------------------------------------------------------
@@ -173,6 +208,8 @@ export class Room {
       bid: null,
       hasDoubled: false,
       tricksWon: 0,
+      collected: [],
+      passSelection: null,
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
@@ -211,9 +248,12 @@ export class Room {
       // Everyone's gone: tell the round loop to stop between phases instead of
       // auto-playing the rest of the game to an empty room.
       if (this.isEmpty) this.aborted = true
-      // Unblock whichever phase was waiting on this seat.
+      // Unblock whichever phase was waiting on this seat. Only one game is
+      // running, so the other game's managers have nothing pending.
       this.bidding.onSeatDisconnected(seat)
       this.tricks.onSeatDisconnected(seat)
+      this.passing.onSeatDisconnected(seat)
+      this.heartsTricks.onSeatDisconnected(seat)
     }
   }
 
@@ -265,6 +305,8 @@ export class Room {
         bid: null,
         hasDoubled: false,
         tricksWon: 0,
+        collected: [],
+        passSelection: null,
         totalScore: 0,
         lastRoundScore: null,
         disconnectedAt: null,
@@ -303,7 +345,8 @@ export class Room {
 
   private canStart(): boolean {
     const count = this.seats.length
-    if (count < Config.minPlayers || count > Config.maxPlayers) return false
+    const { min, max } = this.limits
+    if (count < min || count > max) return false
     return this.allGuestsReady()
   }
 
@@ -326,11 +369,13 @@ export class Room {
     this.io.broadcast('lobbyUpdate', {
       roomCode: this.code,
       roster: this.roster(),
-      minPlayers: Config.minPlayers,
-      maxPlayers: Config.maxPlayers,
+      minPlayers: this.limits.min,
+      maxPlayers: this.limits.max,
       hostId: this.host?.id ?? null,
       canStart: this.canStart(),
       mode: this.roles.getMode(),
+      gameType: this.gameType,
+      targetScore: this.targetScore,
       spectators: this.spectators.map((s) => s.name),
     })
   }
@@ -349,6 +394,36 @@ export class Room {
     }
     if (mode !== 'classic' && mode !== 'chaos') return
     this.roles.setMode(mode)
+    this.broadcastLobby()
+  }
+
+  /** Switches the table between the two games. Host only, lobby only. */
+  setGameType(seat: Seat, gameType: GameType) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the game.')
+      return
+    }
+    if (gameType !== 'prediction' && gameType !== 'hearts') return
+    if (this.gameType === gameType) return
+    this.gameType = gameType
+    // Chaos roles are a Prediction Game feature; a Hearts table is always plain.
+    if (gameType === 'hearts') this.roles.setMode('classic')
+    this.systemChat(
+      gameType === 'hearts' ? 'The table switches to Hearts ♥' : 'The table switches to The Prediction Game',
+    )
+    this.broadcastLobby()
+  }
+
+  /** The score that ends a Hearts game. Host only, lobby only. */
+  setTargetScore(seat: Seat, score: number) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the target score.')
+      return
+    }
+    if (!(HeartsConfig.targetScoreOptions as readonly number[]).includes(score)) return
+    this.targetScore = score
     this.broadcastLobby()
   }
 
@@ -386,7 +461,15 @@ export class Room {
 
   playCard(seat: Seat, card: Card) {
     this.lastActivity = Date.now()
-    this.tricks.handleCardPlay(seat, card)
+    if (this.isHearts) this.heartsTricks.handleCardPlay(seat, card)
+    else this.tricks.handleCardPlay(seat, card)
+  }
+
+  /** Hearts: the three cards this seat is giving away. */
+  passCards(seat: Seat, cards: Card[]) {
+    this.lastActivity = Date.now()
+    if (!this.isHearts) return
+    this.passing.handlePassSelection(seat, cards)
   }
 
   useAbility(seat: Seat, payload: UseAbilityPayload) {
@@ -434,6 +517,11 @@ export class Room {
 
     const seat = this.seatById.get(viewer.id) ?? null
 
+    if (this.isHearts) {
+      this.sendHeartsState(viewer, seat)
+      return
+    }
+
     // A seated viewer always sees their OWN bid undisguised; a watcher is an
     // outsider and gets the fully disguised view.
     const bids = this.roles.isActive()
@@ -448,6 +536,8 @@ export class Room {
       inGame: true,
       roster: this.roster(),
       mode: this.roles.getMode(),
+      gameType: 'prediction',
+      hearts: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: this.trumpSuit,
@@ -474,6 +564,60 @@ export class Room {
     } else {
       this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
     }
+  }
+
+  /**
+   * The Hearts branch of sendState: the same table-level fields, then
+   * everything Hearts-specific in one `hearts` block. The prediction-only
+   * fields (bids, bidSum, roles) are sent empty rather than omitted, so the
+   * client's snapshot handling stays one shape.
+   */
+  private sendHeartsState(viewer: Seat | Spectator, seat: Seat | null) {
+    const hearts: HeartsSnapshot = {
+      targetScore: this.targetScore,
+      direction: passDirection(this.roundNumber, this.seats.length),
+      passToId: seat ? (this.heartsPassTarget(seat)?.id ?? null) : null,
+      passPending: seat ? this.passing.isPending(seat) : false,
+      ...this.heartsTricks.state(),
+    }
+
+    const snapshot: Snapshot = {
+      inGame: true,
+      roster: this.roster(),
+      mode: 'classic',
+      gameType: 'hearts',
+      hearts,
+      roundNumber: this.roundNumber,
+      cardsDealt: this.cardsDealt,
+      trumpSuit: '',
+      turnOrder: this.turnOrderIds,
+      phase: this.phase,
+      bids: {},
+      bidSum: 0,
+      tricksWon: Object.fromEntries(this.seats.map((s) => [s.id, s.tricksWon])),
+      totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
+      history: this.history,
+      hand: seat ? seat.hand : [],
+      roleState: null,
+      illusion: [],
+      rebid: null,
+      barred: null,
+      chat: this.chatLog,
+      spectating: seat == null,
+      ...this.heartsTricks.snapshot(),
+    }
+
+    if (seat) this.io.send(seat, 'snapshot', snapshot)
+    else this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
+  }
+
+  /** Whoever receives this seat's three cards in the current round. */
+  private heartsPassTarget(seat: Seat): Seat | undefined {
+    const order = this.turnOrderIds.map((id) => this.seatById.get(id)).filter(Boolean) as Seat[]
+    const index = order.findIndex((s) => s.id === seat.id)
+    if (index < 0) return undefined
+    const target = passTargetIndex(index, order.length, this.roundNumber)
+    return target == null ? undefined : order[target]
   }
 
   /** Direct-to-socket emit, for viewers who hold no chair. */
@@ -571,7 +715,77 @@ export class Room {
     await sleep(Config.roundEndPause)
   }
 
+  /**
+   * One Hearts round: deal the whole deck, pass three cards (unless this is a
+   * no-pass round), play every trick out, then score the penalties.
+   */
+  private async playHeartsRound(roundNumber: number) {
+    for (const seat of this.seats) {
+      seat.hand = []
+      seat.tricksWon = 0
+      seat.collected = []
+      seat.passSelection = null
+    }
+    this.passing.reset()
+    this.heartsTricks.reset()
+
+    const order = [...this.seats]
+    const { hands, cardsEach, opening } = dealHearts(order)
+    for (const seat of order) seat.hand = hands.get(seat.id) as Card[]
+
+    this.roundNumber = roundNumber
+    this.cardsDealt = cardsEach
+    this.trumpSuit = ''
+    this.turnOrderIds = order.map((s) => s.id)
+    this.phase = 'Passing'
+
+    const direction = this.passing.directionFor(roundNumber, order.length)
+    this.io.broadcast('heartsRoundStart', {
+      roundNumber,
+      cardsEach,
+      direction,
+      passToId: null, // per-seat; the passPrompt below carries the real target
+      targetScore: this.targetScore,
+      turnOrder: this.turnOrderIds,
+    })
+    for (const seat of order) {
+      this.io.send(seat, 'dealHand', { hand: seat.hand, roundNumber })
+    }
+
+    await this.passing.runPassPhase(order, roundNumber)
+    if (this.aborted) return
+    if (direction !== 'none') await sleep(HeartsConfig.passPause)
+
+    this.phase = 'Playing'
+    this.io.broadcast('gameState', { phase: 'Playing', roundNumber })
+    await this.heartsTricks.runPlayPhase(order, cardsEach, opening)
+    if (this.aborted) return
+
+    const results = scoreHeartsRoundForSeats(this.io, this.seats, roundNumber)
+    this.history[roundNumber] = Object.fromEntries(results.map((r) => [r.id, r.roundScore]))
+
+    this.io.broadcast('roundEnded', { roundNumber })
+    await sleep(HeartsConfig.roundEndPause)
+  }
+
+  private async runHeartsGame() {
+    // Unlike the Prediction Game's fixed ten rounds, this runs until somebody
+    // crosses the target -- and the round they cross in is always finished.
+    for (let roundNumber = 1; roundNumber <= HeartsConfig.maxRounds; roundNumber++) {
+      if (this.isEmpty) {
+        this.aborted = true
+        return
+      }
+      await this.playHeartsRound(roundNumber)
+      if (this.aborted) return
+      if (this.seats.some((seat) => seat.totalScore >= this.targetScore)) return
+    }
+  }
+
   private broadcastGameEnded() {
+    // Hearts is a golf score: fewest penalty points wins, so it sorts the other
+    // way and the client is told which way to read it.
+    const lowestWins = this.isHearts
     const standings: Standing[] = this.seats
       .map((seat) => {
         const reveal = this.roles.getRoleReveal(seat.id)
@@ -583,9 +797,9 @@ export class Room {
           roleEmoji: reveal?.roleEmoji,
         }
       })
-      .sort((a, b) => b.totalScore - a.totalScore)
+      .sort((a, b) => (lowestWins ? a.totalScore - b.totalScore : b.totalScore - a.totalScore))
 
-    this.io.broadcast('gameEnded', { standings })
+    this.io.broadcast('gameEnded', { standings, lowestWins })
   }
 
   private async runGameLoop() {
@@ -597,6 +811,36 @@ export class Room {
       seat.ready = false
     }
 
+    if (this.isHearts) {
+      await this.runHeartsGame()
+    } else {
+      await this.runPredictionGame()
+    }
+
+    if (!this.aborted) {
+      this.broadcastGameEnded()
+      await sleep(Config.gameEndPause)
+    }
+
+    this.roles.resetGame()
+    this.tricks.reset()
+    this.passing.reset()
+    this.heartsTricks.reset()
+    this.gameState = 'Lobby'
+    this.roundNumber = 0
+    this.history = {}
+
+    // Anyone who dropped during the game gives up their chair now.
+    for (const seat of [...this.seats]) {
+      if (!seat.connected) this.removeSeat(seat)
+    }
+    // ...and anyone who spent the game watching takes one of the free chairs.
+    this.seatSpectators()
+    this.broadcastLobby()
+  }
+
+  /** Ten rounds of 5-4-3-2-1-1-2-3-4-5, with chaos roles if the host picked them. */
+  private async runPredictionGame() {
     if (this.roles.getMode() === 'chaos') this.roles.assignRoles(this.seats)
 
     let dealerIndex = 0
@@ -611,24 +855,5 @@ export class Room {
       await this.playRound(roundNumber, Config.cardSequence[roundNumber - 1], dealerIndex)
       if (this.aborted) break
     }
-
-    if (!this.aborted) {
-      this.broadcastGameEnded()
-      await sleep(Config.gameEndPause)
-    }
-
-    this.roles.resetGame()
-    this.tricks.reset()
-    this.gameState = 'Lobby'
-    this.roundNumber = 0
-    this.history = {}
-
-    // Anyone who dropped during the game gives up their chair now.
-    for (const seat of [...this.seats]) {
-      if (!seat.connected) this.removeSeat(seat)
-    }
-    // ...and anyone who spent the game watching takes one of the free chairs.
-    this.seatSpectators()
-    this.broadcastLobby()
   }
 }

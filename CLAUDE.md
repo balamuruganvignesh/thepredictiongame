@@ -4,6 +4,11 @@
 tricks they'll win each round, then play them out. Hit the prediction, score
 big; miss, and the score drops.
 
+**Two games live here.** A lobby card lets the host switch the table between
+The Prediction Game and **Hearts** — see the Hearts section below. They share
+the table (roster, codes, chat, spectators, reconnect) and nothing else; the
+round loop forks once, in `Room.runGameLoop`.
+
 Node + Socket.IO server, React + Vite client, one `src/shared/` folder imported
 by both. See README.md for the player-facing rules.
 
@@ -31,6 +36,16 @@ by both. See README.md for the player-facing rules.
   - `npx tsx scripts/abilities-test.ts` — the Time Traveler's and Angel's
     abilities, by re-rolling the deal until the seat holds the exact ability.
   - `npx tsx scripts/rewind-test.ts` — Rewind unwinding the live play loop.
+  - `npx tsx scripts/hearts-test.ts` — every Hearts rule that is pure: the deck
+    trim per table size, the forced opening club, the legality matrix, moon
+    scoring, the passing cycle.
+- **Hearts end-to-end: `npx tsx scripts/hearts-playtest.ts <n> <target>`** (~1–3
+  min). TypeScript rather than `.mjs` on purpose — the bots pick cards with the
+  same shared `isLegalHeartsPlay` the browser uses, so **any rejection means the
+  client and server disagree and a real round would hang**. Zero rejections is
+  the pass condition.
+- All three socket-driven scripts take `PORT=` to hit a second server instance
+  when :3001 is busy with a dev server you'd rather not disturb.
 - Commit after each accepted chunk of work (user expects it).
 
 ## Architecture
@@ -38,16 +53,18 @@ by both. See README.md for the player-facing rules.
 Server-authoritative; the client is render-only. Nothing affecting scoring or
 legality is decided in the browser.
 
-- `src/shared/` — imported by BOTH sides. `config.ts` (tunables), `cards.ts`
-  (trick resolution, follow-suit legality), `scoring.ts`, `roleDefs.ts` (chaos
-  data), `protocol.ts` (the Socket.IO event map — the single source of truth
+- `src/shared/` — imported by BOTH sides. `config.ts` (tunables, incl.
+  `HeartsConfig`), `cards.ts` (trick resolution, follow-suit legality),
+  `scoring.ts`, `roleDefs.ts` (chaos data), `heartsRules.ts` (every pure Hearts
+  rule), `protocol.ts` (the Socket.IO event map — the single source of truth
   for every message).
 - `src/server/room.ts` — one table: roster, lobby, and the round loop. Every
   table is a Socket.IO room keyed by its 4-letter code, and ALL state is
   instance state, because one process hosts many tables.
 - `src/server/engine/` — `bidding.ts`, `tricks.ts`, `scoring.ts`, `roles.ts`,
-  `deck.ts`. Phase managers talk to clients only through the narrow `EngineIO`
-  interface in `io.ts`.
+  `deck.ts`, plus `hearts/` (`deck.ts`, `passing.ts`, `play.ts`, `scoring.ts`).
+  Phase managers talk to clients only through the narrow `EngineIO` interface
+  in `io.ts` — which is what lets the two games share one Room.
 - `src/client/useGame.ts` — all display state; a reducer fed by socket events.
 - `src/client/components/` — one per panel. `styles/tokens.css` is the design
   system: every color, font and radius comes from there, so restyling the whole
@@ -58,7 +75,7 @@ promise that the socket handler resolves when the player acts. A seat that
 disconnects resolves it with an auto-play instead, so a round can never hang on
 an empty chair.
 
-## Rules as implemented
+## Rules as implemented (The Prediction Game)
 
 - 2–10 players; card sequence 5,4,3,2,1,1,2,3,4,5; trump rotates
   Spades→Diamonds→Clubs→Hearts→NoTrump. (10×5 = 50 ≤ 52, so the deal always
@@ -144,6 +161,42 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 - Every ability's `note` states whether a Guardian can cancel it — keep that
   accurate when adding or changing abilities. Announcements name the role,
   never the player; roles are revealed on the final standings.
+
+## Hearts
+
+The second game. Host toggles it on the same lobby card row as classic/chaos;
+switching to Hearts forces the mode back to classic, because **chaos roles are
+a Prediction Game feature and Hearts ships without any**. The Hearts engine
+takes no RoleManager — if a Hearts role set is ever added, inject it into
+`PassManager` / `HeartsTrickManager` the way `RoleManager` is injected into
+`BiddingManager` / `TrickManager`.
+
+- **3–7 players.** The whole deck is dealt every round, so a bigger table gets
+  hands too short for the penalty cards to move. `Room.limits` returns the
+  ACTIVE game's min/max — the seat cap on join stays at 10, and `canStart()` is
+  what refuses an over-large Hearts table.
+- **The deck is trimmed to divide evenly** (`trimmedDeck`), dropping the lowest
+  NON-scoring cards. All 13 hearts and the Q♠ always survive: 26 points must be
+  on the table at every size. Trimming can take the 2♣, which is why the opening
+  lead comes from `openingCard()` (lowest club left) and never a hardcoded 2♣.
+- **The pass is simultaneous, not turn-based.** One promise per seat,
+  `Promise.all`. Every outgoing card leaves its hand BEFORE any incoming card
+  lands, or a card just received could be passed straight on. Same no-turn-timer
+  rule as everywhere else: only a disconnected seat gets picked for.
+- **`passDirection` collapses "across" to no-pass at 3 players** — across is the
+  same seat as left or right there. `hearts-test.ts` asserts every passing round
+  is a permutation with no self-pass.
+- **Client legality MUST come from `isLegalHeartsPlay`**, the same function the
+  server validates with (`HeartsTable` passes it to `Hand` via `isPlayable`).
+  Reimplementing it in the UI is how you get a card the UI offered and the
+  server refuses — and with no turn timers, that hangs the round forever. The
+  playtest's zero-rejection rule exists to catch exactly this.
+- Trick resolution reuses `resolveTrickWinnerIndex` with `trumpSuit:
+  'NoTrump'`, which already means "only the led suit can win". Don't write a
+  second winner function.
+- Scores are golf: `gameEnded` carries `lowestWins` and the standings are sorted
+  ascending. The game runs until a seat crosses the host-chosen target
+  (50/100/200) and always finishes that round.
 
 ## UI conventions (user-driven, keep these)
 

@@ -16,7 +16,7 @@
 // kick per seated player.
 import { io } from 'socket.io-client'
 
-const URL = 'http://localhost:3001'
+const URL = `http://localhost:${process.env.PORT ?? 3001}`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 let roomCode = null

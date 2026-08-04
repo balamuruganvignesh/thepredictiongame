@@ -48,6 +48,9 @@ export function Join({ connected, error, onJoin }: Props) {
           Predict exactly how many tricks you’ll win. Hit it and you score big; miss and your score
           drops. {Config.minPlayers}–{Config.maxPlayers} players.
         </p>
+        <p className="join__blurb">
+          …or switch the table to <b>Hearts ♥</b> once you’re in — the host picks the game.
+        </p>
 
         <label className="field">
           <span className="field__label">your name</span>

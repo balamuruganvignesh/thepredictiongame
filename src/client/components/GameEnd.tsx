@@ -3,7 +3,14 @@
 
 import type { Standing } from '@shared/protocol'
 
-export function GameEnd({ standings }: { standings: Standing[] }) {
+export function GameEnd({
+  standings,
+  lowestWins = false,
+}: {
+  standings: Standing[]
+  /** Hearts is a golf score: the standings arrive lowest-first and win that way. */
+  lowestWins?: boolean
+}) {
   const compact = standings.length > 7
 
   return (
@@ -15,6 +22,7 @@ export function GameEnd({ standings }: { standings: Standing[] }) {
         aria-label="Final standings"
       >
         <h2 className="modal__end-title">Final Standings</h2>
+        {lowestWins && <p className="modal__round">fewest penalty points wins</p>}
 
         <ol className="standings">
           {standings.map((standing, i) => (

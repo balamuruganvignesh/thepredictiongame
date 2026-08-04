@@ -23,6 +23,13 @@ type Props = {
    * unclickable rather than merely look that way.
    */
   barredCard?: string | null
+  /**
+   * Which cards this game considers legal. Defaults to the Prediction Game's
+   * follow-suit rule; Hearts passes its own, which also knows about broken
+   * hearts and the first-trick restrictions. It has to agree with the server
+   * exactly -- offering an illegal card just earns a rejection toast.
+   */
+  isPlayable?: (card: Card, hand: Card[]) => boolean
   onPlay: (card: Card) => void
 }
 
@@ -32,14 +39,16 @@ export function Hand({
   leadSuit,
   illusionCards = [],
   barredCard = null,
+  isPlayable,
   onPlay,
 }: Props) {
+  const allowed = isPlayable ?? ((card: Card, cards: Card[]) => isLegalPlay(card, cards, leadSuit))
   return (
     <div className="hand" aria-label="Your hand">
       {hand.map((card) => {
         const key = cardKey(card)
         const barred = key === barredCard
-        const legal = isMyTurn && !barred && isLegalPlay(card, hand, leadSuit)
+        const legal = isMyTurn && !barred && allowed(card, hand)
         const illusioned = legal && illusionCards.includes(key)
 
         return (

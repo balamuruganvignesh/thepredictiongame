@@ -1,19 +1,28 @@
 // The wire protocol: every server<->client message the game sends.
 //
-// Client -> Server: join, toggleReady, startGame, setMode, submitBid,
-//                   submitRebid, declareDouble, playCard, useAbility,
-//                   requestState
+// Client -> Server: join, toggleReady, startGame, setMode, setGameType,
+//                   setTargetScore, submitBid, submitRebid, declareDouble,
+//                   playCard, passCards, useAbility, requestState
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
 //                   abilityResult, roleAnnounce, roleSync, rebidPrompt,
-//                   snapshot
+//                   snapshot, heartsRoundStart, passPrompt, passResult,
+//                   heartsState, heartsScoreUpdate
+//
+// Two games share this protocol. Everything about the table -- joining, the
+// roster, chat, spectators, the trick area, reconnect -- is common; the
+// bidding events belong to the Prediction Game and the hearts* / pass* events
+// to Hearts, and neither game ever emits the other's.
 
 import type { Card, Suit } from './cards'
+import type { PassDirection } from './heartsRules'
 
 export type PlayerId = string
 export type GameMode = 'classic' | 'chaos'
-export type Phase = 'RoundStart' | 'Bidding' | 'Playing'
+/** Which game this table is playing. Chaos is a Prediction Game mode only. */
+export type GameType = 'prediction' | 'hearts'
+export type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
 // ---- Lobby ------------------------------------------------------------------
 
@@ -33,6 +42,10 @@ export type LobbyUpdate = {
   hostId: PlayerId | null
   canStart: boolean
   mode: GameMode
+  /** Which game the host has the table set to. */
+  gameType: GameType
+  /** Hearts only: the score that ends the game. Ignored by the other game. */
+  targetScore: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
 }
@@ -118,7 +131,14 @@ export type Standing = {
   roleEmoji?: string
 }
 
-export type GameEnded = { standings: Standing[] }
+export type GameEnded = {
+  standings: Standing[]
+  /**
+   * Hearts is a golf score: the standings arrive sorted ASCENDING and the
+   * lowest total is the winner. The Prediction Game is the other way round.
+   */
+  lowestWins: boolean
+}
 
 export type DoubleWindow = { seconds: number }
 
@@ -196,6 +216,67 @@ export type RebidPrompt = { cardsDealt: number; currentBid: number }
  */
 export type Illusion = { cards: string[] }
 
+// ---- Hearts -----------------------------------------------------------------
+//
+// Deliberately its own set of events rather than bids-with-different-meanings:
+// the two games share the table, the chat and the trick area, and nothing else.
+
+export type HeartsRoundStart = {
+  roundNumber: number
+  cardsEach: number
+  direction: PassDirection
+  /** Who your three cards go to, or null on a no-pass round. */
+  passToId: PlayerId | null
+  targetScore: number
+  turnOrder: PlayerId[]
+}
+
+/** Your turn to choose three cards. Everyone gets this at once. */
+export type PassPrompt = {
+  direction: PassDirection
+  passToId: PlayerId | null
+  count: number
+}
+
+/** The three cards that came the other way, once every seat has chosen. */
+export type PassResult = { cards: Card[]; fromId: PlayerId | null }
+
+export type HeartsState = {
+  heartsBroken: boolean
+  isFirstTrick: boolean
+  /** Penalty points each player has taken SO FAR this round. */
+  penalties: Record<PlayerId, number>
+  /**
+   * The one card that may open the round (the 2 of Clubs, or the lowest club
+   * left after an uneven deal). null once the opening lead has been played.
+   */
+  mustLeadCard: Card | null
+}
+
+export type HeartsRoundLineWire = {
+  id: PlayerId
+  hearts: number
+  hadQueen: boolean
+  shotMoon: boolean
+  roundScore: number
+  totalScore: number
+}
+
+export type HeartsScoreUpdate = { roundNumber: number; results: HeartsRoundLineWire[] }
+
+/** The Hearts half of a reconnect snapshot; null while playing the other game. */
+export type HeartsSnapshot = {
+  targetScore: number
+  direction: PassDirection
+  passToId: PlayerId | null
+  /** Still owing three cards: the pass modal comes back up on a refresh. */
+  passPending: boolean
+  heartsBroken: boolean
+  isFirstTrick: boolean
+  penalties: Record<PlayerId, number>
+  mustLeadCard: Card | null
+}
+
 // ---- Reconnect --------------------------------------------------------------
 
 /**
@@ -206,6 +287,9 @@ export type Snapshot = {
   inGame: boolean
   roster: RosterEntry[]
   mode: GameMode
+  gameType: GameType
+  /** Everything Hearts-specific; null when the table is playing the other game. */
+  hearts: HeartsSnapshot | null
   roundNumber: number
   cardsDealt: number
   trumpSuit: string
@@ -270,6 +354,11 @@ export interface ServerToClientEvents {
   illusion: (data: Illusion) => void
   rebidPrompt: (data: RebidPrompt) => void
   snapshot: (data: Snapshot) => void
+  heartsRoundStart: (data: HeartsRoundStart) => void
+  passPrompt: (data: PassPrompt) => void
+  passResult: (data: PassResult) => void
+  heartsState: (data: HeartsState) => void
+  heartsScoreUpdate: (data: HeartsScoreUpdate) => void
 }
 
 export interface ClientToServerEvents {
@@ -277,6 +366,12 @@ export interface ClientToServerEvents {
   toggleReady: (ready: boolean) => void
   startGame: () => void
   setMode: (mode: GameMode) => void
+  /** Host only, lobby only: switch the table between the two games. */
+  setGameType: (gameType: GameType) => void
+  /** Host only, lobby only: the score that ends a Hearts game. */
+  setTargetScore: (score: number) => void
+  /** Hearts: the three cards you're giving away. */
+  passCards: (cards: Card[]) => void
   submitBid: (bid: number) => void
   /** Answering a Reverse Time prompt. Not a turn -- nothing waits on it. */
   submitRebid: (bid: number) => void
