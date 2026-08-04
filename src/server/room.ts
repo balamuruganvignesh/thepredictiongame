@@ -32,6 +32,7 @@ import { dealHearts } from './engine/hearts/deck'
 import { PassManager } from './engine/hearts/passing'
 import { HeartsTrickManager } from './engine/hearts/play'
 import { scoreHeartsRoundForSeats } from './engine/hearts/scoring'
+import { postGameEndedToDiscord } from './discord'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
@@ -911,6 +912,13 @@ export class Room {
       .sort((a, b) => (lowestWins ? a.totalScore - b.totalScore : b.totalScore - a.totalScore))
 
     this.io.broadcast('gameEnded', { standings, lowestWins })
+
+    const gameName = this.isHearts
+      ? 'Hearts'
+      : this.roles.getMode() === 'chaos'
+        ? 'The Prediction Game (Chaos)'
+        : 'The Prediction Game'
+    postGameEndedToDiscord({ code: this.code, gameName, standings })
   }
 
   private async runGameLoop() {
