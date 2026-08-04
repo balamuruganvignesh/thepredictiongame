@@ -266,10 +266,30 @@ export class RoleManager {
     this.io.send(seat, 'dealHand', { hand: seat.hand })
   }
 
-  /** Greys the given cards in one player's own view of their hand. */
+  /** Blacks the given cards out in one player's own view of their hand. */
   private castIllusion(seat: Seat, cards: string[]) {
     this.illusionCards.set(seat.id, cards)
     this.io.send(seat, 'illusion', { cards })
+  }
+
+  /**
+   * Reshuffles the ORDER of every hand at the table and pushes them out.
+   *
+   * A hand is dealt sorted by suit then rank, so a blacked-out card would
+   * otherwise announce itself by where it sits -- between the 9♠ and the 5♠
+   * there are only so many things it can be. Scrambling the order takes that
+   * away.
+   *
+   * It runs on EVERY seat, including ones no Illusion touched and the Detective
+   * who cast it. If only the marks were shuffled, the shuffle itself would be
+   * the tell.
+   */
+  private scrambleHands() {
+    for (const other of this.roundSeats) {
+      if (other.hand.length < 2) continue
+      shuffle(other.hand)
+      this.resendHand(other)
+    }
   }
 
   /** Any Illusion on this player, for the reconnect snapshot. */
@@ -1001,9 +1021,12 @@ export class RoleManager {
           const mark = marks.find((s) => s.id === targetId)
           if (!mark) return { ok: false, error: 'They have no cards left to fool.' }
           this.castIllusion(mark, mark.hand.map(cardKey))
+          // Order first, so the blacked-out cards can't be read off their
+          // position. Everyone gets shuffled, not just the mark.
+          this.scrambleHands()
           this.privateResult(
             seat,
-            `Illusion cast: ${mark.name}'s ENTIRE hand looks dead to them. Every card still plays perfectly.`,
+            `Illusion cast: ${mark.name}'s ENTIRE hand is blacked out to them — they're playing blind. Every card still plays perfectly.`,
           )
           return { ok: true }
         }
@@ -1012,9 +1035,10 @@ export class RoleManager {
           const card = mark.hand[randomInt(0, mark.hand.length - 1)]
           this.castIllusion(mark, [cardKey(card)])
         }
+        this.scrambleHands()
         this.privateResult(
           seat,
-          'Illusion cast: one card in every other hand looks dead. All of them still play perfectly.',
+          'Illusion cast: one card in every other hand is blacked out, and every hand at the table just got reshuffled so nobody can place it. All of them still play perfectly.',
         )
         return { ok: true }
       }

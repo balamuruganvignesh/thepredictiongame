@@ -57,10 +57,10 @@ export const abilities: Record<string, AbilityDef> = {
   illusion: {
     id: 'illusion',
     name: 'Illusion',
-    desc: 'Misdirection, and YOU choose the shape: blanket ONE player so their whole hand looks dead to them, or put one dead-looking card in EVERY other hand. The cards still play perfectly — they just look unplayable.',
+    desc: 'Blackout, and YOU choose the shape: blank ONE player’s ENTIRE hand so they’re playing blind, or black out a single card in EVERY other hand. Every hand at the table is reshuffled at the same time, so nobody can work out the hidden card from where it sits. The cards still play perfectly — they just can’t be seen.',
     target: 'none',
     extra: 'scope',
-    note: 'silent — nobody is told it was you, and nothing can block it. purely cosmetic, so all it costs them is nerve',
+    note: 'silent — nobody is told it was you, and nothing can block it. it takes no points off anyone: all it costs them is knowing what they hold',
   },
   fortune: {
     id: 'fortune',

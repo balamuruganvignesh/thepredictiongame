@@ -79,7 +79,7 @@ use it or lose it.
 
 | Role | | What it does |
 | --- | --- | --- |
-| The Detective | 🕵️ | Read hands and the undealt deck. Cast an illusion, or decide who opens the next trick. |
+| The Detective | 🕵️ | Read hands and the undealt deck. Black out cards nobody can then see, or decide who opens the next trick. |
 | The Joker | 🃏 | Swap cards, hands and bids — but only 75% of swaps land. |
 | The Gambler | 🎲 | Raise your own stakes and flip coins with fate. |
 | The Judge | ⚖️ | Bend other players' bids, steal their tricks, disguise the truth. |

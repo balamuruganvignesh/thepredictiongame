@@ -234,11 +234,18 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   the face (radius, shadow, winner/playable rings, muted + illusion veils) is
   still CSS on the `.card` wrapper, and everything scales off `--card-w`.
   (This replaced an earlier all-CSS deck — no pip layouts or court panels now.)
-- **`.card-button--muted` and `.card-button--illusion` must stay pixel-identical**
-  — same `filter`, same veil, same shadow. An unplayable card is darkened right
-  down (brightness 0.42 + a veil), and the Detective's Illusion is that exact
-  look worn by a card that is actually legal. Restyle one without the other and
-  the bluff is visible, which kills the ability outright.
+- **Three card states, three distinct looks.** `--muted` (illegal): the real
+  face, darkened right down but still readable — you must be able to see your
+  own hand. `--barred` (a Rewind): red-ringed, genuinely unclickable.
+  `--illusion`: the face is blacked out COMPLETELY, an opaque panel with a `?`,
+  because a Detective's Illusion is now concealment, not a bluff — the holder
+  can still play the card, they just don't know what it is. (It used to be
+  pixel-identical to `--muted`; it deliberately isn't any more.)
+- **An Illusion also reshuffles EVERY hand at the table** (`scrambleHands`),
+  including seats it didn't touch and the Detective's own. Hands are dealt
+  sorted, so a blacked-out card between the 9♠ and the 5♠ names itself; and if
+  only the marks were shuffled, the shuffle would be the tell. For the same
+  reason `TrickManager`'s Rewind pushes the card back WITHOUT re-sorting.
 - Chat is for what PLAYERS say. Game events (doubling, ability announcements)
   go to the floating feed via `roleAnnounce`, never `systemChat`. Only presence
   lines — joined / left / watching / took a seat — belong in chat.

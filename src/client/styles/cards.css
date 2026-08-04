@@ -87,13 +87,13 @@
   transform: translateY(-8px);
 }
 
-/* An illegal play: the real face is still there, but properly darkened out
-   rather than lightly greyed, so "can't play that" reads at a glance across a
-   whole fanned hand. The veil and the dimming are ONE look, shared with the
-   Illusion below -- see the note there before changing either.
+/* An illegal play: the real face is still there and still readable -- you must
+   be able to see your own hand -- just darkened right down so "can't play that"
+   reads at a glance across a whole fan.
 
-   `filter` on the card does the heavy lifting (the pixel art goes dark and
-   flat), and the veil on top kills the last of the contrast. */
+   `filter` does the heavy lifting (the pixel art goes dark and flat) and the
+   veil kills the last of the contrast. This is NOT the Illusion look any more:
+   an Illusion blacks the face out entirely. */
 .card-button--muted {
   cursor: default;
 }
@@ -110,26 +110,31 @@
   background: rgb(6 6 10 / 55%);
 }
 
-/* A Detective's Illusion. Deliberately pixel-identical to the muted look above
-   -- same filter, same veil, same values: the whole trick is that a perfectly
-   LEGAL card reads as "you can't play that". If you darken one of these two,
-   darken BOTH, or the lie is visible and the ability is dead. The accent ring is
-   stripped for the same reason. The button stays enabled, so calling the bluff
-   is always possible; it just doesn't lift under the cursor the way a card you
-   can obviously play does. */
+/* A Detective's Illusion: the face is blacked out COMPLETELY. Not a veil you
+   can read through -- an opaque panel with a ? on it, so the holder genuinely
+   does not know what the card is and has to play it blind.
+
+   No filter here on purpose: filter dims what's underneath, and the point is
+   that there is nothing to read at all. The ring stays warm and the button
+   stays enabled, because the card IS legal -- the gamble is the whole ability. */
 .card-button--illusion .card {
   box-shadow:
-    0 0 0 1px var(--card-edge),
-    0 2px 6px rgb(0 0 0 / 45%);
-  filter: brightness(0.42) saturate(0.35) contrast(0.9);
+    0 0 0 2px var(--accent),
+    0 4px 10px rgb(0 0 0 / 50%);
 }
 
 .card-button--illusion .card::before {
-  content: '';
+  content: '?';
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: rgb(6 6 10 / 55%);
+  display: grid;
+  place-items: center;
+  background: #06060a;
+  color: color-mix(in srgb, var(--accent) 55%, transparent);
+  font-family: var(--font-title);
+  font-size: calc(var(--card-w) * 0.5);
+  line-height: 1;
 }
 
 /* A card a Rewind has barred. Deliberately NOT the illusion veil: this one is

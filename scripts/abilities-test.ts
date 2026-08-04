@@ -404,6 +404,50 @@ function testRewindNotDealtInOneCardRounds() {
   check('and the other abilities still are, so the seat is never left empty', dealtAbilities.size >= 2)
 }
 
+// ---- The Detective ----------------------------------------------------------
+
+function testIllusionScramblesEveryHand() {
+  console.log('\n🕵️ Illusion (blackout + the reshuffle that hides it)')
+  const { bus, roles, seats, dealt } = setup('detective', 'illusion')
+  check('the ability was dealt', dealt)
+  const [me] = seats
+
+  const before = new Map(seats.map((s) => [s.id, s.hand.map(cardKey).join(',')]))
+  roles.handleUseAbility(me, { scope: 'all' })
+
+  const blacked = seats
+    .filter((s) => s.id !== me.id)
+    .map((s) => (bus.to(s.id, 'illusion').at(-1) as { cards: string[] } | undefined)?.cards ?? [])
+  check('one card is blacked out in every OTHER hand', blacked.every((c) => c.length === 1))
+  check('and never in the Detective’s own', bus.to(me.id, 'illusion').length === 0)
+
+  // The reshuffle has to reach every seat, the caster included -- a hand that
+  // didn't move would be the tell.
+  check(
+    'every seat is re-sent its hand, including the Detective',
+    seats.every((s) => bus.to(s.id, 'dealHand').length > 0),
+  )
+  check(
+    'nobody gains or loses a card, only the order moves',
+    seats.every((s) => {
+      const now = [...s.hand].map(cardKey).sort().join(',')
+      const then = (before.get(s.id) as string).split(',').sort().join(',')
+      return now === then
+    }),
+  )
+
+  // A 3-card hand shuffles back to itself 1 time in 6, so prove it over casts
+  // rather than off one.
+  let moved = false
+  for (let i = 0; i < 40 && !moved; i++) {
+    const order = seats[1].hand.map(cardKey).join(',')
+    const fresh = setup('detective', 'illusion')
+    fresh.roles.handleUseAbility(fresh.seats[0], { scope: 'all' })
+    moved = fresh.seats[1].hand.map(cardKey).join(',') !== order
+  }
+  check('the order really is scrambled', moved)
+}
+
 // ---- The Mirrorer -----------------------------------------------------------
 
 function testMimic() {
@@ -526,6 +570,7 @@ testGraceOnlyWhenItHelps()
 testHaloAndSacrifice()
 testIntercede()
 testRewindNotDealtInOneCardRounds()
+testIllusionScramblesEveryHand()
 testMimic()
 testTwinFate()
 testTwoWayMirror()

@@ -4,7 +4,7 @@
 
 import { Config } from '@shared/config'
 import type { Card } from '@shared/cards'
-import { cardKey, isLegalPlay, isSameCard, resolveTrickWinnerIndex, sortHand } from '@shared/cards'
+import { cardKey, isLegalPlay, isSameCard, resolveTrickWinnerIndex } from '@shared/cards'
 import type { PlayEntry } from '@shared/protocol'
 import type { Seat } from '../types'
 import { sleep } from '../types'
@@ -239,8 +239,10 @@ export class TrickManager implements TrickHost {
         if (card === REWIND) {
           const undone = plays.pop()
           if (undone) {
+            // Pushed back WITHOUT re-sorting: a Detective's Illusion scrambles
+            // hand order so a blacked-out card can't be placed by where it
+            // sits, and sorting this seat's hand here would hand that back.
             undone.seat.hand.push(undone.card)
-            sortHand(undone.seat.hand)
             // The same message that hands the card back marks it unplayable,
             // so the UI greys it instead of letting them click it and collect
             // a rejection toast.
