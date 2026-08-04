@@ -188,7 +188,59 @@ async function run() {
   )
 }
 
-run().then(
+/**
+ * The between-cards pause used to be a hole: no play was pending, so a Rewind
+ * fired during it was refused outright even though the card was still sitting
+ * on the table. It is now HELD and applied as the next turn opens.
+ */
+async function runPausedRewind() {
+  console.log('\n-- a rewind fired during the between-cards pause --')
+  const a = seat('Ada', [
+    { suit: 'Spades', rank: 9 },
+    { suit: 'Hearts', rank: 4 },
+  ])
+  const b = seat('Bo', [
+    { suit: 'Spades', rank: 12 },
+    { suit: 'Spades', rank: 3 },
+  ])
+  const seats = [a, b]
+
+  const roles = new RoleManager(silentIO)
+  // A real (short) pause this time -- the pause IS what's under test.
+  const tricks = new TrickManager(silentIO, roles, 0.4)
+  roles.attachTricks(tricks)
+
+  const done = tricks.runPlayPhase(seats, a, 2, 'Hearts')
+  await tick()
+
+  tricks.handleCardPlay(a, { suit: 'Spades', rank: 9 })
+  await tick() // now inside the pause, with nobody on the clock
+
+  check('the pause is not a hole: the rewind is still offered', tricks.canRewind().ok)
+  check('and it still names the player who just went', tricks.lastPlayer()?.id === 'Ada')
+
+  tricks.rewindLastPlay()
+  await new Promise((r) => setTimeout(r, 60))
+
+  check('the card came back off the table', tricks.snapshot().plays.length === 0)
+  check('it is back in Ada’s hand', a.hand.some((card) => cardKey(card) === 'Spades-9'))
+  check('and the turn is Ada’s again', tricks.snapshot().currentTurnId === 'Ada')
+
+  // Play it out so the loop finishes rather than leaking a pending promise.
+  tricks.handleCardPlay(a, { suit: 'Hearts', rank: 4 })
+  await new Promise((r) => setTimeout(r, 500))
+  tricks.handleCardPlay(b, { suit: 'Spades', rank: 12 })
+  await new Promise((r) => setTimeout(r, 2200))
+  tricks.handleCardPlay(a, { suit: 'Spades', rank: 9 })
+  await new Promise((r) => setTimeout(r, 500))
+  tricks.handleCardPlay(b, { suit: 'Spades', rank: 3 })
+  await done
+  check('the round still finishes cleanly', seats.every((s) => s.hand.length === 0))
+}
+
+run()
+  .then(runPausedRewind)
+  .then(
   () => {
     console.log(failures === 0 ? '\nPASS' : `\nFAIL — ${failures} problem(s)`)
     process.exit(failures === 0 ? 0 : 1)

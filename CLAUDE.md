@@ -104,6 +104,13 @@ an empty chair.
   is live. `TrickManager` takes it as a constructor arg (default `Config.playPause`)
   purely so `rewind-test.ts` can pass 0 — it asserts the state machine, not the
   pacing. Hearts does NOT have it: its rounds are 4x longer already.
+- **A Rewind fired during that pause is HELD, not refused.** The card is still
+  on the table and the trick hasn't resolved, so `canRewind` / `lastPlayer`
+  accept the moment (`inPlayPause`), the pause is cut short, and
+  `waitForCardPlay` spends the held rewind through the existing REWIND branch.
+  Between TRICKS both flags are false and a rewind is still refused for real —
+  that trick has been scored. Refusing mid-pause made a 3s hole where a
+  perfectly good ability bounced.
 - Host = first joiner: guests ready up, the host has the only START button. No
   auto-start countdown.
 

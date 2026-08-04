@@ -66,6 +66,9 @@ export class TrickManager implements TrickHost {
     this.liveTrickNumber = 0
     this.trickPlays = []
     this.replayBan = null
+    this.inPlayPause = false
+    this.endPause = null
+    this.heldRewind = false
   }
 
   // ---- TrickHost: the Time Traveler's Rewind --------------------------------
@@ -74,10 +77,24 @@ export class TrickManager implements TrickHost {
     return this.liveTrickNumber
   }
 
+  /**
+   * True while the loop is sitting in the between-cards pause. The card that
+   * just landed is still the most recent play and the trick has NOT resolved,
+   * so a Rewind aimed at this moment is perfectly valid -- it just has to be
+   * held until the loop comes back. Between TRICKS this is false, and a rewind
+   * is refused there for real: that trick has already been scored.
+   */
+  private inPlayPause = false
+  /** Ends the pause early, so a held Rewind lands immediately. */
+  private endPause: (() => void) | null = null
+  /** A Rewind that arrived during the pause, waiting for the loop. */
+  private heldRewind = false
+
   lastPlayer(): Seat | null {
-    // Only while a play is actually pending. Between tricks the resolver is
-    // null and the cards on the table have already been scored into a winner.
-    if (!this.resolver || this.trickPlays.length === 0) return null
+    // While a play is pending, or during the pause right after one landed.
+    // Between tricks both are false and the cards on the table have already
+    // been scored into a winner.
+    if ((!this.resolver && !this.inPlayPause) || this.trickPlays.length === 0) return null
     return this.trickPlays[this.trickPlays.length - 1].seat
   }
 
@@ -88,7 +105,7 @@ export class TrickManager implements TrickHost {
    */
   canRewind(): { ok: boolean; error?: string } {
     const last = this.trickPlays[this.trickPlays.length - 1]
-    if (!this.resolver || !last) {
+    if ((!this.resolver && !this.inPlayPause) || !last) {
       return { ok: false, error: 'There is no card on the table to pull back right now.' }
     }
 
@@ -105,9 +122,41 @@ export class TrickManager implements TrickHost {
     return { ok: true }
   }
 
-  /** Aborts the pending wait; runPlayPhase owns the loop index, so it unwinds. */
+  /**
+   * Aborts the pending wait; runPlayPhase owns the loop index, so it unwinds.
+   *
+   * Fired during the between-cards pause there is no wait to abort yet, so the
+   * rewind is HELD rather than refused: the pause is cut short and the next
+   * turn opens straight into the unwind. The alternative -- rejecting it -- made
+   * the pause a window where a perfectly good Rewind bounced.
+   */
   rewindLastPlay(): void {
-    this.resolver?.(REWIND)
+    if (this.resolver) {
+      this.resolver(REWIND)
+      return
+    }
+    if (this.inPlayPause) {
+      this.heldRewind = true
+      this.endPause?.()
+    }
+  }
+
+  /** The beat after a card lands, cut short if a Rewind arrives during it. */
+  private async waitOutPlayPause(): Promise<void> {
+    if (this.playPause <= 0) return
+    this.inPlayPause = true
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        this.endPause = null
+        resolve()
+      }, this.playPause * 1000)
+      this.endPause = () => {
+        clearTimeout(timer)
+        this.endPause = null
+        resolve()
+      }
+    })
+    this.inPlayPause = false
   }
 
   private rotateToStart(seatOrder: Seat[], startSeat: Seat): Seat[] {
@@ -183,6 +232,15 @@ export class TrickManager implements TrickHost {
         resolve(card)
       }
       this.resolver = finish
+
+      // A Rewind that arrived during the pause was held, not refused. Spend it
+      // now, before this seat is asked for anything: the loop's REWIND branch
+      // hands the turn back to whoever played last.
+      if (this.heldRewind) {
+        this.heldRewind = false
+        setImmediate(() => finish(REWIND))
+        return
+      }
 
       // No turn timer: a player's turn is never skipped for taking too long.
       // The only auto-play is for a seat that has actually left, because
@@ -274,7 +332,9 @@ export class TrickManager implements TrickHost {
         // played can be seen. The turn is already cleared above, so during the
         // pause nobody is on the clock and no hand is live -- and the last card
         // of a trick doesn't need it, trickResolvePause covers that moment.
-        if (plays.length < order.length && this.playPause > 0) await sleep(this.playPause)
+        // A Rewind arriving mid-pause ends it early and is applied on the way
+        // out, rather than bouncing off a window it had no way to see.
+        if (plays.length < order.length) await this.waitOutPlayPause()
       }
 
       this.currentTurnSeat = null

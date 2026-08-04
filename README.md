@@ -33,7 +33,8 @@ difference.** Bidding 3 and winning 3 pays 13; bidding 3 and winning 1 costs 2.
   told. Your double stays secret until the scores land.
 - **A beat between cards.** Once a card hits the table there's a 3-second pause
   before the next player's turn opens, so a trick can actually be watched. It
-  never skips anyone — during it nobody is on the clock at all.
+  never skips anyone — during it nobody is on the clock at all, and a Time
+  Traveler's Rewind aimed at that moment is held rather than refused.
 - **No turn timers, ever.** Nobody is ever skipped for thinking too long. The
   server only plays for a seat that has actually disconnected. That 5-second
   Double window is the one clock in the game, and all it closes is an optional
@@ -92,7 +93,15 @@ use it or lose it.
 Announcements name the **role**, never the player — working out who holds what
 is most of the game. Roles are revealed on the final standings.
 
-Seven standard roles means a table of 7 or fewer never has a duplicate.
+Seven standard roles means a table of 7 or fewer never has a duplicate. You're
+never dealt an ability the round can't use, either — no Rewind in a 1-card
+round, no two-target ability at a table of two.
+
+One button, above the dock: **⚡ your ability** while it's live, opening a small
+panel that doesn't cover the table so you can aim while watching the trick, then
+**🎭 ROLE** once it's spent. Everything private that happens to you — what your
+ability found *and* what somebody else quietly did to you — is kept there for
+the round, and you can browse every role from it mid-game.
 
 Full ability lists are on the **[Chaos Mode wiki page](https://github.com/balamuruganvignesh/thepredictiongame/wiki/Chaos-Mode)**.
 
