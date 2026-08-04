@@ -11,6 +11,7 @@ import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
 import { QuickAbility } from './QuickAbility'
 import { RebidModal } from './RebidModal'
+import { RestartVoteButton } from './RestartVote'
 import { RolePanel } from './RolePanel'
 import { Scoreboard } from './Scoreboard'
 import { TopBar, type ChipData } from './TopBar'
@@ -173,6 +174,14 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
           SCORES
         </button>
+        {/* Ends the game early by majority vote, so people waiting as
+            spectators get a chair without the game being played out. */}
+        <RestartVoteButton
+          restart={store.restart}
+          meId={store.meId}
+          spectating={store.spectating}
+          onVote={actions.voteRestart}
+        />
       </div>
 
       {chatOpen && (

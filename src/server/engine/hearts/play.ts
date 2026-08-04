@@ -25,6 +25,8 @@ export class HeartsTrickManager {
   private currentTurnSeat: Seat | null = null
   private currentLeadSuit: string | null = null
   private resolver: ((card: Card) => void) | null = null
+  /** Set by cancel(): the play phase bails out at its next checkpoint. */
+  private cancelled = false
 
   private heartsBroken = false
   private isFirstTrick = true
@@ -47,6 +49,7 @@ export class HeartsTrickManager {
     this.mustLeadCard = null
     this.livePlays = []
     this.liveTrickNumber = 0
+    this.cancelled = false
   }
 
   snapshot() {
@@ -139,6 +142,17 @@ export class HeartsTrickManager {
     }
   }
 
+  /**
+   * The table voted to abandon the game. Unblocks whoever we're waiting on and
+   * makes `runPlayPhase` return at its next checkpoint rather than auto-playing
+   * the rest of the round out. The card it resolves with is discarded.
+   */
+  cancel() {
+    this.cancelled = true
+    const seat = this.currentTurnSeat
+    if (seat && this.resolver) this.resolver(this.autoPlay(seat, this.currentLeadSuit))
+  }
+
   private rotateToStart(order: Seat[], start: Seat): Seat[] {
     const index = Math.max(
       0,
@@ -157,12 +171,14 @@ export class HeartsTrickManager {
     this.heartsBroken = false
     this.isFirstTrick = true
     this.mustLeadCard = opening
+    this.cancelled = false
 
     let leader =
       order.find((seat) => seat.hand.some((card) => isSameCard(card, opening))) ?? order[0]
     this.broadcastState()
 
     for (let trickNumber = 1; trickNumber <= cardsEach; trickNumber++) {
+      if (this.cancelled) return
       const rotated = this.rotateToStart(order, leader)
       const plays: { seat: Seat; card: Card }[] = []
       let leadSuit: string | null = null
@@ -173,6 +189,9 @@ export class HeartsTrickManager {
         this.broadcastTrickState(plays, leadSuit, trickNumber, cardsEach)
 
         const card = await this.waitForCardPlay(seat, leadSuit)
+        // The table voted to restart mid-trick: stop here rather than play a
+        // round out that is about to be thrown away.
+        if (this.cancelled) return
 
         const index = seat.hand.findIndex((c) => isSameCard(c, card))
         if (index >= 0) seat.hand.splice(index, 1)

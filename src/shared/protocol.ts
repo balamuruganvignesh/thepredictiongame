@@ -2,13 +2,13 @@
 //
 // Client -> Server: join, toggleReady, startGame, setMode, setGameType,
 //                   setTargetScore, submitBid, submitRebid, declareDouble,
-//                   playCard, passCards, useAbility, requestState
+//                   playCard, passCards, useAbility, requestState, voteRestart
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
 //                   abilityResult, roleAnnounce, roleSync, rebidPrompt,
 //                   snapshot, heartsRoundStart, passPrompt, passResult,
-//                   heartsState, heartsScoreUpdate
+//                   heartsState, heartsScoreUpdate, restartVote
 //
 // Two games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
@@ -141,6 +141,23 @@ export type GameEnded = {
 }
 
 export type DoubleWindow = { seconds: number }
+
+// ---- Restart vote -----------------------------------------------------------
+
+/**
+ * The table voting to abandon the game in progress and go back to the lobby --
+ * how anyone waiting as a spectator gets a chair without the game having to be
+ * played out. Sent to everyone (spectators included, so they can see it coming)
+ * whenever a vote is cast, withdrawn, or invalidated by someone dropping.
+ */
+export type RestartVote = {
+  /** Who is currently voting to restart. */
+  votes: PlayerId[]
+  /** Votes needed to pass: a majority of the connected seats. */
+  needed: number
+  /** How many people are waiting for a chair, i.e. what the vote is FOR. */
+  waiting: number
+}
 
 // ---- Chat -------------------------------------------------------------------
 
@@ -315,6 +332,8 @@ export type Snapshot = {
   barred: string | null
   /** Recent chat, so a refresh doesn't wipe the conversation. */
   chat: ChatMessage[]
+  /** The restart vote as it stands, so a refresh doesn't lose sight of it. */
+  restart: RestartVote
   /** Watching rather than playing: no hand, no turn, no abilities. */
   spectating: boolean
 }
@@ -359,6 +378,7 @@ export interface ServerToClientEvents {
   passResult: (data: PassResult) => void
   heartsState: (data: HeartsState) => void
   heartsScoreUpdate: (data: HeartsScoreUpdate) => void
+  restartVote: (data: RestartVote) => void
 }
 
 export interface ClientToServerEvents {
@@ -389,4 +409,10 @@ export interface ClientToServerEvents {
   useAbility: (payload: UseAbilityPayload) => void
   requestState: () => void
   chat: (text: string) => void
+  /**
+   * Vote to abandon the game in progress and reopen the lobby (typically so
+   * spectators can be seated). A toggle: sending it again withdraws the vote.
+   * Any seated player may call it; it passes on a majority of connected seats.
+   */
+  voteRestart: (vote: boolean) => void
 }

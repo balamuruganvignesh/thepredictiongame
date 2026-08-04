@@ -17,6 +17,7 @@ import type {
   PassResult,
   PlayEntry,
   RebidPrompt,
+  RestartVote,
   RoleState,
   RoleSync,
   ScoreUpdate,
@@ -139,6 +140,13 @@ export type Store = {
   doubleDeadline: number | null
   doubled: boolean
 
+  /**
+   * The live vote to abandon the game and reopen the lobby. `needed` is a
+   * majority of the connected seats and `waiting` is how many people are stuck
+   * spectating -- the reason to call one.
+   */
+  restart: RestartVote
+
   chat: ChatMessage[]
   /** Messages that have arrived since the chat panel was last open. */
   unreadChat: number
@@ -187,6 +195,7 @@ const initialStore: Store = {
   abilityLog: [],
   doubleDeadline: null,
   doubled: false,
+  restart: { votes: [], needed: 0, waiting: 0 },
   chat: [],
   unreadChat: 0,
   feed: [],
@@ -198,6 +207,7 @@ type Action =
   | { type: 'connected'; value: boolean }
   | { type: 'joined'; playerId: string; roomCode: string; name: string; spectating: boolean }
   | { type: 'joinError'; message: string }
+  | { type: 'restartVote'; data: RestartVote }
   | { type: 'lobby'; data: LobbyUpdate }
   | { type: 'roundStart'; data: Extract<GameStateUpdate, { phase: 'RoundStart' }> }
   | { type: 'bidding'; data: Extract<GameStateUpdate, { phase: 'Bidding' }> }
@@ -282,9 +292,13 @@ function reducer(state: Store, action: Action): Store {
         order: [],
         standings: null,
         roleState: null,
+        restart: { votes: [], needed: 0, waiting: 0 },
         view: 'lobby',
       }
     }
+
+    case 'restartVote':
+      return { ...state, restart: action.data }
 
     case 'roundStart': {
       const { data } = action
@@ -629,6 +643,7 @@ function reducer(state: Store, action: Action): Store {
         trickWinnerId: null,
         roleState: data.roleState,
         chat: data.chat,
+        restart: data.restart,
         spectating: data.spectating,
         standings: null,
       }
@@ -702,6 +717,7 @@ export function useGame() {
     socket.on('heartsState', (data) => dispatch({ type: 'heartsState', data }))
     socket.on('heartsScoreUpdate', (data) => dispatch({ type: 'heartsScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
+    socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
     socket.on('doubleWindow', (data) => dispatch({ type: 'doubleWindow', seconds: data.seconds }))
@@ -797,6 +813,15 @@ export function useGame() {
       },
       useAbility(payload: UseAbilityPayload) {
         socket.emit('useAbility', payload)
+      },
+      /**
+       * Vote to abandon the game in progress and reopen the lobby, so anyone
+       * spectating gets a chair. A toggle: sending false takes the vote back.
+       * No optimistic update -- the tally comes back from the server, which is
+       * also the only thing that knows when the vote has passed.
+       */
+      voteRestart(vote: boolean) {
+        socket.emit('voteRestart', vote)
       },
       sendChat(text: string) {
         socket.emit('chat', text)

@@ -133,6 +133,9 @@ io.on('connection', (socket) => {
       target.sendChatHistoryToSocket(socket.id)
       if (!known) target.systemChat(`${spectator.name} is watching.`)
       target.broadcastLobby()
+      // The table's restart vote counts who is waiting for a chair -- this
+      // arrival is exactly what makes calling one worth it.
+      target.broadcastRestartVote()
       target.sendState(spectator)
       return
     }
@@ -165,6 +168,8 @@ io.on('connection', (socket) => {
   socket.on('declareDouble', () => withSeat((r, s) => r.declareDouble(s)))
   socket.on('playCard', (card) => withSeat((r, s) => r.playCard(s, card)))
   socket.on('useAbility', (payload) => withSeat((r, s) => r.useAbility(s, payload ?? {})))
+  // Seated players only: a spectator can't vote to end the game they're waiting on.
+  socket.on('voteRestart', (vote) => withSeat((r, s) => r.voteRestart(s, vote !== false)))
   // Watching and talking are the two things a spectator CAN do.
   socket.on('requestState', () =>
     withViewer((r, seat, spectator) => r.sendState(seat ?? spectator!)),

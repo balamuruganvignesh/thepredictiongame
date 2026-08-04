@@ -29,12 +29,18 @@ by both. See README.md for the player-facing rules.
 - `node scripts/spectate-test.mjs` (~25s) asserts that neither a spectator
   joining nor a player reconnecting knocks the table out of a running game.
   Run it after touching join / reconnect / lobby broadcasting.
+- `node scripts/restart-vote-test.mjs` (~25s) drives a mid-game restart vote:
+  the tally reaching everyone, a majority dropping the table back to the lobby
+  WITHOUT standings, and the spectator being seated. Run it after touching the
+  vote, `Room.abandonGame`, or any phase manager's `cancel()`.
 - **In-process tests, no server needed, all under a second — prefer these to a
   playtest when the change is to chaos mode.** A playtest only exercises the
   roles the deal happened to hand out (a 6-player game doesn't contain all 7),
   so it can pass while a whole role is untouched.
   - `npx tsx scripts/roles-test.ts` — role assignment: no duplicates while the
-    table fits the pool, and every role still gets dealt.
+    table fits the pool, every role still gets dealt, and a player rarely draws
+    the same role in back-to-back games at that table (measured against a
+    control that has no history — rarer than chance, never impossible).
   - `npx tsx scripts/abilities-test.ts` — the Time Traveler's and Angel's
     abilities, by re-rolling the deal until the seat holds the exact ability.
   - `npx tsx scripts/rewind-test.ts` — Rewind unwinding the live play loop.
@@ -127,6 +133,15 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   pool.length]` is distinct for as long as the pool lasts, so any table of 7 or
   fewer is guaranteed no repeated roles, and only 8+ players see one twice.
   Never replace it with an independent random pick per seat.
+- **Which seat gets which of those slots is weighted by `roleHistory`** — the
+  one piece of RoleManager state that survives `resetGame`, so a player who was
+  the Judge last game is heavily outweighed off the Judge this game
+  (`ROLE_RECENCY_WEIGHTS`, three games deep, multiplied on a second sighting).
+  Weights are never zero: a repeat is RARE, not banned, and a zero could leave
+  a seat with no assignable slot. The pool is built FIRST and untouched by any
+  of this, so the no-duplicates guarantee above is unaffected. History is keyed
+  by seat id — the same id localStorage keeps — so it survives a refresh and
+  resets only for a genuinely new player.
 - **Duplicate role holders are supported and must stay that way.** Every
   per-player effect is keyed by player id. The two effects keyed by TARGET must
   ACCUMULATE, never overwrite: `armedSabotageBy` is a LIST of saboteurs per
@@ -261,6 +276,12 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   SCORES button toggles it.
 - Top bar: trump glyph, Round X/Y, Hand K/M, per-player "won / bid" chips
   (green on-target / red off, accent ring = turn).
+- **The RESTART button lives in the dock of BOTH games** (`RestartVote.tsx`),
+  because the vote belongs to the table, not to either game. It is quiet until
+  someone actually calls a vote, then goes red with the tally; with nobody
+  voting it just shows how many people are stuck watching, which is the reason
+  to press it. Spectators see the tally and cannot vote — it's not their game
+  being ended.
 - **One chaos button, not two.** `QuickAbility` sits just above the dock and is
   the ONLY door: `⚡ <ABILITY>` while it's live, collapsing to `🎭 ROLE` once
   spent. Its popover has NO backdrop on purpose — the whole point is that the
@@ -302,6 +323,16 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   without the guard either one throws the ENTIRE table out of the game — which
   is exactly the "someone's wifi died and it kicked us all out" bug.
   `scripts/spectate-test.mjs` covers both paths.
+- **The restart vote is how a spectator gets a chair without waiting out the
+  game.** Any seated player can toggle `voteRestart`; a majority of CONNECTED
+  seats calls it, and `Room.abandonGame()` sets `aborted` and calls `cancel()`
+  on all four phase managers. That cancel is load-bearing: there are no turn
+  timers, so without it the round loop would sit forever on the turn of someone
+  who is already looking at the lobby. The abandoned round is never scored and
+  NO `gameEnded` goes out — the table just reappears in the lobby, where
+  `seatSpectators()` does the actual seating. Votes from seats that drop are
+  discarded, and the bar drops with them, so a disconnect can be what carries a
+  vote that was one short.
 - `index.ts` installs `uncaughtException` / `unhandledRejection` handlers that
   LOG and keep serving. One process hosts every table, so Node's default of
   exiting would drop every game at once — and because the round loop's phases

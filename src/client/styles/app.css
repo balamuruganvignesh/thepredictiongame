@@ -933,6 +933,18 @@ button.seat:hover {
   line-height: 1.4;
 }
 
+/* The restart vote. Quiet until somebody actually calls one, then it wears the
+   danger colour: it ends the game everyone is in the middle of. */
+.dock__button--restart.is-live {
+  color: var(--text);
+  border-color: var(--danger);
+}
+
+.dock__badge--vote {
+  background: var(--accent);
+  color: var(--bg-bottom);
+}
+
 .dock__button--role {
   color: var(--text);
   border-color: var(--accent);

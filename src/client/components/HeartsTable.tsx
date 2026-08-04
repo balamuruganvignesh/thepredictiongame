@@ -11,6 +11,7 @@ import { Hand } from './Hand'
 import { HeartsScoresheet } from './HeartsScoresheet'
 import { HeartsTopBar } from './HeartsTopBar'
 import { PassModal, PassWaiting } from './PassModal'
+import { RestartVoteButton } from './RestartVote'
 import { TrickArea } from './TrickArea'
 import type { GameActions, Store } from '../useGame'
 
@@ -127,6 +128,14 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
         <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
           SCORES
         </button>
+        {/* Ends the game early by majority vote, so people waiting as
+            spectators get a chair without the game being played out. */}
+        <RestartVoteButton
+          restart={store.restart}
+          meId={store.meId}
+          spectating={store.spectating}
+          onVote={actions.voteRestart}
+        />
       </div>
 
       {chatOpen && (

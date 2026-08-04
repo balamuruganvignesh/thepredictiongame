@@ -11,6 +11,7 @@ import type {
   GameMode,
   GameType,
   HeartsSnapshot,
+  RestartVote,
   RosterEntry,
   ServerToClientEvents,
   Snapshot,
@@ -70,6 +71,12 @@ export class Room {
   private history: Record<number, Record<string, number>> = {}
   /** Set when the table empties mid-game so the round loop can bail out. */
   private aborted = false
+  /**
+   * Seats currently voting to abandon the game in progress and reopen the
+   * lobby -- the way a table with people waiting as spectators gets them a
+   * chair without playing ten rounds out first.
+   */
+  private restartVotes = new Set<string>()
 
   // Table talk. Kept server-side so a refresh (or a late joiner) sees the
   // recent conversation rather than an empty box.
@@ -254,6 +261,8 @@ export class Room {
       this.tricks.onSeatDisconnected(seat)
       this.passing.onSeatDisconnected(seat)
       this.heartsTricks.onSeatDisconnected(seat)
+      // Their vote goes with them, and the bar drops with the table size.
+      this.settleRestartVote()
     }
   }
 
@@ -281,6 +290,8 @@ export class Room {
     this.spectatorById.delete(spectator.id)
     this.lastActivity = Date.now()
     this.broadcastLobby()
+    // One fewer person waiting for a chair, which is what the vote is about.
+    this.broadcastRestartVote()
   }
 
   /**
@@ -488,6 +499,93 @@ export class Room {
     this.roles.handleUseAbility(seat, payload)
   }
 
+  // ---- Restart vote ---------------------------------------------------------
+
+  /** A majority of the seats still connected. Always at least one vote. */
+  private restartVotesNeeded(): number {
+    const connected = this.seats.filter((seat) => seat.connected).length
+    return Math.max(1, Math.floor(connected / 2) + 1)
+  }
+
+  /**
+   * Republish the tally. Public because it is also how the table hears that the
+   * number of people WAITING for a chair changed -- a spectator arriving is the
+   * usual reason anyone calls a restart in the first place.
+   */
+  broadcastRestartVote() {
+    if (this.gameState !== 'InProgress') return
+    this.io.broadcast('restartVote', this.restartVoteState())
+  }
+
+  private restartVoteState(): RestartVote {
+    return {
+      votes: [...this.restartVotes],
+      needed: this.restartVotesNeeded(),
+      waiting: this.spectators.length,
+    }
+  }
+
+  /**
+   * Any seated player can call this; it's a toggle, so pressing it again takes
+   * the vote back. Passing abandons the game IMMEDIATELY -- no scores, no
+   * standings -- and drops the table back to the lobby, where anyone who has
+   * been watching is seated.
+   */
+  voteRestart(seat: Seat, vote: boolean) {
+    if (this.gameState !== 'InProgress') return
+    this.lastActivity = Date.now()
+
+    const had = this.restartVotes.has(seat.id)
+    if (vote) this.restartVotes.add(seat.id)
+    else this.restartVotes.delete(seat.id)
+    if (had === vote) return
+
+    // Cast votes are announced so people looking at the table rather than the
+    // button know a restart is building; withdrawals stay quiet.
+    if (vote) {
+      this.io.broadcast('roleAnnounce', {
+        message: `🔄 ${seat.name} votes to restart — ${this.restartVotes.size}/${this.restartVotesNeeded()}`,
+      })
+    }
+    this.settleRestartVote()
+  }
+
+  /**
+   * Drops votes from seats that have left (they can't consent to anything), then
+   * either passes the vote or republishes the tally. Also called on a mid-game
+   * disconnect: fewer connected seats means a lower bar, so someone dropping can
+   * be what carries a vote that was already one short.
+   */
+  private settleRestartVote() {
+    for (const id of [...this.restartVotes]) {
+      const seat = this.seatById.get(id)
+      if (!seat || !seat.connected) this.restartVotes.delete(id)
+    }
+    if (this.gameState !== 'InProgress') return
+    if (this.restartVotes.size >= this.restartVotesNeeded()) {
+      this.abandonGame()
+      return
+    }
+    this.broadcastRestartVote()
+  }
+
+  /**
+   * The vote passed. `aborted` makes the round loop return without scoring or
+   * announcing standings, and each phase manager's `cancel()` unblocks whatever
+   * turn it is sitting on -- without that the loop would wait forever on a
+   * player who is already looking at the lobby (there are no turn timers).
+   */
+  private abandonGame() {
+    this.aborted = true
+    this.restartVotes.clear()
+    this.broadcastRestartVote()
+    this.systemChat('The table voted to restart — back to the lobby.')
+    this.bidding.cancel()
+    this.tricks.cancel()
+    this.passing.cancel()
+    this.heartsTricks.cancel()
+  }
+
   // ---- Chat -----------------------------------------------------------------
 
   private pushChat(message: Omit<ChatMessage, 'id'>) {
@@ -566,6 +664,7 @@ export class Room {
       rebid: seat ? this.roles.getRebidPrompt(seat) : null,
       barred: seat ? this.tricks.barredFor(seat) : null,
       chat: this.chatLog,
+      restart: this.restartVoteState(),
       spectating: seat == null,
       ...this.tricks.snapshot(),
     }
@@ -614,6 +713,7 @@ export class Room {
       rebid: null,
       barred: null,
       chat: this.chatLog,
+      restart: this.restartVoteState(),
       spectating: seat == null,
       ...this.heartsTricks.snapshot(),
     }
@@ -815,6 +915,7 @@ export class Room {
 
   private async runGameLoop() {
     this.aborted = false
+    this.restartVotes.clear()
     this.history = {}
     for (const seat of this.seats) {
       seat.totalScore = 0

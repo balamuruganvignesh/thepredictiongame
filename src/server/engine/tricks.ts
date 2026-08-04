@@ -22,6 +22,8 @@ export class TrickManager implements TrickHost {
   private currentTurnSeat: Seat | null = null
   private currentLeadSuit: string | null = null
   private resolver: ((card: Card | typeof REWIND) => void) | null = null
+  /** Set by cancel(): the play phase bails out at its next checkpoint. */
+  private cancelled = false
 
   /**
    * The current trick, live. An instance field rather than a local in
@@ -69,6 +71,28 @@ export class TrickManager implements TrickHost {
     this.inPlayPause = false
     this.endPause = null
     this.heldRewind = false
+    this.cancelled = false
+  }
+
+  /**
+   * The table voted to abandon the game. Unblocks whatever the phase is waiting
+   * on and makes `runPlayPhase` return at the next checkpoint instead of
+   * auto-playing the remaining tricks out into a room nobody is watching.
+   * Whatever this resolves with is discarded: the round is never scored.
+   */
+  cancel() {
+    this.cancelled = true
+    this.endPause?.()
+    const resolver = this.resolver
+    if (resolver && this.currentTurnSeat) {
+      resolver(
+        this.findAutoPlayCard(
+          this.currentTurnSeat.hand,
+          this.currentLeadSuit,
+          this.bannedFor(this.currentTurnSeat),
+        ),
+      )
+    }
   }
 
   // ---- TrickHost: the Time Traveler's Rewind --------------------------------
@@ -274,8 +298,10 @@ export class TrickManager implements TrickHost {
     // including for the opening trick if they used it during bidding. No-op in
     // classic.
     let leader = this.roles.overrideNextLeader(leaderSeat)
+    this.cancelled = false
 
     for (let trickNumber = 1; trickNumber <= cardsDealt; trickNumber++) {
+      if (this.cancelled) return
       const order = this.rotateToStart(seatOrder, leader)
       const plays: { seat: Seat; card: Card }[] = []
       this.trickPlays = plays
@@ -290,6 +316,9 @@ export class TrickManager implements TrickHost {
         this.broadcastTrickState(plays, leadSuit, trickNumber, cardsDealt)
 
         const card = await this.waitForCardPlay(seat, leadSuit)
+        // The table voted to restart while this seat was thinking: drop the
+        // trick where it stands rather than finishing a round nobody wants.
+        if (this.cancelled) return
 
         // A Time Traveler pulled the previous play back off the table. Undo it
         // and hand the turn back to whoever played it -- always the seat at
@@ -335,6 +364,7 @@ export class TrickManager implements TrickHost {
         // A Rewind arriving mid-pause ends it early and is applied on the way
         // out, rather than bouncing off a window it had no way to see.
         if (plays.length < order.length) await this.waitOutPlayPause()
+        if (this.cancelled) return
       }
 
       this.currentTurnSeat = null

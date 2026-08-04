@@ -30,6 +30,8 @@ export class BiddingManager {
   /** Seat whose post-bid Double window is currently open (null otherwise). */
   private doubleWindowSeat: Seat | null = null
   private doubleWindowResolve: (() => void) | null = null
+  /** Set by cancel(): the bidding phase bails out at its next checkpoint. */
+  private cancelled = false
 
   constructor(
     private io: EngineIO,
@@ -145,6 +147,22 @@ export class BiddingManager {
     if (this.doubleWindowSeat?.id === seat.id) this.closeDoubleWindow()
   }
 
+  /**
+   * The table voted to abandon the game. Unblocks whoever we're waiting on and
+   * makes `runBiddingPhase` return at its next checkpoint -- the bid it resolves
+   * with is thrown away with the rest of the round.
+   */
+  cancel() {
+    this.cancelled = true
+    const seat = this.currentTurnSeat
+    if (seat && this.resolver) {
+      this.resolver(
+        this.autoChooseBid(this.currentCardsDealt, this.currentIsLastBidder, this.sumExcluding(seat)),
+      )
+    }
+    this.closeDoubleWindow()
+  }
+
   private closeDoubleWindow() {
     this.doubleWindowSeat = null
     const resolve = this.doubleWindowResolve
@@ -155,15 +173,18 @@ export class BiddingManager {
   /** Blocks until every seat in turnOrder has bid. */
   async runBiddingPhase(turnOrder: Seat[], cardsDealt: number) {
     this.doublesLocked = false
+    this.cancelled = false
     this.currentCardsDealt = cardsDealt
     this.currentTurnOrder = turnOrder
 
     for (let i = 0; i < turnOrder.length; i++) {
+      if (this.cancelled) break
       const seat = turnOrder[i]
       this.currentTurnSeat = seat
       this.currentIsLastBidder = i === turnOrder.length - 1
       this.broadcastBidState(turnOrder)
       const bid = await this.waitForBid(seat, cardsDealt, this.currentIsLastBidder, this.sumExcluding(seat))
+      if (this.cancelled) break
       seat.bid = bid
       this.broadcastBidState(turnOrder)
 

@@ -80,5 +80,61 @@ for (let count = 2; count <= MAX_PLAYERS; count++) {
   }
 }
 
+// ---- Repeat roles across games at the same table -----------------------------
+//
+// The second rule: a player who held a role last game should rarely be handed it
+// again the next. RoleManager remembers a few games per player id, so playing
+// the SAME manager twice is a real table's second session; a fresh manager each
+// game is the control -- what pure chance looks like.
+
+function repeatRate(sameTable: boolean, games: number): number {
+  const seats = makeSeats(5)
+  let repeats = 0
+  let samples = 0
+
+  for (let run = 0; run < 300; run++) {
+    let roles = new RoleManager(silentIO)
+    let previous: string[] = []
+    for (let game = 0; game < games; game++) {
+      if (!sameTable) roles = new RoleManager(silentIO)
+      roles.assignRoles(seats)
+      const assigned = seats.map((seat) => roles.getRoleReveal(seat.id)?.roleName ?? '???')
+      if (previous.length > 0) {
+        assigned.forEach((role, i) => {
+          samples++
+          if (role === previous[i]) repeats++
+        })
+      }
+      previous = assigned
+    }
+  }
+  return repeats / samples
+}
+
+const chance = repeatRate(false, 2)
+const withHistory = repeatRate(true, 2)
+const overFour = repeatRate(true, 4)
+
+console.log(
+  `\n  repeat rate, 5p back-to-back: ${(chance * 100).toFixed(1)}% by chance → ` +
+    `${(withHistory * 100).toFixed(1)}% with history`,
+)
+
+if (withHistory >= chance / 2) {
+  fail(`a repeated role is meant to be much rarer than chance (${withHistory} vs ${chance})`)
+} else {
+  console.log('  ✓ holding the same role twice running is far rarer than chance')
+}
+// Rarer, never impossible -- a zero here would mean the weighting had hardened
+// into a ban, which is not what was asked for.
+if (withHistory === 0) fail('a repeat has become impossible, not just unlikely')
+else console.log('  ✓ …but still possible: the weighting is a thumb on the scale, not a ban')
+
+if (overFour >= chance / 2) {
+  fail(`the bias decayed away over four games (${overFour} vs ${chance})`)
+} else {
+  console.log('  ✓ and it holds up over four games at the same table')
+}
+
 console.log(failures === 0 ? '\nPASS' : `\nFAIL — ${failures} problem(s)`)
 process.exit(failures === 0 ? 0 : 1)

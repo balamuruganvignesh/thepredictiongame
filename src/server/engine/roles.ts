@@ -63,6 +63,17 @@ const GRACE_FOR_SACRIFICE = 3
 // repeat sits at ~12% instead of 25%, a second at ~5%.
 const ABILITY_REPEAT_DECAY = 0.4
 
+// How many past games at this table a player's role history remembers, and how
+// hard each remembered game weighs against getting that role again. Index 0 is
+// the game they just played: a role held last game is ~1/6 as likely to come
+// back as one they've never had, two games ago ~1/2.5, three ago barely at all.
+// Multiplied when a role shows up more than once in the window, so a player who
+// keeps drawing the Judge gets pushed off it harder each time.
+//
+// Never zero: this makes a repeat RARE, never impossible, and a weight of zero
+// could leave a seat with no assignable slot at all on a small pool.
+const ROLE_RECENCY_WEIGHTS = [0.15, 0.4, 0.7]
+
 const SUIT_GLYPH: Record<string, string> = {
   Spades: '♠',
   Hearts: '♥',
@@ -87,6 +98,17 @@ type ExecResult = { ok: boolean; error?: string; keepAbility?: boolean }
 export class RoleManager {
   private mode: GameMode = 'classic'
   private rolesActive = false
+
+  // ---- Table-lifetime state -------------------------------------------------
+  /**
+   * Player id -> the roles they held in recent games at THIS table, most recent
+   * first. Deliberately NOT cleared by assignRoles or resetGame: it is the only
+   * state that outlives a game, and it is what stops the same player drawing
+   * the same role session after session. Keyed by seat id, which the client
+   * keeps in localStorage, so it survives a refresh or a drop-and-rejoin and
+   * resets only if they arrive as a genuinely new player.
+   */
+  private roleHistory = new Map<string, string[]>()
 
   // ---- Per-game state -------------------------------------------------------
   private roleBySeat = new Map<string, string>()
@@ -405,6 +427,12 @@ export class RoleManager {
    *
    * The seats are shuffled too, so the duplicated roles aren't always the ones
    * held by the earliest chairs.
+   *
+   * WHICH seat gets which of those roles is then weighted by `roleHistory`: a
+   * player is much less likely to be handed a role they held in a recent game
+   * at this table. The pool -- and therefore the no-duplicates guarantee -- is
+   * built first and untouched by that; history only decides the matching
+   * between seats and the slots the pool already produced.
    */
   assignRoles(seats: Seat[]) {
     this.rolesActive = true
@@ -419,12 +447,54 @@ export class RoleManager {
     if (Math.random() < MIRRORER_CHANCE) pool.push('mirrorer')
     shuffle(pool)
 
-    const seatPicks = shuffle([...seats])
-    seatPicks.forEach((seat, i) => {
-      this.roleBySeat.set(seat.id, pool[i % pool.length])
-    })
+    // Exactly the roles the old `pool[i % pool.length]` dealt out, as a bag to
+    // draw from: distinct for as long as the pool lasts, doubling up only on a
+    // table bigger than it.
+    const slots = seats.map((_, i) => pool[i % pool.length])
+
+    // Random seat order so that when the weights tie (a table of strangers,
+    // game one) nobody's chair gets first pick every time.
+    for (const seat of shuffle([...seats])) {
+      const role = slots.splice(this.pickRoleSlot(seat.id, slots), 1)[0]
+      this.roleBySeat.set(seat.id, role)
+      this.rememberRole(seat.id, role)
+    }
   }
 
+  /**
+   * Which of the remaining role slots this player draws. Every slot is possible;
+   * one they held recently is just heavily outweighed by one they haven't --
+   * see ROLE_RECENCY_WEIGHTS. Returns an index into `slots`.
+   */
+  private pickRoleSlot(id: string, slots: string[]): number {
+    const history = this.roleHistory.get(id) ?? []
+    const weights = slots.map((role) => {
+      let weight = 1
+      // Held twice in the window -> both penalties apply, so a player the
+      // shuffle keeps handing the Judge is pushed off it harder each game.
+      history.forEach((past, age) => {
+        if (past === role) weight *= ROLE_RECENCY_WEIGHTS[age] ?? 1
+      })
+      return weight
+    })
+
+    const total = weights.reduce((a, b) => a + b, 0)
+    let roll = Math.random() * total
+    for (let i = 0; i < slots.length; i++) {
+      roll -= weights[i]
+      if (roll <= 0) return i
+    }
+    return slots.length - 1 // fallback guards float drift
+  }
+
+  /** Files this game's role at the front of the player's history. */
+  private rememberRole(id: string, role: string) {
+    const history = [role, ...(this.roleHistory.get(id) ?? [])]
+    history.length = Math.min(history.length, ROLE_RECENCY_WEIGHTS.length)
+    this.roleHistory.set(id, history)
+  }
+
+  /** End of a game. `roleHistory` deliberately survives -- see its declaration. */
   resetGame() {
     this.rolesActive = false
     this.roleBySeat.clear()

@@ -34,11 +34,24 @@ function dangerOf(card: Card): number {
 export class PassManager {
   /** One resolver per seat still owing three cards. */
   private pending = new Map<string, () => void>()
+  /** Set by cancel(): the pass phase bails out without moving any cards. */
+  private cancelled = false
 
   constructor(private io: EngineIO) {}
 
   reset() {
     this.pending.clear()
+    this.cancelled = false
+  }
+
+  /**
+   * The table voted to abandon the game. Releases every seat still choosing so
+   * `runPassPhase` returns -- and it returns BEFORE any card moves, so a
+   * cancelled pass leaves the hands exactly as they were dealt.
+   */
+  cancel() {
+    this.cancelled = true
+    for (const resolve of [...this.pending.values()]) resolve()
   }
 
   /** For the reconnect snapshot: is the pass modal still up for this seat? */
@@ -62,6 +75,7 @@ export class PassManager {
    * cards. Returns immediately on a no-pass round.
    */
   async runPassPhase(order: Seat[], roundNumber: number): Promise<void> {
+    this.cancelled = false
     const direction = passDirection(roundNumber, order.length)
     if (direction === 'none') {
       for (const seat of order) {
@@ -98,6 +112,8 @@ export class PassManager {
     })
 
     await Promise.all(waits)
+    // Cancelled mid-choice: leave every hand as dealt. The round is discarded.
+    if (this.cancelled) return
 
     // Every hand is emptied of its outgoing cards BEFORE any incoming card
     // lands, so a card that was just passed to you can't be passed straight on.
