@@ -46,7 +46,16 @@ use it or lose it.
 | The Gambler | 🎲 | Raise your own stakes and flip coins with fate. |
 | The Judge | ⚖️ | Bend other players' bids, steal their tricks, disguise the truth. |
 | The Guardian | 🛡️ | Nullify anything aimed at you; lock your bid against meddling. |
+| The Time Traveler | ⏳ | Reopen a bid, pull a played card back, or trade your ability for another role's. |
+| The Angel | 😇 | Every ability is spent on somebody else. They say kindness comes back around. |
 | The Mirrorer | 🪞 | **Rare.** Bet on another player and ride their tricks. |
+
+Announcements name the **role**, never the player — working out who holds what
+is most of the game. Roles are revealed on the final standings.
+
+Seven standard roles means a table of 7 or fewer never has a duplicate.
+
+Full ability lists are on the **[Chaos Mode wiki page](https://github.com/balamuruganvignesh/thepredictiongame/wiki/Chaos-Mode)**.
 
 
 ## Spectating
