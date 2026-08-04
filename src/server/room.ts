@@ -32,7 +32,7 @@ import { dealHearts } from './engine/hearts/deck'
 import { PassManager } from './engine/hearts/passing'
 import { HeartsTrickManager } from './engine/hearts/play'
 import { scoreHeartsRoundForSeats } from './engine/hearts/scoring'
-import { postGameEndedToDiscord } from './discord'
+import { postGameEndedToDiscord, postGameAbandonedToDiscord } from './discord'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
@@ -585,6 +585,13 @@ export class Room {
     this.tricks.cancel()
     this.passing.cancel()
     this.heartsTricks.cancel()
+
+    postGameAbandonedToDiscord({
+      code: this.code,
+      gameName: this.gameName(),
+      roundNumber: this.roundNumber,
+      standings: this.currentStandings(),
+    })
   }
 
   // ---- Chat -----------------------------------------------------------------
@@ -894,11 +901,10 @@ export class Room {
     }
   }
 
-  private broadcastGameEnded() {
-    // Hearts is a golf score: fewest penalty points wins, so it sorts the other
-    // way and the client is told which way to read it.
+  /** Sorted the way each game reads a leaderboard -- Hearts ascending (golf), the Prediction Game descending. */
+  private currentStandings(): Standing[] {
     const lowestWins = this.isHearts
-    const standings: Standing[] = this.seats
+    return this.seats
       .map((seat) => {
         const reveal = this.roles.getRoleReveal(seat.id)
         return {
@@ -910,15 +916,19 @@ export class Room {
         }
       })
       .sort((a, b) => (lowestWins ? a.totalScore - b.totalScore : b.totalScore - a.totalScore))
+  }
+
+  private gameName(): string {
+    if (this.isHearts) return 'Hearts'
+    return this.roles.getMode() === 'chaos' ? 'The Prediction Game (Chaos)' : 'The Prediction Game'
+  }
+
+  private broadcastGameEnded() {
+    const lowestWins = this.isHearts
+    const standings = this.currentStandings()
 
     this.io.broadcast('gameEnded', { standings, lowestWins })
-
-    const gameName = this.isHearts
-      ? 'Hearts'
-      : this.roles.getMode() === 'chaos'
-        ? 'The Prediction Game (Chaos)'
-        : 'The Prediction Game'
-    postGameEndedToDiscord({ code: this.code, gameName, standings })
+    postGameEndedToDiscord({ code: this.code, gameName: this.gameName(), standings })
   }
 
   private async runGameLoop() {
