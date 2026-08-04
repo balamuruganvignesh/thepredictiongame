@@ -28,6 +28,12 @@ export function scoreRound(
     scores.set(seat.id, roles.adjustScore(seat, calculateScore(bid, seat.tricksWon, seat.hasDoubled)))
   }
 
+  // A Mirrorer's Twin Fate averages two seats' finished round scores, so it can
+  // only run once the pass above is complete. Before Grace: an Angel's payout is
+  // private and personal, and shouldn't be handed to a bound partner. No-op in
+  // classic.
+  roles.settleMirror(scores)
+
   // An Angel's Grace is only banked as the seats they helped are scored above,
   // so it can't be settled until that whole pass is done -- an Angel sitting
   // earlier in seat order than the player they saved would otherwise be paid

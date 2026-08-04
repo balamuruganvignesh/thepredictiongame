@@ -83,7 +83,7 @@ use it or lose it.
 | The Guardian | 🛡️ | Nullify anything aimed at you; lock your bid against meddling. |
 | The Time Traveler | ⏳ | Reopen a bid, pull a played card back, or trade your ability for another role's. |
 | The Angel | 😇 | Every ability is spent on somebody else. They say kindness comes back around. |
-| The Mirrorer | 🪞 | **Rare.** Bet on another player and ride their tricks. |
+| The Mirrorer | 🪞 | **Rare.** Never plays its own game — rides your bid, your tricks, your score. |
 
 Announcements name the **role**, never the player — working out who holds what
 is most of the game. Roles are revealed on the final standings.

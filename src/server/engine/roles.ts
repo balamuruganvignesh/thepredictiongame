@@ -136,6 +136,14 @@ export class RoleManager {
   private raisedStakes = new Set<string>()
   private disguisedBids = new Map<string, number>()
   private mirrorBetOn = new Map<string, string>()
+  /**
+   * The Mirrorer's Twin Fate: MIRRORER id -> the player they tied themselves
+   * to. Keyed by the caster because the binding is theirs; settleMirror hands
+   * BOTH seats the better of their two finished round scores.
+   */
+  private twinFateWith = new Map<string, string>()
+  /** The Mirrorer's Two-Way Mirror: MIRRORER id -> who they swap scores with. */
+  private swapScoreWith = new Map<string, string>()
   // Joker swap retries, per round: attempts burned and who they've already
   // failed against (a retry has to find a new mark).
   private swapAttempts = new Map<string, number>()
@@ -478,6 +486,8 @@ export class RoleManager {
     this.raisedStakes.clear()
     this.disguisedBids.clear()
     this.mirrorBetOn.clear()
+    this.twinFateWith.clear()
+    this.swapScoreWith.clear()
     this.swapAttempts.clear()
     this.swapTriedTargets.clear()
     this.pendingLeadId = null
@@ -713,6 +723,50 @@ export class RoleManager {
     }
 
     return score
+  }
+
+  /**
+   * Settles the Mirrorer's two score-bending abilities, AFTER every seat has
+   * been through adjustScore. They have to run here rather than inside it for
+   * the same reason Grace does: each needs BOTH seats' FINISHED round scores,
+   * and the partner may be scored after the Mirrorer.
+   *
+   * Every pair is read before any of them is written, so two Mirrorers pointing
+   * at each other resolve off the same original numbers instead of the second
+   * one reading a score the first already moved.
+   */
+  settleMirror(scores: Map<string, number>) {
+    if (!this.rolesActive) return
+    const writes: { id: string; score: number }[] = []
+    const lines: string[] = []
+
+    // Twin Fate: tied together, and the better round is the one they BOTH get.
+    for (const [mirrorId, partnerId] of this.twinFateWith) {
+      const mirror = this.findSeat(mirrorId)
+      const partner = this.findSeat(partnerId)
+      if (!mirror || !partner) continue
+      const best = Math.max(scores.get(mirrorId) ?? 0, scores.get(partnerId) ?? 0)
+      writes.push({ id: mirrorId, score: best }, { id: partnerId, score: best })
+      lines.push(
+        `🪞 TWIN FATE: ${mirror.name} and ${partner.name} are tied together — the better round is the one they BOTH take. ${best} each.`,
+      )
+    }
+
+    // Two-Way Mirror: the two rounds trade places, wherever that leaves them.
+    for (const [mirrorId, partnerId] of this.swapScoreWith) {
+      const mirror = this.findSeat(mirrorId)
+      const partner = this.findSeat(partnerId)
+      if (!mirror || !partner) continue
+      const mine = scores.get(mirrorId) ?? 0
+      const theirs = scores.get(partnerId) ?? 0
+      writes.push({ id: mirrorId, score: theirs }, { id: partnerId, score: mine })
+      lines.push(
+        `🪞 TWO-WAY MIRROR: ${mirror.name} and ${partner.name} swapped rounds — ${theirs} and ${mine} change hands.`,
+      )
+    }
+
+    for (const { id, score } of writes) scores.set(id, score)
+    for (const line of lines) this.announce(line)
   }
 
   /**
@@ -1524,6 +1578,59 @@ export class RoleManager {
         this.privateResult(
           seat,
           `Bet placed on ${t.name}: +3 for every trick they win this round, -1 for every trick they don't.`,
+        )
+        return { ok: true }
+      }
+
+      case 'mimic': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+
+        const theirs = this.abilityBySeat.get(t.id)
+        if (!theirs) return { ok: false, error: 'They have no ability this round to mirror.' }
+        // A mirror facing a mirror is just an empty room -- and worse, since
+        // Mimic doesn't spend the turn, copying it would let one seat re-copy
+        // for free forever.
+        if (theirs === 'mimic') return { ok: false, error: 'You can’t mirror a mirror.' }
+        // The Big Swap stays once per game, whoever ends up holding it.
+        if (theirs === 'hand_swap' && this.handSwapUsed.has(id)) {
+          return { ok: false, error: 'They hold The Big Swap, and yours is already spent.' }
+        }
+        if (this.roundSeats.length < 3 && RoleDefs.getAbility(theirs)?.target === 'two') {
+          return { ok: false, error: 'What they hold needs more players than this table has.' }
+        }
+
+        // Copied, not stolen: they keep theirs. keepAbility, exactly like the
+        // Time Traveler's Alternate Universe -- this REPLACES your ability, so
+        // the round's one action is still ahead of you.
+        this.abilityBySeat.set(id, theirs)
+        this.privateResult(
+          seat,
+          `You reflect ${t.name}: their ability this round is ${
+            RoleDefs.getAbility(theirs)?.name ?? theirs
+          }, and it is now yours too. They keep theirs — and you still have your turn to use it.`,
+        )
+        return { ok: true, keepAbility: true }
+      }
+
+      case 'twin_fate': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        this.twinFateWith.set(id, t.id)
+        this.privateResult(
+          seat,
+          `Tied to ${t.name}. At scoring you BOTH take whichever of your two rounds went better — if either of you wins, you both win.`,
+        )
+        return { ok: true }
+      }
+
+      case 'two_way_mirror': {
+        const t = target!
+        if (this.blockedByDefenses(t, abilityId)) return { ok: true }
+        this.swapScoreWith.set(id, t.id)
+        this.privateResult(
+          seat,
+          `The glass is set between you and ${t.name}. At scoring your two round scores trade places — whatever they earned is yours, and whatever you earned is theirs.`,
         )
         return { ok: true }
       }

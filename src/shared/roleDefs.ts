@@ -269,6 +269,27 @@ export const abilities: Record<string, AbilityDef> = {
     target: 'other',
     note: 'bidding phase only — bet before the first card falls. a Guardian’s Nullify stops the bet for THAT ROUND only; you get a fresh one next deal',
   },
+  mimic: {
+    id: 'mimic',
+    name: 'Mimic',
+    desc: 'Name anyone and reflect them: whatever ability they were dealt this round becomes yours too. They keep theirs, and using this doesn’t cost you your turn — you still get to fire the ability you just copied.',
+    target: 'other',
+    note: 'you’re picking blind — you find out what they hold as you take it. a Guardian’s Nullify can cancel it',
+  },
+  twin_fate: {
+    id: 'twin_fate',
+    name: 'Twin Fate',
+    desc: 'Tie your round to another player’s. At scoring you BOTH take whichever of your two rounds went better — if either of you wins, you both win. Pick someone about to have a very good round.',
+    target: 'other',
+    note: 'resolves at end of round, after everything else has landed. it lifts them too. a Guardian’s Nullify can cancel it',
+  },
+  two_way_mirror: {
+    id: 'two_way_mirror',
+    name: 'Two-Way Mirror',
+    desc: 'Put the glass between you and another player: at scoring your two round scores trade places. Their round becomes yours, and yours becomes theirs.',
+    target: 'other',
+    note: 'resolves at end of round, after everything else has landed — read the table wrong and you hand away a good round. a Guardian’s Nullify can cancel it',
+  },
 }
 
 export const roles: Record<string, RoleDef> = {
@@ -348,9 +369,9 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🪞',
     tagline: 'Your fate is my fate.',
     blurb:
-      'RARE. One permanent ability, every round: bet on a player and ride their tricks — their wins pay you, their losses cost you. A Guardian’s Nullify can stop a bet cold, but only for that round — the next deal hands you the ability back.',
+      'RARE. The reflection role, and it never plays its own game — it plays yours. Ride another player’s tricks, copy the ability they were dealt, tie your round to theirs so a win for either is a win for both, or trade rounds with them outright. Every single thing it does is pointed at somebody else’s game.',
     color: '#B2D2E0',
-    abilities: ['mirror_bet'],
+    abilities: ['mirror_bet', 'mimic', 'twin_fate', 'two_way_mirror'],
     rare: true,
   },
 }

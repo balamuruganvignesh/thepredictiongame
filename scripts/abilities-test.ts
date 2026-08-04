@@ -1,4 +1,4 @@
-// In-process test for the Time Traveler and the Angel:
+// In-process test for the Time Traveler, the Angel and the Mirrorer:
 //
 //   npx tsx scripts/abilities-test.ts
 //
@@ -66,6 +66,8 @@ function seat(id: string, hand: Card[] = []): Seat {
     bid: null,
     hasDoubled: false,
     tricksWon: 0,
+    collected: [],
+    passSelection: null,
     totalScore: 0,
     lastRoundScore: null,
     disconnectedAt: null,
@@ -267,6 +269,9 @@ function scoreOne(roles: RoleManager, seats: Seat[], base = 0): Map<string, numb
   roles.prepareScoring()
   const scores = new Map<string, number>()
   for (const s of seats) scores.set(s.id, roles.adjustScore(s, base))
+  // Same order as engine/scoring.ts: Twin Fate averages finished round scores,
+  // then Grace pays out.
+  roles.settleMirror(scores)
   roles.settleGrace(scores)
   return scores
 }
@@ -368,6 +373,119 @@ function testIntercede() {
   check('the Angel banks Grace for the block', (scores.get(angel.id) ?? 0) === 5)
 }
 
+// ---- The Mirrorer -----------------------------------------------------------
+
+function testMimic() {
+  console.log('\n🪞 Mimic')
+  const { bus, roles, seats, dealt } = setup('mirrorer', 'mimic')
+  check('the ability was dealt', dealt)
+  const [me, mark] = seats
+
+  const forced = roles as unknown as { abilityBySeat: Map<string, string> }
+  forced.abilityBySeat.set(mark.id, 'fortune')
+
+  roles.handleUseAbility(me, { targetId: mark.id })
+  check('you now hold what they hold', roles.getRoleState(me)?.abilityId === 'fortune')
+  check('they keep theirs too — it is copied, not stolen', roles.getRoleState(mark)?.abilityId === 'fortune')
+  check('your turn is NOT spent: the copy is there to be used', roles.getRoleState(me)?.used === false)
+  check('nothing is announced — the mirror is quiet', bus.announcements().length === 0)
+
+  // And the copied ability really works from its new owner.
+  bus.clear()
+  roles.handleUseAbility(me, { suit: 'Diamonds' })
+  check('the copied ability fires normally', bus.privateTo(me.id).length === 1)
+  check('and THAT spends the turn', roles.getRoleState(me)?.used === true)
+
+  // A mirror facing a mirror would re-grant itself for free, forever.
+  const second = setup('mirrorer', 'mimic')
+  const [me2, mark2] = second.seats
+  ;(second.roles as unknown as { abilityBySeat: Map<string, string> }).abilityBySeat.set(mark2.id, 'mimic')
+  second.bus.clear()
+  second.roles.handleUseAbility(me2, { targetId: mark2.id })
+  check('mirroring a mirror is refused', second.bus.errorsTo(me2.id).length === 1)
+  check('and the refusal costs nothing', second.roles.getRoleState(me2)?.abilityId === 'mimic')
+}
+
+function testTwinFate() {
+  console.log('\n🪞 Twin Fate')
+  const { bus, roles, seats, dealt } = setup('mirrorer', 'twin_fate')
+  check('the ability was dealt', dealt)
+  const [me, partner, other] = seats
+
+  roles.handleUseAbility(me, { targetId: partner.id })
+  check('nothing is announced when it is cast', bus.announcements().length === 0)
+  check('the ability is spent', roles.getRoleState(me)?.used === true)
+
+  for (const s of seats) {
+    s.bid = 1
+    s.tricksWon = 1
+  }
+  bus.clear()
+  // The base score passes straight through adjustScore here, so these ARE the
+  // two round scores: a bad -3 tied to a good +11.
+  roles.prepareScoring()
+  const scores = new Map<string, number>()
+  scores.set(me.id, roles.adjustScore(me, -3))
+  scores.set(partner.id, roles.adjustScore(partner, 11))
+  scores.set(other.id, roles.adjustScore(other, 7))
+  roles.settleMirror(scores)
+
+  check(
+    'if either of them wins, they BOTH win',
+    scores.get(me.id) === 11 && scores.get(partner.id) === 11,
+  )
+  check('nobody else is touched', scores.get(other.id) === 7)
+  check(
+    'the table is told they are tied, since both scores visibly move',
+    bus.announcements().some((m) => m.includes('TWIN FATE')),
+  )
+
+  // The partner having the worse round is the version that costs you.
+  const b = setup('mirrorer', 'twin_fate')
+  const [meB, partnerB] = b.seats
+  b.roles.handleUseAbility(meB, { targetId: partnerB.id })
+  for (const s of b.seats) {
+    s.bid = 1
+    s.tricksWon = 1
+  }
+  b.roles.prepareScoring()
+  const scoresB = new Map<string, number>()
+  scoresB.set(meB.id, b.roles.adjustScore(meB, 11))
+  scoresB.set(partnerB.id, b.roles.adjustScore(partnerB, -3))
+  b.roles.settleMirror(scoresB)
+  check('it works the other way too — your good round carries them', scoresB.get(partnerB.id) === 11)
+}
+
+function testTwoWayMirror() {
+  console.log('\n🪞 Two-Way Mirror')
+  const { bus, roles, seats, dealt } = setup('mirrorer', 'two_way_mirror')
+  check('the ability was dealt', dealt)
+  const [me, mark, other] = seats
+
+  roles.handleUseAbility(me, { targetId: mark.id })
+  check('nothing is announced when it is cast', bus.announcements().length === 0)
+  check('the ability is spent', roles.getRoleState(me)?.used === true)
+
+  for (const s of seats) {
+    s.bid = 1
+    s.tricksWon = 1
+  }
+  bus.clear()
+  roles.prepareScoring()
+  const scores = new Map<string, number>()
+  scores.set(me.id, roles.adjustScore(me, -8))
+  scores.set(mark.id, roles.adjustScore(mark, 13))
+  scores.set(other.id, roles.adjustScore(other, 7))
+  roles.settleMirror(scores)
+
+  check('the two rounds trade places', scores.get(me.id) === 13 && scores.get(mark.id) === -8)
+  check('nobody else is touched', scores.get(other.id) === 7)
+  check(
+    'the swap is announced — two scores visibly move',
+    bus.announcements().some((m) => m.includes('TWO-WAY MIRROR')),
+  )
+}
+
 testReverseTime()
 testRewindGuards()
 testAlternateUniverse()
@@ -376,6 +494,9 @@ testGuardianAngel()
 testGraceOnlyWhenItHelps()
 testHaloAndSacrifice()
 testIntercede()
+testMimic()
+testTwinFate()
+testTwoWayMirror()
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL — ${failures} problem(s)`)
 process.exit(failures === 0 ? 0 : 1)

@@ -126,6 +126,16 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   it REPLACES your ability (a random one from a role you name) and returns
   `keepAbility`, so the round's action is still ahead of you. All options start equally likely, but the ability you were
   just dealt is weighted `0.4^streak` against 1.0 for the rest.
+- **The Mirrorer is a full role (4 abilities), still RARE.** Every one of them
+  rides somebody else: Mirror Bet (their tricks), Mimic (their ability), Twin
+  Fate (the better of your two rounds, to both of you), Two-Way Mirror (your two
+  rounds trade places). Mimic returns `keepAbility` like Alternate Universe — it
+  REPLACES your ability without spending the turn — and must keep refusing to
+  copy itself, or a seat re-copies for free forever. The two score-benders
+  settle in `settleMirror`, a post-pass beside `settleGrace`: both need two
+  FINISHED round scores, so neither can live in the per-seat `adjustScore` loop,
+  and every pair is READ before any is written so two Mirrorers pointed at each
+  other can't resolve off a number the other already moved.
 - Conflict order: Nullify beats all targeted abilities, Bid Lock beats bid
   tampering. Sabotage cuts both ways: mark hits their bid → −10 them, mark
   misses → −5 the Judge (resolved in `prepareScoring`, called before the
@@ -213,6 +223,11 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   the face (radius, shadow, winner/playable rings, muted + illusion veils) is
   still CSS on the `.card` wrapper, and everything scales off `--card-w`.
   (This replaced an earlier all-CSS deck — no pip layouts or court panels now.)
+- **`.card-button--muted` and `.card-button--illusion` must stay pixel-identical**
+  — same `filter`, same veil, same shadow. An unplayable card is darkened right
+  down (brightness 0.42 + a veil), and the Detective's Illusion is that exact
+  look worn by a card that is actually legal. Restyle one without the other and
+  the bluff is visible, which kills the ability outright.
 - Chat is for what PLAYERS say. Game events (doubling, ability announcements)
   go to the floating feed via `roleAnnounce`, never `systemChat`. Only presence
   lines — joined / left / watching / took a seat — belong in chat.
