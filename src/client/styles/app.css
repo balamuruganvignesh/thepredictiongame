@@ -299,6 +299,18 @@
   color: var(--text);
 }
 
+/* A quieter variant for secondary choices (the deck-art picker) that
+   shouldn't compete with the primary game-type segmented control. */
+.segmented--small {
+  margin-bottom: 12px;
+  padding: 3px;
+}
+
+.segmented--small .segmented__option {
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+
 .join__go {
   width: 100%;
 }

@@ -1,11 +1,17 @@
-// Draws a single playing card. The faces are Kenney's CC0 pixel-art deck
-// (public/cards/, cropped to the artwork so the sprite IS the card), rendered
-// with image-rendering: pixelated so upscaling stays crisp instead of going
-// soft. Everything around the face -- shadow, radius, the winner/playable
-// rings, the muted and illusion veils -- is still CSS on the wrapper, so the
-// interaction states are unchanged.
+// Draws a single playing card. Two deck styles are available, picked by the
+// user via useDeckStyle (see ../deckStyle.tsx) and persisted in
+// localStorage -- it's a display preference, not table state:
+//  - "pixel": Kenney's CC0 pixel-art deck (public/cards/, cropped to the
+//    artwork so the sprite IS the card), rendered with image-rendering:
+//    pixelated so upscaling stays crisp instead of going soft.
+//  - "classic": a photographed deck (public/cards-classic/). It has no Joker
+//    face, so Jokers fall back to the pixel deck's in both styles.
+// Everything around the face -- shadow, radius, the winner/playable rings,
+// the muted and illusion veils -- is still CSS on the wrapper, so the
+// interaction states are unchanged regardless of deck.
 
 import type { Card } from '@shared/cards'
+import { useDeckStyle, type DeckStyle } from '../deckStyle'
 
 /** Rank -> the token Kenney's filenames use. */
 const RANK_FILE: Record<number, string> = {
@@ -31,27 +37,67 @@ const SUIT_FILE: Record<string, string> = {
   Clubs: 'clubs',
 }
 
-/** The sprite for a card. */
-export function cardImage(card: Card): string {
+/** Rank -> the token the classic deck's filenames use (2..10,J,Q,K,A). */
+const RANK_FILE_CLASSIC: Record<number, string> = {
+  2: '2',
+  3: '3',
+  4: '4',
+  5: '5',
+  6: '6',
+  7: '7',
+  8: '8',
+  9: '9',
+  10: 'T',
+  11: 'J',
+  12: 'Q',
+  13: 'K',
+  14: 'A',
+}
+
+const SUIT_FILE_CLASSIC: Record<string, string> = {
+  Spades: 'S',
+  Hearts: 'H',
+  Diamonds: 'D',
+  Clubs: 'C',
+}
+
+export const cardBackImage = (deck: DeckStyle) =>
+  deck === 'classic' ? '/cards-classic/back.png' : '/cards/card_back.png'
+
+/** The sprite for a card, for the given deck style. */
+export function cardImage(card: Card, deck: DeckStyle = 'pixel'): string {
   if (card.suit === 'Joker') return '/cards/card_joker_red.png'
+  if (deck === 'classic') {
+    const suit = SUIT_FILE_CLASSIC[card.suit]
+    const rank = RANK_FILE_CLASSIC[card.rank]
+    if (!suit || !rank) return cardBackImage(deck)
+    return `/cards-classic/${rank}${suit}.png`
+  }
   const suit = SUIT_FILE[card.suit]
   const rank = RANK_FILE[card.rank]
-  if (!suit || !rank) return '/cards/card_back.png'
+  if (!suit || !rank) return cardBackImage(deck)
   return `/cards/card_${suit}_${rank}.png`
 }
 
 export function PlayingCard({ card, className = '' }: { card: Card; className?: string }) {
+  const { deck } = useDeckStyle()
   return (
     <div className={`card ${className}`.trim()}>
-      <img className="card__face" src={cardImage(card)} alt={cardLabel(card)} draggable={false} />
+      <img
+        className="card__face"
+        src={cardImage(card, deck)}
+        alt={cardLabel(card)}
+        draggable={false}
+      />
     </div>
   )
 }
 
 export function CardBack({ className = '' }: { className?: string }) {
+  const { deck } = useDeckStyle()
   return (
     <div className={`card card--back ${className}`.trim()} aria-hidden="true">
-      <img className="card__face" src="/cards/card_back.png" alt="" draggable={false} />
+      <img className="card__face" src={cardBackImage(deck)} alt="" draggable={false} />
     </div>
   )
 }

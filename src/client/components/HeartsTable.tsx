@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { isLegalHeartsPlay } from '@shared/heartsRules'
 import { ChatPanel } from './ChatPanel'
+import { DeckToggleButton } from './DeckToggle'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { HeartsScoresheet } from './HeartsScoresheet'
@@ -128,6 +129,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
         <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
           SCORES
         </button>
+        <DeckToggleButton />
         {/* Ends the game early by majority vote, so people waiting as
             spectators get a chair without the game being played out. */}
         <RestartVoteButton

@@ -1,9 +1,12 @@
 /*
- * Playing cards. The faces are Kenney's CC0 pixel-art deck, cropped so each
- * sprite is exactly the card (42x60 source, see src/client/public/cards/).
+ * Playing cards. Two deck styles, picked at runtime via the data-deck
+ * attribute on <html> (see ../deckStyle.tsx):
+ *  - pixel (default): Kenney's CC0 pixel-art deck, cropped so each sprite is
+ *    exactly the card (42x60 source, see src/client/public/cards/).
+ *  - classic: a photographed deck (src/client/public/cards-classic/).
  * The wrapper still owns everything AROUND the face -- radius, shadow, the
  * winner/playable rings, the muted and illusion veils -- so every interaction
- * state below is unchanged from the CSS-drawn version.
+ * state below is unchanged regardless of which deck is active.
  */
 
 .card {
@@ -19,14 +22,19 @@
   overflow: hidden;
 }
 
-/* The sprite fills the wrapper exactly. `pixelated` is the whole point: these
-   are 42x60 originals shown at roughly 2x, and smoothing turns crisp pixel art
-   into mush. */
+/* The sprite fills the wrapper exactly. `pixelated` is the pixel deck's whole
+   point: those are 42x60 originals shown at roughly 2x, and smoothing turns
+   crisp pixel art into mush. The classic deck is photographed art, so it
+   wants normal smoothing instead -- otherwise it upscales just as blocky. */
 .card__face {
   display: block;
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+}
+
+:root[data-deck='classic'] .card__face {
+  image-rendering: auto;
 }
 
 /* ---- Backs and placeholders ------------------------------------------------- */

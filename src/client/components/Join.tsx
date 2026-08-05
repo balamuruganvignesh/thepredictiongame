@@ -7,6 +7,7 @@ import { Config, HeartsConfig } from '@shared/config'
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
+import { useDeckStyle } from '../deckStyle'
 
 type Props = {
   connected: boolean
@@ -21,6 +22,7 @@ export function Join({ connected, error, onJoin }: Props) {
   const [game, setGame] = useState<GameType>('prediction')
   const isHearts = game === 'hearts'
   const creating = mode === 'create'
+  const { deck, setDeck } = useDeckStyle()
 
   // A shared link like /ABCD drops you straight into the join form.
   useEffect(() => {
@@ -46,6 +48,27 @@ export function Join({ connected, error, onJoin }: Props) {
       <form className="note join__card" onSubmit={submit}>
         <div className="join__deck">
           <DeckStack />
+        </div>
+
+        <div className="segmented segmented--small" role="tablist" aria-label="Card deck">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={deck === 'pixel'}
+            className={`segmented__option${deck === 'pixel' ? ' is-active' : ''}`}
+            onClick={() => setDeck('pixel')}
+          >
+            pixel deck
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={deck === 'classic'}
+            className={`segmented__option${deck === 'classic' ? ' is-active' : ''}`}
+            onClick={() => setDeck('classic')}
+          >
+            classic deck
+          </button>
         </div>
 
         {/* Joining by code: the table already has a game, so this screen

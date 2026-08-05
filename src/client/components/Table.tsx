@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
+import { DeckToggleButton } from './DeckToggle'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
@@ -174,6 +175,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
           SCORES
         </button>
+        <DeckToggleButton />
         {/* Ends the game early by majority vote, so people waiting as
             spectators get a chair without the game being played out. */}
         <RestartVoteButton
