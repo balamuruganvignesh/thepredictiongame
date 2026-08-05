@@ -942,6 +942,20 @@ export class RoleManager {
     return { roleName: role.name, roleEmoji: role.emoji }
   }
 
+  /**
+   * Up to the last three roles this seat has held at this table, most recent
+   * (this game) first -- surfaced as a lightweight stat alongside the standings
+   * reveal. `roleHistory` already outlives `resetGame`, so this reads straight
+   * off it with no new tracking.
+   */
+  getRoleHistoryReveal(id: string): { roleName: string; roleEmoji: string }[] {
+    const history = this.roleHistory.get(id) ?? []
+    return history.flatMap((roleId) => {
+      const role = RoleDefs.getRole(roleId)
+      return role ? [{ roleName: role.name, roleEmoji: role.emoji }] : []
+    })
+  }
+
   // ---- Ability execution ----------------------------------------------------
 
   private isBidAffecting(abilityId: string): boolean {

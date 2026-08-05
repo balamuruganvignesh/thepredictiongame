@@ -174,6 +174,13 @@ io.on('connection', (socket) => {
   socket.on('requestState', () =>
     withViewer((r, seat, spectator) => r.sendState(seat ?? spectator!)),
   )
+  // Seated players hold no spectator identity, so this is silently a no-op
+  // for them -- picking a hand to watch only makes sense without one of your own.
+  socket.on('watchSeat', (targetSeatId) =>
+    withViewer((r, seat, spectator) => {
+      if (!seat && spectator) r.watchSeat(spectator, targetSeatId ? String(targetSeatId) : null)
+    }),
+  )
   socket.on('chat', (text) =>
     withViewer((r, seat, spectator) => {
       if (seat) r.chat(seat, String(text ?? ''))

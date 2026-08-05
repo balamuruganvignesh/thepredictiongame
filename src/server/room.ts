@@ -46,6 +46,8 @@ export class Room {
    */
   private spectators: Spectator[] = []
   private spectatorById = new Map<string, Spectator>()
+  /** Spectator id -> id of the seat they're currently watching read-only. */
+  private watching = new Map<string, string>()
   gameState: 'Lobby' | 'InProgress' = 'Lobby'
   lastActivity = Date.now()
 
@@ -98,6 +100,10 @@ export class Room {
       send: (seat, event, payload) => {
         if (!seat.socketId) return
         ;(this.server.to(seat.socketId).emit as (e: string, p: unknown) => void)(event, payload)
+        // Every hand mutation (deal, Joker swap, Illusion scramble, Rewind)
+        // goes through this one choke point, so hooking it here reaches
+        // spectators watching this seat without touching each call site.
+        if (event === 'dealHand') this.notifyWatchers(seat)
       },
       sendSpectators: (event, payload) => {
         for (const spectator of this.spectators) {
@@ -289,10 +295,43 @@ export class Room {
     const index = this.spectators.indexOf(spectator)
     if (index >= 0) this.spectators.splice(index, 1)
     this.spectatorById.delete(spectator.id)
+    this.watching.delete(spectator.id)
     this.lastActivity = Date.now()
     this.broadcastLobby()
     // One fewer person waiting for a chair, which is what the vote is about.
     this.broadcastRestartVote()
+  }
+
+  /**
+   * A spectator picking (or dropping) a seat to watch read-only. `seatId:
+   * null` stops watching. Reused whenever that seat's hand changes -- see
+   * `notifyWatchers` -- so the view stays live without polling.
+   */
+  watchSeat(spectator: Spectator, seatId: string | null) {
+    const seat = seatId ? this.seatById.get(seatId) : undefined
+    if (!seat) {
+      this.watching.delete(spectator.id)
+      this.sendToSocket(spectator.socketId, 'watchedHand', null)
+      return
+    }
+    this.watching.set(spectator.id, seat.id)
+    this.sendToSocket(spectator.socketId, 'watchedHand', {
+      seatId: seat.id,
+      name: seat.name,
+      hand: seat.hand,
+    })
+  }
+
+  /** Pushes this seat's current hand to anyone watching it. */
+  private notifyWatchers(seat: Seat) {
+    for (const spectator of this.spectators) {
+      if (this.watching.get(spectator.id) !== seat.id) continue
+      this.sendToSocket(spectator.socketId, 'watchedHand', {
+        seatId: seat.id,
+        name: seat.name,
+        hand: seat.hand,
+      })
+    }
   }
 
   /**
@@ -301,6 +340,11 @@ export class Room {
    * having to rejoin. Anyone who doesn't fit stays a spectator.
    */
   private seatSpectators() {
+    // The game that made "watch a seat" meaningful just ended -- whoever's
+    // left spectating gets a clean slate rather than a stale hand.
+    for (const spectator of this.spectators) this.sendToSocket(spectator.socketId, 'watchedHand', null)
+    this.watching.clear()
+
     for (const spectator of [...this.spectators]) {
       if (this.seats.length >= Config.maxPlayers) break
       this.spectators.splice(this.spectators.indexOf(spectator), 1)
@@ -907,12 +951,14 @@ export class Room {
     return this.seats
       .map((seat) => {
         const reveal = this.roles.getRoleReveal(seat.id)
+        const roleHistory = this.roles.getRoleHistoryReveal(seat.id)
         return {
           id: seat.id,
           name: seat.name,
           totalScore: seat.totalScore,
           roleName: reveal?.roleName,
           roleEmoji: reveal?.roleEmoji,
+          roleHistory: roleHistory.length > 0 ? roleHistory : undefined,
         }
       })
       .sort((a, b) => (lowestWins ? a.totalScore - b.totalScore : b.totalScore - a.totalScore))

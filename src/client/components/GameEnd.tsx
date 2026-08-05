@@ -40,6 +40,20 @@ export function GameEnd({
                     {standing.roleEmoji} {standing.roleName}
                   </span>
                 )}
+                {standing.roleHistory && standing.roleHistory.length > 1 && (
+                  <span
+                    className="standings__history"
+                    title={`Recent roles at this table: ${standing.roleHistory
+                      .map((r) => r.roleName)
+                      .join(' → ')}`}
+                  >
+                    {' '}
+                    {standing.roleHistory
+                      .slice(1)
+                      .map((r) => r.roleEmoji)
+                      .join(' ')}
+                  </span>
+                )}
               </span>
               <span className="standings__score">{standing.totalScore}</span>
             </li>

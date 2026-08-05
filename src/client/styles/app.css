@@ -930,6 +930,44 @@ button.seat:hover {
   }
 }
 
+.spectator-watch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.spectator-watch__picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 clamp(12px, 16vw, 220px) 4px;
+}
+
+.spectator-watch__label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.spectator-watch__pick {
+  border: 1px solid color-mix(in srgb, var(--stroke) 50%, transparent);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.spectator-watch__pick.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- Dock buttons ---------------------------------------------------------- */
 
 .dock {
@@ -1859,6 +1897,13 @@ button.seat:hover {
 .standings__role {
   color: var(--text-muted);
   font-size: 0.8em;
+}
+
+.standings__history {
+  color: var(--text-muted);
+  font-size: 0.75em;
+  opacity: 0.7;
+  letter-spacing: 1px;
 }
 
 .standings__score {

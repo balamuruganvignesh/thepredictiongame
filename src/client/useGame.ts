@@ -27,6 +27,7 @@ import type {
   TrickResolved,
   TrickUpdate,
   UseAbilityPayload,
+  WatchedHand,
 } from '@shared/protocol'
 import { displayName } from '@shared/cards'
 import type { PassDirection } from '@shared/heartsRules'
@@ -85,6 +86,8 @@ export type Store = {
   lowestWins: boolean
   /** Watching a game that was already running: no hand, no turn, no abilities. */
   spectating: boolean
+  /** Spectator-only: the seat they've chosen to peek at, read-only. */
+  watchedSeat: WatchedHand
 
   names: Record<string, string>
   /** THE display order for every player list, locked in at round 1. */
@@ -175,6 +178,7 @@ const initialStore: Store = {
   hearts: emptyHearts,
   lowestWins: false,
   spectating: false,
+  watchedSeat: null,
   names: {},
   order: [],
   turnOrder: [],
@@ -249,6 +253,7 @@ type Action =
   | { type: 'toast'; message: string | null }
   | { type: 'dropFeed'; id: number }
   | { type: 'snapshot'; data: Snapshot }
+  | { type: 'watchedHand'; data: WatchedHand }
   | { type: 'leave' }
 
 const SUIT_GLYPH: Record<string, string> = {
@@ -304,6 +309,7 @@ function reducer(state: Store, action: Action): Store {
         standings: null,
         roleState: null,
         restart: { votes: [], needed: 0, waiting: 0 },
+        watchedSeat: null,
         view: 'lobby',
       }
     }
@@ -670,6 +676,9 @@ function reducer(state: Store, action: Action): Store {
       }
     }
 
+    case 'watchedHand':
+      return { ...state, watchedSeat: action.data }
+
     case 'leave':
       return { ...initialStore, connected: state.connected, myName: state.myName }
 
@@ -739,6 +748,7 @@ export function useGame() {
     socket.on('heartsScoreUpdate', (data) => dispatch({ type: 'heartsScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
+    socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
     socket.on('doubleWindow', (data) => dispatch({ type: 'doubleWindow', seconds: data.seconds }))
@@ -868,6 +878,10 @@ export function useGame() {
       },
       dismissEffect(key: number) {
         dispatch({ type: 'dismissEffect', key })
+      },
+      /** Spectator-only: pick a seat to watch read-only, or null to stop. */
+      watchSeat(seatId: string | null) {
+        socket.emit('watchSeat', seatId)
       },
     }),
     [],

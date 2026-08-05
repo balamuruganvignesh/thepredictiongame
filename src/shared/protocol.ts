@@ -129,6 +129,8 @@ export type Standing = {
   totalScore: number
   roleName?: string
   roleEmoji?: string
+  /** Roles held at this table recently, most recent (this game) first -- up to 3, chaos mode only. */
+  roleHistory?: { roleName: string; roleEmoji: string }[]
 }
 
 export type GameEnded = {
@@ -141,6 +143,13 @@ export type GameEnded = {
 }
 
 export type DoubleWindow = { seconds: number }
+
+/**
+ * A spectator's read-only view of one seat's hand. `null` means "not watching
+ * anyone" -- sent when the spectator stops watching, or the watched seat is no
+ * longer valid (e.g. it became a real seat of theirs at the next lobby).
+ */
+export type WatchedHand = { seatId: PlayerId; name: string; hand: Card[] } | null
 
 // ---- Restart vote -----------------------------------------------------------
 
@@ -399,6 +408,8 @@ export interface ServerToClientEvents {
   heartsState: (data: HeartsState) => void
   heartsScoreUpdate: (data: HeartsScoreUpdate) => void
   restartVote: (data: RestartVote) => void
+  /** Spectator-only: the hand of whichever seat they're currently watching. */
+  watchedHand: (data: WatchedHand) => void
 }
 
 export interface ClientToServerEvents {
@@ -435,4 +446,10 @@ export interface ClientToServerEvents {
    * Any seated player may call it; it passes on a majority of connected seats.
    */
   voteRestart: (vote: boolean) => void
+  /**
+   * Spectator-only: watch a seated player's hand read-only. `seatId: null`
+   * stops watching. Any other event silently ignores this from a spectator --
+   * they hold no Seat, so nothing else in the protocol reaches them anyway.
+   */
+  watchSeat: (seatId: string | null) => void
 }

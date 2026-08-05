@@ -147,12 +147,41 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
 
       {isMyTurn && store.phase === 'playing' && <p className="turn-banner">YOUR TURN</p>}
 
-      {/* Spectators have no hand to render -- they watch the trick area and the
-          score sheet, and get a chair when this game ends. */}
+      {/* Spectators have no hand of their own, but can peek at a seated
+          player's read-only -- makes waiting out a mid-game join less dead.
+          They get a real chair when this game ends. */}
       {store.spectating ? (
-        <p className="turn-banner turn-banner--spectating">
-          👁 SPECTATING — you'll be seated when this game ends
-        </p>
+        <div className="spectator-watch">
+          <p className="turn-banner turn-banner--spectating">
+            👁 SPECTATING — you'll be seated when this game ends
+          </p>
+          {players.length > 0 && (
+            <div className="spectator-watch__picker">
+              <span className="spectator-watch__label">watch a hand:</span>
+              {players.map((player) => {
+                const active = store.watchedSeat?.seatId === player.id
+                return (
+                  <button
+                    key={player.id}
+                    type="button"
+                    className={`spectator-watch__pick${active ? ' is-active' : ''}`}
+                    onClick={() => actions.watchSeat(active ? null : player.id)}
+                  >
+                    {player.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {store.watchedSeat && (
+            <Hand
+              hand={store.watchedSeat.hand}
+              isMyTurn={false}
+              leadSuit={store.leadSuit}
+              onPlay={() => {}}
+            />
+          )}
+        </div>
       ) : (
         /* Your bidding turn is still "your turn", but no card is playable until
            the play phase -- otherwise the whole hand lights up during bidding. */
