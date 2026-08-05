@@ -273,22 +273,33 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   lines — joined / left / watching / took a seat — belong in chat.
 - Score sheet docked LEFT (row per round + trump icon, column per player,
   totals bar), open by default on desktop, on demand on touch; Tab or the
-  SCORES button toggles it.
+  SCORES menu item toggles it.
 - Top bar: trump glyph, Round X/Y, Hand K/M, per-player "won / bid" chips
   (green on-target / red off, accent ring = turn).
-- **The RESTART button lives in the dock of BOTH games** (`RestartVote.tsx`),
-  because the vote belongs to the table, not to either game. It is quiet until
-  someone actually calls a vote, then goes red with the tally; with nobody
-  voting it just shows how many people are stuck watching, which is the reason
-  to press it. Spectators see the tally and cannot vote — it's not their game
-  being ended.
-- **One chaos button, not two.** `QuickAbility` sits just above the dock and is
-  the ONLY door: `⚡ <ABILITY>` while it's live, collapsing to `🎭 ROLE` once
-  spent. Its popover has NO backdrop on purpose — the whole point is that the
-  trick stays visible while you aim. It punts to the full `RolePanel` for the
-  two-target abilities and the two that need a gallery (Alternate Universe's
-  roles, Time Branches' hand); everything else fires straight from the popover.
-  Don't put a second ROLE button back in the dock.
+- **The dock is deliberately small: SETTINGS + CHAT in both games, plus ROLE
+  and ABILITY in chaos.** Everything that isn't a moment-to-moment action —
+  which card art renders, the score sheet toggle, the restart vote — lives
+  behind `SettingsMenu.tsx`, a popover opened from one SETTINGS button and
+  shared by both games' tables. A live restart vote still shows through as a
+  badge on the closed SETTINGS button (`restart.votes.length`), so a vote
+  in progress is never missed just because it's tucked in the menu.
+- **`SettingsMenu`'s popover must clear the chaos `.quick` column, not
+  overlap it.** Both float above the dock in the same bottom-right corner;
+  `Table.tsx` passes `raised` (true whenever the ROLE/ABILITY buttons are
+  rendered) so the popover opens far enough up to clear them — the collision
+  is vertical-only by design, because `.quick`'s WIDTH is unbounded (ability
+  names vary a lot) but its HEIGHT is capped at two stacked buttons. Widening
+  the gap sideways instead would be fragile; don't revert to that.
+- **ROLE and ABILITY are two separate, always-available buttons in chaos**,
+  stacked in `.quick` just above the dock. `QuickAbility` renders only the
+  ABILITY button and disappears once the ability is spent (or nothing was
+  dealt) — it does NOT collapse into a ROLE button anymore. The ROLE button is
+  rendered by `Table.tsx` itself, always present alongside it, opening
+  `RolePanel` so a player can read their role and this round's ability
+  (including ones already spent) to plan what card to play. `QuickAbility`'s
+  popover still has NO backdrop on purpose — the trick stays visible while you
+  aim — and still punts to `RolePanel` for the two-target abilities and the
+  two that need a gallery (Alternate Universe's roles, Time Branches' hand).
 - **The panel's private log is a LIST (`store.abilityLog`), never "the latest
   one".** Your own ability's result and whatever another player quietly did TO
   you both arrive on the same `abilityResult` channel — keeping one slot meant a

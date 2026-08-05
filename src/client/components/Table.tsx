@@ -6,15 +6,14 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
-import { DeckToggleButton } from './DeckToggle'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
 import { QuickAbility } from './QuickAbility'
 import { RebidModal } from './RebidModal'
-import { RestartVoteButton } from './RestartVote'
 import { RolePanel } from './RolePanel'
 import { Scoreboard } from './Scoreboard'
+import { SettingsMenu } from './SettingsMenu'
 import { TopBar, type ChipData } from './TopBar'
 import { TrickArea } from './TrickArea'
 import type { GameActions, Store } from '../useGame'
@@ -149,41 +148,43 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {/* Fire the ability without the modal covering the trick. Sits just above
-          the dock; the full panel is still a tap away for the ones that need
-          more room. */}
+      {/* ROLE always opens the full panel -- your role and this round's
+          ability are worth reading even before you've decided to fire it, so
+          you know what card to play toward it. ABILITY (from QuickAbility)
+          fires it without the modal covering the trick, and disappears once
+          it's spent -- ROLE is still there to read what it did. Both sit just
+          above the dock. */}
       {chaosActive && !store.spectating && store.roleState && (
-        <QuickAbility
-          roleState={store.roleState}
-          players={players}
-          meId={store.meId}
-          onUse={actions.useAbility}
-          onOpenPanel={() => setRoleOpen(true)}
-        />
+        <div className="quick">
+          <QuickAbility
+            roleState={store.roleState}
+            players={players}
+            meId={store.meId}
+            onUse={actions.useAbility}
+            onOpenPanel={() => setRoleOpen(true)}
+          />
+          <button className="dock__button dock__button--role" onClick={() => setRoleOpen(true)}>
+            🎭 ROLE
+          </button>
+        </div>
       )}
 
       <div className="dock">
-        {/* No ROLE button here: QuickAbility above the dock is the one door to
-            the ability AND to the panel, so there's only ever one thing to
-            press. */}
+        <SettingsMenu
+          scoresOpen={scoresOpen}
+          onToggleScores={() => setScoresOpen((open) => !open)}
+          restart={store.restart}
+          meId={store.meId}
+          spectating={store.spectating}
+          onVoteRestart={actions.voteRestart}
+          raised={chaosActive && !store.spectating && store.roleState != null}
+        />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (
             <span className="dock__badge">{store.unreadChat > 9 ? '9+' : store.unreadChat}</span>
           )}
         </button>
-        <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
-          SCORES
-        </button>
-        <DeckToggleButton />
-        {/* Ends the game early by majority vote, so people waiting as
-            spectators get a chair without the game being played out. */}
-        <RestartVoteButton
-          restart={store.restart}
-          meId={store.meId}
-          spectating={store.spectating}
-          onVote={actions.voteRestart}
-        />
       </div>
 
       {chatOpen && (

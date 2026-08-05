@@ -6,13 +6,12 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { isLegalHeartsPlay } from '@shared/heartsRules'
 import { ChatPanel } from './ChatPanel'
-import { DeckToggleButton } from './DeckToggle'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { HeartsScoresheet } from './HeartsScoresheet'
 import { HeartsTopBar } from './HeartsTopBar'
 import { PassModal, PassWaiting } from './PassModal'
-import { RestartVoteButton } from './RestartVote'
+import { SettingsMenu } from './SettingsMenu'
 import { TrickArea } from './TrickArea'
 import type { GameActions, Store } from '../useGame'
 
@@ -120,24 +119,20 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
       )}
 
       <div className="dock">
+        <SettingsMenu
+          scoresOpen={scoresOpen}
+          onToggleScores={() => setScoresOpen((open) => !open)}
+          restart={store.restart}
+          meId={store.meId}
+          spectating={store.spectating}
+          onVoteRestart={actions.voteRestart}
+        />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (
             <span className="dock__badge">{store.unreadChat > 9 ? '9+' : store.unreadChat}</span>
           )}
         </button>
-        <button className="dock__button" onClick={() => setScoresOpen((open) => !open)}>
-          SCORES
-        </button>
-        <DeckToggleButton />
-        {/* Ends the game early by majority vote, so people waiting as
-            spectators get a chair without the game being played out. */}
-        <RestartVoteButton
-          restart={store.restart}
-          meId={store.meId}
-          spectating={store.spectating}
-          onVote={actions.voteRestart}
-        />
       </div>
 
       {chatOpen && (

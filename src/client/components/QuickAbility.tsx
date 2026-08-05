@@ -9,8 +9,9 @@
 // the two that need a gallery (Alternate Universe's roles, Time Branches' hand)
 // still hand off to RolePanel -- they need the room.
 //
-// This is also the ONLY way into that panel: there is no separate ROLE button in
-// the dock. Once the ability is spent this collapses back into one.
+// Renders nothing once the ability is spent (or nothing was dealt) -- the
+// separate, always-on ROLE button in Table.tsx is where you go to read your
+// role and this round's ability after that.
 
 import { useEffect, useState } from 'react'
 import * as RoleDefs from '@shared/roleDefs'
@@ -47,18 +48,10 @@ export function QuickAbility({ roleState, players, meId, onUse, onOpenPanel }: P
 
   if (!roleState.active) return null
 
-  // Spent (or nothing dealt): this is the ONLY door to the role panel, so it
-  // stays put as a plain ROLE button rather than vanishing -- your role and
-  // what your ability actually did are still worth reading mid-round.
-  if (!def || roleState.used) {
-    return (
-      <div className="quick">
-        <button className="dock__button dock__button--role" onClick={onOpenPanel}>
-          🎭 ROLE
-        </button>
-      </div>
-    )
-  }
+  // Spent (or nothing dealt): nothing to fire, so the button disappears. The
+  // separate ROLE button (always rendered alongside this one) is where your
+  // role and what the ability did are still readable mid-round.
+  if (!def || roleState.used) return null
 
   // What this ability needs before it can fire.
   const needsGallery = def.extra === 'role' || def.extra === 'card' || def.target === 'two'
@@ -86,7 +79,7 @@ export function QuickAbility({ roleState, players, meId, onUse, onOpenPanel }: P
   }
 
   return (
-    <div className="quick">
+    <>
       {open && (
         <div className="note quick__pop" role="dialog" aria-label={`Use ${def.name}`}>
           <p className="quick__name">{def.name}</p>
@@ -180,6 +173,6 @@ export function QuickAbility({ roleState, players, meId, onUse, onOpenPanel }: P
       <button className="dock__button dock__button--quick" onClick={press}>
         ⚡ {def.name.toUpperCase()}
       </button>
-    </div>
+    </>
   )
 }

@@ -12,12 +12,14 @@ export function RestartVoteButton({
   meId,
   spectating,
   onVote,
+  className = '',
 }: {
   restart: RestartVoteState
   meId: string | null
   /** Watchers see the tally but can't vote: they aren't in the game being ended. */
   spectating: boolean
   onVote: (vote: boolean) => void
+  className?: string
 }) {
   const voted = meId != null && restart.votes.includes(meId)
   const count = restart.votes.length
@@ -28,7 +30,7 @@ export function RestartVoteButton({
   if (spectating) {
     if (!live) return null
     return (
-      <span className="dock__button dock__button--restart is-live" aria-live="polite">
+      <span className={`dock__button dock__button--restart is-live ${className}`.trim()} aria-live="polite">
         🔄 RESTART {count}/{restart.needed}
       </span>
     )
@@ -36,7 +38,7 @@ export function RestartVoteButton({
 
   return (
     <button
-      className={`dock__button dock__button--restart${live ? ' is-live' : ''}`}
+      className={`dock__button dock__button--restart${live ? ' is-live' : ''} ${className}`.trim()}
       onClick={() => onVote(!voted)}
       title={
         voted

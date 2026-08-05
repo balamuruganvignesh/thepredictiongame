@@ -991,6 +991,38 @@ button.seat:hover {
   color: var(--text);
 }
 
+/* ---- Settings menu ---------------------------------------------------------- */
+
+.settings {
+  position: relative;
+  display: inline-flex;
+}
+
+.settings__pop {
+  --tilt: 0deg;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 27;
+  width: max-content;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+}
+
+.settings__item {
+  width: 100%;
+  text-align: left;
+}
+
+/* Chaos's ROLE + ABILITY buttons stack directly above the dock in the same
+   corner -- pushed up clear of them rather than opening underneath. */
+.settings__pop--raised {
+  bottom: calc(100% + 104px);
+}
+
 /* ---- Quick ability (chaos) -------------------------------------------------- */
 
 /* Sits directly above the dock, same right edge. Deliberately NOT a modal and
