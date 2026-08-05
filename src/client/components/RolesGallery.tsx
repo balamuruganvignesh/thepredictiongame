@@ -30,9 +30,7 @@ export function RolesGallery({ onClose }: { onClose: () => void }) {
         <h2 className="gallery__name" style={{ color: role.color }}>
           {role.name.toUpperCase()}
         </h2>
-        <p className="gallery__tagline">
-          “{role.tagline}”{role.rare && <span className="gallery__rare"> — ✦ RARE</span>}
-        </p>
+        <p className="gallery__tagline">“{role.tagline}”</p>
         <p className="gallery__blurb">{role.blurb}</p>
 
         <ul className="gallery__abilities">

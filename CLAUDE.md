@@ -126,12 +126,12 @@ Host toggles classic/chaos on a lobby card. All role logic lives in
 `server/engine/roles.ts` + `shared/roleDefs.ts` (data) + `client/components/
 RolePanel.tsx`, gated behind the mode so the classic path is untouched.
 
-- **EVERY seat gets a role**, dealt round-robin from a shuffled pool. 7 standard
-  roles (Detective/Joker/Gambler/Judge/Guardian/Time Traveler/Angel) + RARE
-  Mirrorer, which only joins the pool 20% of games.
+- **EVERY seat gets a role**, dealt round-robin from a shuffled pool. All 8
+  roles (Detective/Joker/Gambler/Judge/Guardian/Time Traveler/Angel/Mirrorer)
+  are equally likely — none is rarer than the others.
 - **Round-robin off a shuffled pool IS the no-duplicates rule** — `pool[i %
-  pool.length]` is distinct for as long as the pool lasts, so any table of 7 or
-  fewer is guaranteed no repeated roles, and only 8+ players see one twice.
+  pool.length]` is distinct for as long as the pool lasts, so any table of 8 or
+  fewer is guaranteed no repeated roles, and only 9+ players see one twice.
   Never replace it with an independent random pick per seat.
 - **Which seat gets which of those slots is weighted by `roleHistory`** — the
   one piece of RoleManager state that survives `resetGame`, so a player who was
@@ -159,8 +159,8 @@ RolePanel.tsx`, gated behind the mode so the classic path is untouched.
   it REPLACES your ability (a random one from a role you name) and returns
   `keepAbility`, so the round's action is still ahead of you. All options start equally likely, but the ability you were
   just dealt is weighted `0.4^streak` against 1.0 for the rest.
-- **The Mirrorer is a full role (4 abilities), still RARE.** Every one of them
-  rides somebody else: Mirror Bet (their tricks), Mimic (their ability), Twin
+- **The Mirrorer is a full role (4 abilities), dealt as often as any other.**
+  Every one of them rides somebody else: Mirror Bet (their tricks), Mimic (their ability), Twin
   Fate (the better of your two rounds, to both of you), Two-Way Mirror (your two
   rounds trade places). Mimic returns `keepAbility` like Alternate Universe — it
   REPLACES your ability without spending the turn — and must keep refusing to

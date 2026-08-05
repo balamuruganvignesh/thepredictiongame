@@ -26,9 +26,6 @@ import type { Seat } from '../types'
 import { randomInt, shuffle } from '../types'
 import type { EngineIO, TrickHost } from './io'
 
-// Chance per chaos game that the rare Mirrorer joins the role pool at all.
-const MIRRORER_CHANCE = 0.2
-
 // Every Joker swap is a gamble: this often it actually goes through.
 const SWAP_SUCCESS = 0.75
 
@@ -422,8 +419,8 @@ export class RoleManager {
    * duplicate rule: `pool[i % pool.length]` hands out distinct roles for as
    * long as the pool lasts, so any table that fits inside the pool is
    * guaranteed no repeats at all. Only a table BIGGER than the pool sees a role
-   * twice -- with 7 standard roles that means 8+ players, and which ones double
-   * up is random every game.
+   * twice -- with all 8 roles equally likely that means 9+ players, and which
+   * ones double up is random every game.
    *
    * The seats are shuffled too, so the duplicated roles aren't always the ones
    * held by the earliest chairs.
@@ -442,9 +439,7 @@ export class RoleManager {
     this.abilityRepeatStreak.clear()
     this.allInLossStreak.clear()
 
-    // The Mirrorer stays rare: it only enters the pool some games.
-    const pool = [...RoleDefs.standardRoleOrder]
-    if (Math.random() < MIRRORER_CHANCE) pool.push('mirrorer')
+    const pool = [...RoleDefs.roleOrder]
     shuffle(pool)
 
     // Exactly the roles the old `pool[i % pool.length]` dealt out, as a bag to

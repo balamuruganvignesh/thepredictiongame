@@ -626,10 +626,6 @@ button.seat:hover {
   font-family: var(--font-heading);
 }
 
-.gallery__rare {
-  color: var(--accent);
-}
-
 .gallery__blurb {
   margin: 0 0 16px;
   line-height: 1.55;

@@ -36,12 +36,6 @@ export type RoleDef = {
   blurb: string
   color: string
   abilities: string[]
-  /**
-   * Rare roles are excluded from the normal assignment pool; RoleManager rolls
-   * them in with a small per-game chance. A role with a single ability keeps
-   * that ability every round (no per-round reroll).
-   */
-  rare?: boolean
 }
 
 export const abilities: Record<string, AbilityDef> = {
@@ -261,7 +255,7 @@ export const abilities: Record<string, AbilityDef> = {
     note: 'resolves at end of round. a Guardian’s Nullify can cancel it',
   },
 
-  // ---- The Mirrorer (rare) ------------------------------------------------
+  // ---- The Mirrorer --------------------------------------------------------
   mirror_bet: {
     id: 'mirror_bet',
     name: 'Mirror Bet',
@@ -369,14 +363,19 @@ export const roles: Record<string, RoleDef> = {
     emoji: '🪞',
     tagline: 'Your fate is my fate.',
     blurb:
-      'RARE. The reflection role, and it never plays its own game — it plays yours. Ride another player’s tricks, copy the ability they were dealt, tie your round to theirs so a win for either is a win for both, or trade rounds with them outright. Every single thing it does is pointed at somebody else’s game.',
+      'The reflection role, and it never plays its own game — it plays yours. Ride another player’s tricks, copy the ability they were dealt, tie your round to theirs so a win for either is a win for both, or trade rounds with them outright. Every single thing it does is pointed at somebody else’s game.',
     color: '#B2D2E0',
     abilities: ['mirror_bet', 'mimic', 'twin_fate', 'two_way_mirror'],
-    rare: true,
   },
 }
 
-/** Stable order for the lobby gallery. */
+/**
+ * Stable order for the lobby gallery, and also the pool RoleManager deals
+ * from every game -- every role here is equally likely. Its LENGTH is the
+ * table's duplicate-free capacity: assignRoles deals round-robin, so any
+ * table with this many seats or fewer gets all-distinct roles, and only a
+ * table bigger than the pool sees a role repeat.
+ */
 export const roleOrder = [
   'detective',
   'joker',
@@ -386,22 +385,6 @@ export const roleOrder = [
   'time_traveler',
   'angel',
   'mirrorer',
-]
-
-/**
- * The non-rare roles RoleManager deals from by default. Its LENGTH is the
- * table's duplicate-free capacity: assignRoles deals round-robin, so any table
- * with this many seats or fewer gets all-distinct roles, and only a table
- * bigger than the pool sees a role repeat.
- */
-export const standardRoleOrder = [
-  'detective',
-  'joker',
-  'gambler',
-  'judge',
-  'guardian',
-  'time_traveler',
-  'angel',
 ]
 
 export function getRole(roleId: string | null | undefined): RoleDef | null {

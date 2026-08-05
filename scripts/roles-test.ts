@@ -42,12 +42,8 @@ const fail = (message: string) => {
   failures++
 }
 
-// The Mirrorer is RARE, so it only joins the pool in some games. The pool a
-// table can count on is the standard list.
-const guaranteedCapacity = RoleDefs.standardRoleOrder.length
-console.log(
-  `role pool: ${guaranteedCapacity} standard roles (+ the rare Mirrorer some games)\n`,
-)
+const guaranteedCapacity = RoleDefs.roleOrder.length
+console.log(`role pool: ${guaranteedCapacity} roles, all equally likely\n`)
 
 for (let count = 2; count <= MAX_PLAYERS; count++) {
   const seats = makeSeats(count)
