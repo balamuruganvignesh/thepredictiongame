@@ -26,7 +26,11 @@ export function GameEnd({
 
         <ol className="standings">
           {standings.map((standing, i) => (
-            <li key={standing.id} className={i === 0 ? 'is-winner' : ''}>
+            <li
+              key={standing.id}
+              className={i === 0 ? 'is-winner' : ''}
+              style={{ animationDelay: `${i * 60}ms` }}
+            >
               <span className="standings__rank">{i === 0 ? '🏆' : `${i + 1}.`}</span>
               <span className="standings__name">
                 {standing.name}

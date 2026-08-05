@@ -3,6 +3,7 @@
 // plate above each card, a crown + green ring on the winner and the losers
 // veiled once the trick resolves.
 
+import { useEffect, useState } from 'react'
 import type { PlayEntry } from '@shared/protocol'
 import { PlayingCard } from './PlayingCard'
 
@@ -25,6 +26,28 @@ export function TrickArea({
   totalTricks,
   winnerId,
 }: Props) {
+  // `plays` (and `winnerId` with it) goes straight to empty when the next
+  // trick starts -- there's no server-side "clearing" state to key an exit
+  // animation off. Hold the last full trick a beat longer so it can sweep
+  // away instead of vanishing.
+  const [shown, setShown] = useState({ plays, winnerId })
+  const [sweeping, setSweeping] = useState(false)
+
+  useEffect(() => {
+    if (plays.length > 0) {
+      setShown({ plays, winnerId })
+      setSweeping(false)
+      return
+    }
+    if (shown.plays.length === 0) return
+    setSweeping(true)
+    const timer = setTimeout(() => {
+      setShown({ plays: [], winnerId: null })
+      setSweeping(false)
+    }, 260)
+    return () => clearTimeout(timer)
+  }, [plays, winnerId])
+
   return (
     <section className="trick" aria-label="Current trick">
       <header className="trick__info">
@@ -32,10 +55,10 @@ export function TrickArea({
         {leadSuit && <span className="trick__lead"> • Led: {leadSuit}</span>}
       </header>
 
-      <div className="trick__cards">
-        {plays.map((play) => {
-          const isWinner = winnerId != null && play.id === winnerId
-          const isLoser = winnerId != null && !isWinner
+      <div className={`trick__cards${sweeping ? ' trick__cards--sweeping' : ''}`}>
+        {shown.plays.map((play) => {
+          const isWinner = shown.winnerId != null && play.id === shown.winnerId
+          const isLoser = shown.winnerId != null && !isWinner
           return (
             <div
               key={play.id}
@@ -51,7 +74,7 @@ export function TrickArea({
             </div>
           )
         })}
-        {plays.length === 0 && <p className="trick__empty">waiting for the lead…</p>}
+        {shown.plays.length === 0 && <p className="trick__empty">waiting for the lead…</p>}
       </div>
 
       <footer className={`trick__turn${winnerId ? ' is-winner' : ''}`}>

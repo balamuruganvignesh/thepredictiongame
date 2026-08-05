@@ -233,6 +233,35 @@ export class RoleManager {
     this.io.send(seat, 'abilityResult', { message })
   }
 
+  /**
+   * Choreographed visual to run alongside an announce() line. `trade` is only
+   * safe here because BOTH seats are already named in the matching message --
+   * never call this with an actor announce() keeps anonymous (see
+   * AbilityEffect in shared/protocol.ts).
+   */
+  private effect(sourceId: string, targetId: string, icon: string) {
+    this.io.broadcast('abilityEffect', { kind: 'trade', icon, sourceId, targetId })
+  }
+
+  /**
+   * A source-less landing effect for abilities whose actor announce() keeps
+   * anonymous. Call this beside the announce() line that names the target --
+   * never invent a targetId announce() didn't already make public.
+   */
+  private impact(targetId: string, icon: string) {
+    this.io.broadcast('abilityEffect', { kind: 'impact', icon, targetId })
+  }
+
+  /**
+   * A PRIVATE effect, visible only on `viewer`'s own screen (io.send, never
+   * broadcast). For abilities that only ever tell ONE seat what happened via
+   * privateResult() -- this mirrors that exact privacy, never naming a
+   * targetId the matching privateResult() didn't already tell that viewer.
+   */
+  private privateEffect(viewer: Seat, targetId: string, icon: string) {
+    this.io.send(viewer, 'abilityEffect', { kind: 'impact', icon, targetId })
+  }
+
   private actionError(seat: Seat, message: string) {
     this.io.send(seat, 'actionError', message)
   }
@@ -363,6 +392,7 @@ export class RoleManager {
     // client is entitled to see, and a Judge's Imposter may be disguising this
     // very bid -- printing the real one here would hand the disguise away.
     this.announce(`⏳ The rewritten bid is in — ${seat.name} chose again.`)
+    this.impact(seat.id, '⏳')
   }
 
   /**
@@ -653,6 +683,7 @@ export class RoleManager {
     this.announce(
       `🕵️ SET THE PACE! The Detective hands the lead to ${claimant.name} — they open the next trick instead of ${defaultSeat.name}.`,
     )
+    this.effect(defaultSeat.id, claimant.id, '🕵️')
     return claimant
   }
 
@@ -671,6 +702,7 @@ export class RoleManager {
     if (curses > 0) {
       this.armedGravekeeper.set(winner.id, curses - 1)
       this.announce(`⚰️ The Gravekeeper's curse strikes! ${winner.name}'s trick doesn't count.`)
+      this.impact(winner.id, '⚰️')
       return false
     }
 
@@ -702,6 +734,7 @@ export class RoleManager {
         this.announce(
           `⚖️ Sabotage BACKFIRES! ${target.name} missed anyway — the Judge loses 5.`,
         )
+        this.impact(target.id, '⚖️')
       }
     }
   }
@@ -726,12 +759,14 @@ export class RoleManager {
     if (this.armedShield.has(id) && diff === 1) {
       score = calculateScore(bid, bid, seat.hasDoubled)
       this.announce(`🛡️ The Guardian's Shield saves ${name} — scored as a hit!`)
+      this.impact(id, '🛡️')
     } else if (blessings && blessings.length > 0 && diff === 1) {
       score = calculateScore(bid, bid, seat.hasDoubled)
       // Only the first Angel is credited -- the second one's blessing landed on
       // a player who was already saved, so it bought nothing.
       this.bankGrace(blessings[0])
       this.announce(`😇 Something is watching over ${name} — a miss by 1 scores as a hit!`)
+      this.impact(id, '😇')
     } else if (this.armedLastChance.has(id) && diff === 1) {
       if (randomInt(0, 1) === 1) {
         score = calculateScore(bid, bid, seat.hasDoubled)
@@ -740,16 +775,19 @@ export class RoleManager {
         score = score * 2
         this.announce(`🎲 Last Chance backfires! ${name} takes double the penalty.`)
       }
+      this.impact(id, '🎲')
     }
 
     if (this.raisedStakes.has(id) && diff === 0) {
       score += 10
       this.announce(`🎲 The Gambler raised the stakes and DELIVERED: ${name} banks +10.`)
+      this.impact(id, '🎲')
     }
 
     if (this.armedCrown.has(id) && this.wonFirstTrick.has(id)) {
       score += 10
       this.announce(`👑 ${name} claimed the crown — first trick won, +10!`)
+      this.impact(id, '👑')
     }
 
     if (this.armedAllIn.has(id)) {
@@ -770,6 +808,9 @@ export class RoleManager {
         this.allInLossStreak.set(id, lossStreak + 1)
         this.announce(`🎲 ALL IN: the coin betrays ${name}. -15.`)
       }
+      // Cast time deliberately says nothing (see the 'all_in' case below) --
+      // this is the FIRST moment the name is public, win or lose.
+      this.impact(id, '🎲')
     }
 
     // Each Judge who marked them collects separately (duplicate Judges).
@@ -781,6 +822,7 @@ export class RoleManager {
           marks.length > 1 ? 'the Judges take' : 'the Judge takes'
         } ${10 * marks.length} points away.`,
       )
+      this.impact(id, '⚖️')
     }
 
     // Cross-seat deltas resolved in prepareScoring (Sabotage backfire).
@@ -800,6 +842,9 @@ export class RoleManager {
             ? `🪞 The Mirrorer bet on ${betTarget.name} — it pays out! +${delta}.`
             : `🪞 The Mirrorer bet on ${betTarget.name} — it backfires. ${delta}.`,
         )
+        // Lands on the bet TARGET, never the Mirrorer's own seat -- the
+        // Mirrorer isn't named in the line above and must stay that way.
+        this.impact(betTarget.id, '🪞')
       }
     }
 
@@ -811,6 +856,7 @@ export class RoleManager {
       score = 0
       this.bankGrace(halos[0])
       this.announce(`😇 Something is holding ${name} up — their round can't go below zero.`)
+      this.impact(id, '😇')
     }
 
     return score
@@ -841,6 +887,8 @@ export class RoleManager {
       lines.push(
         `🪞 TWIN FATE: ${mirror.name} and ${partner.name} are tied together — the better round is the one they BOTH take. ${best} each.`,
       )
+      // Distinct from Two-Way Mirror's icon below: fates are TIED, not swapped.
+      this.effect(mirrorId, partnerId, '🔗')
     }
 
     // Two-Way Mirror: the two rounds trade places, wherever that leaves them.
@@ -854,6 +902,7 @@ export class RoleManager {
       lines.push(
         `🪞 TWO-WAY MIRROR: ${mirror.name} and ${partner.name} swapped rounds — ${theirs} and ${mine} change hands.`,
       )
+      this.effect(mirrorId, partnerId, '🪞')
     }
 
     for (const { id, score } of writes) scores.set(id, score)
@@ -881,6 +930,7 @@ export class RoleManager {
         angel,
         `😇 Grace: what you gave away came back to you. +${payout} this round, and nobody was told.`,
       )
+      this.privateEffect(angel, angelId, '😇')
     }
   }
 
@@ -921,10 +971,12 @@ export class RoleManager {
         if (angels.length === 0) this.nullifyCreditBy.delete(target.id)
       }
       this.announce(`🛡️ A shield shattered an ability aimed at ${target.name}!`)
+      this.impact(target.id, '🛡️')
       return true
     }
     if (this.isBidAffecting(abilityId) && this.armedLock.has(target.id)) {
       this.announce(`🛡️ ${target.name}'s bid is LOCKED — the meddling fizzled.`)
+      this.impact(target.id, '🔒')
       return true
     }
     return false
@@ -1063,6 +1115,9 @@ export class RoleManager {
           seat,
           `${high ? 'Highest' : 'Lowest'} card in every hand — ${lines.join('   ')}`,
         )
+        // No single target -- every hand is read at once -- so this is a
+        // self-only flourish, private like everything else about the cast.
+        this.privateEffect(seat, id, '🕵️')
         return { ok: true }
       }
 
@@ -1093,6 +1148,9 @@ export class RoleManager {
             seat,
             `Illusion cast: ${mark.name}'s ENTIRE hand is blacked out to them — they're playing blind. Every card still plays perfectly.`,
           )
+          // Private to the Detective only -- io.send, never broadcast, so this
+          // can't be the leak the ability is built never to have.
+          this.privateEffect(seat, mark.id, '🕵️')
           return { ok: true }
         }
 
@@ -1105,6 +1163,7 @@ export class RoleManager {
           seat,
           'Illusion cast: one card in every other hand is blacked out, and every hand at the table just got reshuffled so nobody can place it. All of them still play perfectly.',
         )
+        this.privateEffect(seat, id, '🕵️')
         return { ok: true }
       }
 
@@ -1126,6 +1185,7 @@ export class RoleManager {
             seat,
             `No undealt ${suit} at all: every single one is in somebody's hand — the whole suit is live.`,
           )
+          this.privateEffect(seat, id, '🔮')
           return { ok: true }
         }
         const peek = matches.slice(0, 2).map(cardText).join('   ')
@@ -1133,6 +1193,7 @@ export class RoleManager {
           seat,
           `Highest undealt ${suit}: ${peek}  (${matches.length} of the suit never got dealt — nobody holds these)`,
         )
+        this.privateEffect(seat, id, '🔮')
         return { ok: true }
       }
 
@@ -1152,6 +1213,9 @@ export class RoleManager {
             seat,
             "You've claimed the lead. You open the next trick — the table will see the lead jump to you, so expect questions.",
           )
+          // The PUBLIC reveal is overrideNextLeader's trade(), once the trick
+          // actually opens -- nothing to add here beyond a private cast cue.
+          this.privateEffect(seat, id, '🕵️')
           return { ok: true }
         }
         // Forcing someone else into the lead aims at them, so it can be blocked.
@@ -1165,6 +1229,7 @@ export class RoleManager {
           seat,
           `${t.name} opens the next trick, whether they like it or not — and their ENTIRE hand reads: ${hand}`,
         )
+        this.privateEffect(seat, t.id, '🕵️')
         return { ok: true }
       }
 
@@ -1208,6 +1273,7 @@ export class RoleManager {
         this.resendHand(seat)
         this.resendHand(t)
         this.announce(`🃏 THE BIG SWAP! The Joker traded entire hands with ${t.name}!`)
+        this.impact(t.id, '🃏')
         this.privateResult(t, 'The Joker swapped hands with you. Those cards are yours now.')
         return { ok: true }
       }
@@ -1242,7 +1308,9 @@ export class RoleManager {
         this.resendHand(seat)
         this.resendHand(t)
         this.announce(`🃏 Sticky Fingers! The Joker traded a random card with ${t.name}.`)
+        this.impact(t.id, '🃏')
         this.privateResult(seat, `You gave away ${cardText(mine)} and got ${cardText(theirs)}.`)
+        this.privateEffect(seat, id, '🃏')
         this.privateResult(
           t,
           `The Joker took your ${cardText(theirs)} and left you ${cardText(mine)}.`,
@@ -1281,6 +1349,7 @@ export class RoleManager {
         this.announce(
           `🃏 BID CHAOS! The Joker swapped ${t.name}'s and ${t2.name}'s bids! (${t2.bid} ↔ ${t.bid})`,
         )
+        this.effect(t.id, t2.id, '🔄')
         return { ok: true }
       }
 
@@ -1307,6 +1376,9 @@ export class RoleManager {
         this.announce(
           `🃏 FATE SWAP! The Joker swapped bids with ${t.name}! (now ${seat.bid} ↔ ${t.bid})`,
         )
+        // Not a trade() -- the Joker's own seat is a party to this swap and
+        // must stay anonymous, so only the named target gets a landing effect.
+        this.impact(t.id, '🔄')
         return { ok: true }
       }
 
@@ -1325,13 +1397,22 @@ export class RoleManager {
         this.announce(
           `🎲 The Gambler RAISES THE STAKES: ${myName}'s bid is now ${seat.bid} (+10 bonus if they hit it).`,
         )
+        // A self-bet, so the caster's own name is already public above --
+        // unlike All In just below, there's nothing left to protect by waiting.
+        this.impact(id, '🎲')
         return { ok: true }
       }
 
       case 'all_in': {
         this.armedAllIn.add(id)
+        // No effect() here on purpose: this line names nobody, and firing an
+        // impact on your own seat now would out you before the coin lands --
+        // adjustScore's ALL IN result is the first moment that's public.
         this.announce('🎲 The Gambler goes ALL IN. A coin flips at the end of the round…')
         this.privateResult(seat, "You're all in: +15 or -15 at scoring. No take-backs.")
+        // Private (send-only) is fine here even though the public effect above
+        // waits for scoring: this one only ever reaches the caster's own screen.
+        this.privateEffect(seat, id, '🎲')
         return { ok: true }
       }
 
@@ -1341,6 +1422,7 @@ export class RoleManager {
           seat,
           'Last Chance armed: if you miss your bid by exactly 1, a coin decides — full credit or double the pain.',
         )
+        this.privateEffect(seat, id, '🎲')
         return { ok: true }
       }
 
@@ -1348,6 +1430,7 @@ export class RoleManager {
         if (this.firstTrickResolved) return { ok: false, error: 'The first trick is already done.' }
         this.armedCrown.add(id)
         this.announce(`👑 ${myName} declares for the crown: +10 if they win the FIRST trick!`)
+        this.impact(id, '👑')
         return { ok: true }
       }
 
@@ -1368,6 +1451,7 @@ export class RoleManager {
         t.bid = newBid
         this.syncBids()
         this.announce(`⚖️ VERDICT! The Judge changed ${t.name}'s bid: ${oldBid} → ${newBid}.`)
+        this.impact(t.id, '⚖️')
         return { ok: true }
       }
 
@@ -1381,6 +1465,7 @@ export class RoleManager {
           seat,
           `Sabotage armed on ${t.name}: -10 for them if they hit their bid exactly — but -5 for YOU if they miss. Pick your marks carefully.`,
         )
+        this.privateEffect(seat, t.id, '⚖️')
         return { ok: true }
       }
 
@@ -1395,6 +1480,7 @@ export class RoleManager {
         seat.tricksWon += 1
         this.syncTricks()
         this.announce(`⚖️ TRICK MAGNET! The Judge stole one of ${t.name}'s tricks!`)
+        this.impact(t.id, '⚖️')
         return { ok: true }
       }
 
@@ -1422,6 +1508,7 @@ export class RoleManager {
             seat,
             `Your bid now shows as ${fake} to the table (really ${realBid}). Bid accordingly — only scoring reveals the truth.`,
           )
+          this.privateEffect(seat, id, '⚖️')
           return { ok: true }
         }
         this.privateResult(
@@ -1432,6 +1519,8 @@ export class RoleManager {
           t,
           `⚖️ The Judge disguised your bid! The table sees ${fake}, but your REAL bid of ${realBid} is what counts.`,
         )
+        this.privateEffect(seat, t.id, '⚖️')
+        this.privateEffect(t, t.id, '⚖️')
         return { ok: true }
       }
 
@@ -1442,6 +1531,7 @@ export class RoleManager {
           seat,
           'Shield up: if you miss your bid by exactly 1 this round, you score as if you hit it.',
         )
+        this.privateEffect(seat, id, '🛡️')
         return { ok: true }
       }
 
@@ -1456,12 +1546,14 @@ export class RoleManager {
           seat,
           "Bid Lock armed: your bid can't be changed, swapped or disguised for the rest of the round.",
         )
+        this.privateEffect(seat, id, '🔒')
         return { ok: true }
       }
 
       case 'nullify': {
         this.armShield(id)
         this.privateResult(seat, 'Nullify armed: the next ability aimed at you this round fizzles.')
+        this.privateEffect(seat, id, '🚫')
         return { ok: true }
       }
 
@@ -1473,6 +1565,7 @@ export class RoleManager {
           seat,
           `Curse placed on ${t.name}: the next trick they win doesn't count. They'll find out the hard way.`,
         )
+        this.privateEffect(seat, t.id, '⚰️')
         return { ok: true }
       }
 
@@ -1497,6 +1590,7 @@ export class RoleManager {
         this.announce(
           `⏳ REVERSE TIME! The Time Traveler reopened ${t.name}'s bid — they get to choose again.`,
         )
+        this.impact(t.id, '⏳')
         this.privateResult(
           seat,
           self
@@ -1536,6 +1630,7 @@ export class RoleManager {
         this.announce(
           `⏳ REWIND! The Time Traveler pulled ${victim.name}'s card back off the table — they must play something else.`,
         )
+        this.impact(victim.id, '⏳')
         this.privateResult(victim, 'Your play was REWOUND. That card is back in your hand, and you have to play a different one.')
         return { ok: true }
       }
@@ -1571,6 +1666,7 @@ export class RoleManager {
             RoleDefs.getAbility(newAbility)?.name ?? newAbility
           }, and you still have your turn to use it.`,
         )
+        this.privateEffect(seat, id, '⏳')
         return { ok: true, keepAbility: true }
       }
 
@@ -1600,6 +1696,7 @@ export class RoleManager {
           seat,
           `The deal rewinds: you put ${cardText(given)} back and the branch handed you ${cardText(drawn)}.`,
         )
+        this.privateEffect(seat, id, '⏳')
         return { ok: true }
       }
 
@@ -1614,6 +1711,7 @@ export class RoleManager {
           seat,
           `You're watching over ${t.name}: miss by exactly 1 and they score as a hit. They'll never know it was you.`,
         )
+        this.privateEffect(seat, t.id, '😇')
         return { ok: true }
       }
 
@@ -1627,6 +1725,7 @@ export class RoleManager {
           seat,
           `You've stepped in front of ${t.name}: the next ability aimed at them fizzles.`,
         )
+        this.privateEffect(seat, t.id, '😇')
         return { ok: true }
       }
 
@@ -1640,6 +1739,7 @@ export class RoleManager {
           seat,
           `A halo over ${t.name}: however badly this round goes for them, they can't finish it below zero.`,
         )
+        this.privateEffect(seat, t.id, '😇')
         return { ok: true }
       }
 
@@ -1653,6 +1753,11 @@ export class RoleManager {
         this.bankGrace(id, GRACE_FOR_SACRIFICE)
         this.privateResult(seat, `You gave ${t.name} 10 of your points. No strings. It's done.`)
         this.privateResult(t, 'Somebody at this table just handed you 10 of their own points.')
+        // Two SEPARATE private sends, matching the two privateResults above:
+        // the giver sees it land on the named target, the receiver only ever
+        // sees it land on their OWN seat -- never who it came from.
+        this.privateEffect(seat, t.id, '😇')
+        this.privateEffect(t, t.id, '😇')
         return { ok: true }
       }
 
@@ -1677,6 +1782,7 @@ export class RoleManager {
           seat,
           `Bet placed on ${t.name}: +3 for every trick they win this round, -1 for every trick they don't.`,
         )
+        this.privateEffect(seat, t.id, '🪞')
         return { ok: true }
       }
 
@@ -1712,6 +1818,7 @@ export class RoleManager {
             RoleDefs.getAbility(theirs)?.name ?? theirs
           }, and it is now yours too. They keep theirs — and you still have your turn to use it.`,
         )
+        this.privateEffect(seat, t.id, '🪞')
         return { ok: true, keepAbility: true }
       }
 
@@ -1723,6 +1830,9 @@ export class RoleManager {
           seat,
           `Tied to ${t.name}. At scoring you BOTH take whichever of your two rounds went better — if either of you wins, you both win.`,
         )
+        // Cast-time confirmation, private -- the PUBLIC trade() fires later,
+        // in settleMirror, once there's a score to actually show moving.
+        this.privateEffect(seat, t.id, '🔗')
         return { ok: true }
       }
 
@@ -1734,6 +1844,7 @@ export class RoleManager {
           seat,
           `The glass is set between you and ${t.name}. At scoring your two round scores trade places — whatever they earned is yours, and whatever you earned is theirs.`,
         )
+        this.privateEffect(seat, t.id, '🪞')
         return { ok: true }
       }
 

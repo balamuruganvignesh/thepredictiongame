@@ -42,7 +42,24 @@ export function BiddingModal({
   const secondsLeft = useCountdown(doubleDeadline)
   const windowOpen = !doubled && doubleDeadline != null && secondsLeft > 0
 
-  const picking = isMyTurn && !hasBid
+  // The chip you tapped gets a beat to punch in and glow before this whole
+  // section swaps to "waiting for the others" -- without it, a fast server
+  // ack (same box, basically instant) means the chips just vanish on click
+  // and the flourish never gets a frame.
+  const [confirming, setConfirming] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (confirming == null) return
+    const timer = setTimeout(() => setConfirming(null), 420)
+    return () => clearTimeout(timer)
+  }, [confirming])
+
+  const handleBid = (n: number) => {
+    setConfirming(n)
+    onBid(n)
+  }
+
+  const picking = (isMyTurn && !hasBid) || confirming != null
 
   return (
     <div className="backdrop backdrop--bidding">
@@ -74,12 +91,16 @@ export function BiddingModal({
             {Array.from({ length: cardsDealt + 1 }, (_, n) => {
               // The last bidder can't make the bids sum to the number of tricks.
               const forbidden = isLastBidder && sumSoFar + n === cardsDealt
+              const selected = confirming === n
+              const dimmed = confirming != null && !selected
               return (
                 <button
                   key={n}
-                  className={`bid-chip${forbidden ? ' is-forbidden' : ''}`}
-                  onClick={() => !forbidden && onBid(n)}
-                  disabled={forbidden}
+                  className={`bid-chip${forbidden ? ' is-forbidden' : ''}${
+                    selected ? ' bid-chip--selected' : ''
+                  }${dimmed ? ' bid-chip--dimmed' : ''}`}
+                  onClick={() => !forbidden && handleBid(n)}
+                  disabled={forbidden || confirming != null}
                   aria-label={forbidden ? `${n} — not allowed this round` : `Bid ${n}`}
                 >
                   {n}

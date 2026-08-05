@@ -45,7 +45,7 @@ export function Hand({
   const allowed = isPlayable ?? ((card: Card, cards: Card[]) => isLegalPlay(card, cards, leadSuit))
   return (
     <div className="hand" aria-label="Your hand">
-      {hand.map((card) => {
+      {hand.map((card, i) => {
         const key = cardKey(card)
         const barred = key === barredCard
         const legal = isMyTurn && !barred && allowed(card, hand)
@@ -65,6 +65,7 @@ export function Hand({
                     ? 'card-button--illusion'
                     : 'card-button--playable')
             }
+            style={{ animationDelay: `${i * 55}ms` }}
             onClick={() => legal && onPlay(card)}
             disabled={!legal}
             // The label stays honest: a screen reader shouldn't be fooled by a

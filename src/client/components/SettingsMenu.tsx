@@ -8,6 +8,7 @@ import { useState } from 'react'
 import type { RestartVote as RestartVoteState } from '@shared/protocol'
 import { DeckToggleButton } from './DeckToggle'
 import { RestartVoteButton } from './RestartVote'
+import { SoundToggleButton } from './SoundToggle'
 
 export function SettingsMenu({
   scoresOpen,
@@ -41,6 +42,7 @@ export function SettingsMenu({
           aria-label="Settings"
         >
           <DeckToggleButton className="settings__item" />
+          <SoundToggleButton className="settings__item" />
           <button
             className="dock__button settings__item"
             onClick={() => {

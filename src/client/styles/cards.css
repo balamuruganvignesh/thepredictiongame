@@ -20,6 +20,9 @@
     0 2px 6px rgb(0 0 0 / 45%);
   user-select: none;
   overflow: hidden;
+  transition:
+    box-shadow var(--t-normal) ease-out,
+    filter var(--t-normal) ease-out;
 }
 
 /* The sprite fills the wrapper exactly. `pixelated` is the pixel deck's whole
@@ -77,6 +80,20 @@
   transition:
     transform var(--t-quick) ease-out,
     filter var(--t-quick) ease-out;
+  /* A card only ever mounts fresh when it's actually new to the hand -- a
+     round's deal, a rewound card returning, an ability swapping one in --
+     never on a re-render, since React keeps the same DOM node for a card
+     that's just sitting there. So a plain mount animation IS the deal
+     animation, no "is this a deal" bookkeeping needed. The stagger comes from
+     each button's own animation-delay (index * 55ms, set inline). */
+  animation: deal-in 340ms var(--ease-pop) both;
+}
+
+@keyframes deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-46px) rotate(-10deg) scale(0.85);
+  }
 }
 
 /* Playable cards get a warm ring and lift under the cursor. */
@@ -174,12 +191,26 @@
     0 8px 18px rgb(0 0 0 / 55%);
 }
 
-/* Trick winner / losers. */
+/* Trick winner / losers. The winner gets a quick overshoot-then-settle punch
+   rather than snapping straight to its scaled-up size. */
 .card-slot--winner .card {
   box-shadow:
     0 0 0 3px var(--positive),
     0 6px 16px rgb(0 0 0 / 55%);
   transform: scale(1.12);
+  animation: trick-win 420ms var(--ease-pop);
+}
+
+@keyframes trick-win {
+  0% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1.12);
+  }
 }
 
 .card-slot--lost .card::after {

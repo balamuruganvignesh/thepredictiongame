@@ -60,7 +60,11 @@ export function Scoreboard({ players, history, totals, currentRound, onClose }: 
                           score == null ? '' : score > 0 ? 'is-good' : score < 0 ? 'is-bad' : ''
                         }
                       >
-                        {score ?? ''}
+                        {score != null && (
+                          <span key={score} className="score-pop">
+                            {score}
+                          </span>
+                        )}
                       </td>
                     )
                   })}

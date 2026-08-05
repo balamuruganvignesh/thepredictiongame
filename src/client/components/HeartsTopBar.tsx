@@ -46,7 +46,9 @@ export function HeartsTopBar({
         >
           <span className="chip__name">{player.name}</span>
           <span className={`chip__score${player.penalty === 0 ? ' is-good' : ' is-bad'}`}>
-            +{player.penalty} / {player.total}
+            <span key={`${player.penalty}-${player.total}`} className="score-pop">
+              +{player.penalty} / {player.total}
+            </span>
           </span>
         </div>
       ))}

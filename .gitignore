@@ -5,3 +5,6 @@ dist/
 
 .DS_Store
 .Rhistory
+
+graphify-out/
+!graphify-out/GRAPH_REPORT.md

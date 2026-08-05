@@ -48,6 +48,17 @@ function makeIO() {
     privateTo(id: string): string[] {
       return this.to(id, 'abilityResult').map((p) => (p as { message: string }).message)
     },
+    effects(): { kind: string; icon: string; sourceId?: string; targetId: string }[] {
+      return sent
+        .filter((e) => e.event === 'abilityEffect')
+        .map((e) => e.payload as { kind: string; icon: string; sourceId?: string; targetId: string })
+    },
+    /** PUBLIC-only effects (broadcast, not io.send) -- what the whole table sees. */
+    broadcastEffects(): { kind: string; icon: string; sourceId?: string; targetId: string }[] {
+      return sent
+        .filter((e) => e.event === 'abilityEffect' && e.to === '*')
+        .map((e) => e.payload as { kind: string; icon: string; sourceId?: string; targetId: string })
+    },
     errorsTo(id: string): string[] {
       return sent.filter((e) => e.to === id && e.event === 'actionError').map((e) => e.payload as string)
     },
@@ -144,6 +155,10 @@ function testReverseTime() {
   check('the prompt carries their current bid', prompts[0]?.currentBid === 2)
   check('the table is told, by role not by name', bus.announcements().some((m) => m.includes('REVERSE TIME') && !m.includes(me.name)))
   check('the ability is spent', roles.getRoleState(me)?.used === true)
+  check(
+    'a source-less impact lands on the named victim, never the anonymous Time Traveler',
+    bus.broadcastEffects().some((e) => e.kind === 'impact' && e.targetId === victim.id && !e.sourceId),
+  )
 
   // THEY pick the number -- and a rewrite ignores the last-bidder sum rule.
   bus.clear()
@@ -207,6 +222,10 @@ function testRewindGuards() {
   check('the table is told', bus.announcements().some((m) => m.includes('REWIND')))
   check('the victim is told their play came back', bus.privateTo(victim.id).length === 1)
   check('the ability is spent', roles.getRoleState(me)?.used === true)
+  check(
+    'a source-less impact lands on the victim, never the anonymous Time Traveler',
+    bus.broadcastEffects().some((e) => e.kind === 'impact' && e.targetId === victim.id && !e.sourceId),
+  )
 }
 
 function testAlternateUniverse() {
@@ -305,6 +324,11 @@ function testGuardianAngel() {
     bus.privateTo(angel.id).some((m) => m.includes('Grace')),
   )
   check('Grace is never announced', !bus.announcements().some((m) => m.includes('Grace')))
+  check(
+    'a source-less impact lands on the saved player only',
+    bus.broadcastEffects().some((e) => e.kind === 'impact' && e.targetId === saved.id && !e.sourceId) &&
+      !bus.broadcastEffects().some((e) => e.targetId === angel.id),
+  )
 }
 
 function testGraceOnlyWhenItHelps() {
@@ -366,6 +390,10 @@ function testIntercede() {
   check(
     'the shield eats the attack, and the message names no role',
     bus.announcements().some((m) => m.includes('A shield shattered') && !m.includes('Guardian')),
+  )
+  check(
+    'a source-less impact lands on the shielded player, naming no attacker',
+    bus.broadcastEffects().some((e) => e.kind === 'impact' && e.targetId === shielded.id && !e.sourceId),
   )
 
   for (const s of seats) s.bid = 1
@@ -448,6 +476,40 @@ function testIllusionScramblesEveryHand() {
   check('the order really is scrambled', moved)
 }
 
+// ---- The Joker ----------------------------------------------------------------
+
+function testBidChaosEffect() {
+  console.log('\n🃏 Bid Chaos (choreographed effect)')
+  // Every swap ability only lands SWAP_SUCCESS (75%) of the time, and a fizzle
+  // burns the turn without a re-roll -- so retry with a FRESH deal each time,
+  // same as other randomness in this file, until one actually lands.
+  let landed: { bus: ReturnType<typeof makeIO>; t1: Seat; t2: Seat } | null = null
+  let dealtOnce = false
+  for (let attempt = 0; attempt < 60 && !landed; attempt++) {
+    const { bus, roles, seats, dealt } = setup('joker', 'bid_chaos')
+    if (attempt === 0) dealtOnce = dealt
+    const [me, t1, t2] = seats
+    roles.setPhase('Playing')
+    t1.bid = 1
+    t2.bid = 2
+    roles.handleUseAbility(me, { targetId: t1.id, targetId2: t2.id })
+    if (bus.announcements().some((m) => m.includes('BID CHAOS'))) landed = { bus, t1, t2 }
+  }
+
+  check('the ability was dealt', dealtOnce)
+  check('the swap landed within 60 tries (75% odds each)', landed !== null)
+  if (!landed) return
+
+  const effects = landed.bus.broadcastEffects()
+  check(
+    'a choreographed trade fires between the two named targets, never the anonymous Joker',
+    effects.length === 1 &&
+      effects[0]!.kind === 'trade' &&
+      [landed.t1.id, landed.t2.id].includes(effects[0]!.sourceId ?? '') &&
+      [landed.t1.id, landed.t2.id].includes(effects[0]!.targetId),
+  )
+}
+
 // ---- The Mirrorer -----------------------------------------------------------
 
 function testMimic() {
@@ -514,6 +576,14 @@ function testTwinFate() {
     'the table is told they are tied, since both scores visibly move',
     bus.announcements().some((m) => m.includes('TWIN FATE')),
   )
+  const effects = bus.broadcastEffects()
+  check(
+    'a choreographed trade fires between the two named seats, not the anonymous actor',
+    effects.length === 1 &&
+      effects[0]!.kind === 'trade' &&
+      effects[0]!.sourceId === me.id &&
+      effects[0]!.targetId === partner.id,
+  )
 
   // The partner having the worse round is the version that costs you.
   const b = setup('mirrorer', 'twin_fate')
@@ -559,6 +629,14 @@ function testTwoWayMirror() {
     'the swap is announced — two scores visibly move',
     bus.announcements().some((m) => m.includes('TWO-WAY MIRROR')),
   )
+  const effects = bus.broadcastEffects()
+  check(
+    'a choreographed trade fires between the two named seats',
+    effects.length === 1 &&
+      effects[0]!.kind === 'trade' &&
+      effects[0]!.sourceId === me.id &&
+      effects[0]!.targetId === mark.id,
+  )
 }
 
 testReverseTime()
@@ -571,6 +649,7 @@ testHaloAndSacrifice()
 testIntercede()
 testRewindNotDealtInOneCardRounds()
 testIllusionScramblesEveryHand()
+testBidChaosEffect()
 testMimic()
 testTwinFate()
 testTwoWayMirror()

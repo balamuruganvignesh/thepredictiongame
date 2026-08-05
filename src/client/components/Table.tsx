@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
+import { EffectLayer } from './EffectLayer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
@@ -45,6 +46,21 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
   useEffect(() => {
     if (chatOpen) actions.markChatRead()
   }, [chatOpen, store.chat.length, actions])
+
+  // The bidding phase can end the instant YOUR bid lands -- you're the last
+  // to act, so the server flips everyone straight to playing. Unmounting the
+  // modal that fast cuts its own chip-selection flourish off before it can
+  // play a single frame, so hold it mounted a beat past the phase change
+  // instead of tying its lifetime directly to store.phase.
+  const [showBidding, setShowBidding] = useState(store.phase === 'bidding')
+  useEffect(() => {
+    if (store.phase === 'bidding') {
+      setShowBidding(true)
+      return
+    }
+    const timer = setTimeout(() => setShowBidding(false), 500)
+    return () => clearTimeout(timer)
+  }, [store.phase])
 
   // THE one display order for player lists: locked in at round 1, so the top
   // bar, score sheet, bid pills and target pickers always agree.
@@ -99,6 +115,8 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         trumpSuit={store.trumpSuit}
         players={chips}
       />
+
+      <EffectLayer effects={store.activeEffects} onDismiss={actions.dismissEffect} />
 
       {scoresOpen && (
         <Scoreboard
@@ -196,7 +214,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {store.phase === 'bidding' && !store.spectating && (
+      {showBidding && !store.spectating && (
         <BiddingModal
           cardsDealt={store.cardsDealt}
           trumpSuit={store.trumpSuit}

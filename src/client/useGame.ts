@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { Card } from '@shared/cards'
 import type {
+  AbilityEffect,
   ChatMessage,
   GameMode,
   GameStateUpdate,
@@ -30,6 +31,7 @@ import type {
 import { displayName } from '@shared/cards'
 import type { PassDirection } from '@shared/heartsRules'
 import { rememberName, rememberPlayerId, socket, storedPlayerId } from './socket'
+import { playAbilityEffect } from './sound'
 
 export type FeedCard = { id: number; message: string; secret: boolean; createdAt: number }
 
@@ -135,6 +137,12 @@ export type Store = {
    * overwrite the hand-reading you spent your own ability on.
    */
   abilityLog: string[]
+  /**
+   * Choreographed visuals queued from `abilityEffect`, keyed so a stale
+   * `onDismiss` from a fast-fired duplicate never clears the wrong instance.
+   * `EffectLayer` owns removing its own entries once their animation ends.
+   */
+  activeEffects: (AbilityEffect & { key: number })[]
 
   /** Epoch ms the post-bid Double window closes, or null when it isn't open. */
   doubleDeadline: number | null
@@ -193,6 +201,7 @@ const initialStore: Store = {
   roleState: null,
   roleBannerKey: 0,
   abilityLog: [],
+  activeEffects: [],
   doubleDeadline: null,
   doubled: false,
   restart: { votes: [], needed: 0, waiting: 0 },
@@ -230,6 +239,8 @@ type Action =
   | { type: 'roleSync'; data: RoleSync }
   | { type: 'announce'; message: string }
   | { type: 'abilityResult'; message: string }
+  | { type: 'abilityEffect'; effect: AbilityEffect }
+  | { type: 'dismissEffect'; key: number }
   | { type: 'doubleWindow'; seconds: number }
   | { type: 'doubleCommitted' }
   | { type: 'chat'; message: ChatMessage }
@@ -567,6 +578,16 @@ function reducer(state: Store, action: Action): Store {
         ],
       }
 
+    case 'abilityEffect':
+      return {
+        ...state,
+        nextId: state.nextId + 1,
+        activeEffects: [...state.activeEffects, { ...action.effect, key: state.nextId }],
+      }
+
+    case 'dismissEffect':
+      return { ...state, activeEffects: state.activeEffects.filter((e) => e.key !== action.key) }
+
     case 'dropFeed':
       return { ...state, feed: state.feed.filter((card) => card.id !== action.id) }
 
@@ -731,9 +752,25 @@ export function useGame() {
     socket.on('abilityResult', (data) =>
       dispatch({ type: 'abilityResult', message: data.message }),
     )
+    socket.on('abilityEffect', (data) => {
+      dispatch({ type: 'abilityEffect', effect: data })
+      playAbilityEffect(data)
+    })
 
     return () => {
       socket.removeAllListeners()
+    }
+  }, [])
+
+  // Dev-only escape hatch for smoke-testing EffectLayer without a server-side
+  // ability wired up to emit one yet.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    ;(window as unknown as { __fireEffect?: (effect: AbilityEffect) => void }).__fireEffect = (
+      effect,
+    ) => {
+      dispatch({ type: 'abilityEffect', effect })
+      playAbilityEffect(effect)
     }
   }, [])
 
@@ -828,6 +865,9 @@ export function useGame() {
       },
       markChatRead() {
         dispatch({ type: 'chatRead' })
+      },
+      dismissEffect(key: number) {
+        dispatch({ type: 'dismissEffect', key })
       },
     }),
     [],

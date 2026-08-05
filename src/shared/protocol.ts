@@ -6,9 +6,9 @@
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
-//                   abilityResult, roleAnnounce, roleSync, rebidPrompt,
-//                   snapshot, heartsRoundStart, passPrompt, passResult,
-//                   heartsState, heartsScoreUpdate, restartVote
+//                   abilityResult, roleAnnounce, abilityEffect, roleSync,
+//                   rebidPrompt, snapshot, heartsRoundStart, passPrompt,
+//                   passResult, heartsState, heartsScoreUpdate, restartVote
 //
 // Two games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
@@ -185,6 +185,25 @@ export type RoleState = {
 
 export type AbilityResult = { message: string }
 export type RoleAnnounce = { message: string }
+/**
+ * A choreographed visual to play on top of an ability's text line. Kept as
+ * its own event rather than folded into RoleAnnounce/AbilityResult so wiring
+ * one up is purely additive -- one extra broadcast call, never a change to
+ * the text-message contract those two already have consumers for.
+ *
+ * `trade` animates a point-to-point flight between two seats and is only
+ * safe where BOTH identities are already public in the same announcement
+ * (e.g. Bid Chaos names both swapped players). `impact` is a source-less
+ * landing effect on the target only -- what most abilities must use, since
+ * announce() deliberately never names the acting player and a visible
+ * flight FROM their seat would deanonymize a secret role.
+ */
+export type AbilityEffect = {
+  kind: 'trade' | 'impact'
+  icon: string
+  sourceId?: PlayerId
+  targetId: PlayerId
+}
 export type RoleSync = {
   bids?: Record<PlayerId, number>
   tricks?: Record<PlayerId, number>
@@ -369,6 +388,7 @@ export interface ServerToClientEvents {
   roleState: (data: RoleState) => void
   abilityResult: (data: AbilityResult) => void
   roleAnnounce: (data: RoleAnnounce) => void
+  abilityEffect: (data: AbilityEffect) => void
   roleSync: (data: RoleSync) => void
   illusion: (data: Illusion) => void
   rebidPrompt: (data: RebidPrompt) => void

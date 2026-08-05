@@ -45,13 +45,14 @@ export function PassModal({ hand, direction, toName, onPass }: Props) {
         </p>
 
         <div className="pass-hand">
-          {hand.map((card) => {
+          {hand.map((card, i) => {
             const chosen = picked.some((c) => isSameCard(c, card))
             return (
               <button
                 key={cardKey(card)}
                 type="button"
                 className={`card-button ${chosen ? 'card-button--picked' : 'card-button--playable'}`}
+                style={{ animationDelay: `${i * 55}ms` }}
                 onClick={() => toggle(card)}
                 aria-pressed={chosen}
                 aria-label={`${chosen ? 'Keep' : 'Pass'} the ${cardLabel(card)}`}

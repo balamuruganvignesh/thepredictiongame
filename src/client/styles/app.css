@@ -845,6 +845,38 @@ button.seat:hover {
 
 .card-slot__name.is-winner {
   color: var(--accent);
+  animation: crown-bounce 480ms var(--ease-pop);
+}
+
+@keyframes crown-bounce {
+  0% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Cards linger and fade instead of vanishing when a trick clears -- see the
+   sweep-state effect in TrickArea.tsx. */
+.trick__cards--sweeping .card-slot {
+  transition:
+    opacity 240ms ease-in,
+    transform 240ms ease-in;
+  opacity: 0;
+  transform: scale(0.85) translateY(6px);
+}
+
+/* A number that just changed -- score cells filling in, won/bid ticking up --
+   pops in the same way a played card does. */
+.score-pop {
+  display: inline-block;
+  animation: card-pop 220ms var(--ease-pop);
 }
 
 .trick__turn {
@@ -1045,11 +1077,102 @@ button.seat:hover {
   animation: role-glow 1.8s ease-in-out infinite;
 }
 
+/* The instant an ability actually fires, swap its idle glow for a one-shot
+   cast pulse -- the button holds this look for the same beat its popover
+   spends dimming the options you didn't pick (see QuickAbility's firingKey). */
+.dock__button--quick.is-firing {
+  animation: ability-cast 320ms var(--ease-pop);
+}
+
+@keyframes ability-cast {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 65%, transparent);
+  }
+  45% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Choreographed ability visuals, positioned off live chip coordinates (see
+   EffectLayer.tsx) rather than anything laid out here. Sits above the dock
+   and score sheet so a flight reads clearly, below modal backdrops so it
+   never blocks a decision the player has to make. */
+.effect-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.effect-badge,
+.effect-impact {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* 'trade': one badge per seat, each animating to the OTHER seat's position --
+   a literal crossing between two already-named players. */
+.effect-badge {
+  animation: effect-fly 600ms var(--ease-pop) forwards;
+}
+
+@keyframes effect-fly {
+  0% {
+    transform: translate(-50%, -50%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--to-x)), calc(-50% + var(--to-y)));
+    opacity: 0;
+  }
+}
+
+/* 'impact': a source-less landing pulse on the target only -- no directional
+   cue, since the acting player must stay anonymous for most abilities. */
+.effect-impact {
+  animation: effect-impact 450ms var(--ease-pop) forwards;
+}
+
+@keyframes effect-impact {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+  }
+  30% {
+    transform: translate(-50%, -50%) scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.7);
+    opacity: 0;
+  }
+}
+
 .quick__pop {
   --tilt: 0deg;
   width: min(320px, calc(100vw - 28px));
   padding: 12px 14px 10px;
   text-align: left;
+  transform-origin: bottom right;
+  animation: quick-pop 200ms var(--ease-pop);
+}
+
+@keyframes quick-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(8px);
+  }
 }
 
 .quick__name {
@@ -1181,6 +1304,39 @@ button.seat:hover {
   height: 3px;
   background: var(--danger);
   rotate: -38deg;
+}
+
+/* The chip you just tapped punches up and locks in green; its siblings step
+   back out of the way so the choice reads clearly before the modal swaps to
+   "waiting for the others". */
+.bid-chip--selected {
+  border-color: var(--positive);
+  background: var(--positive);
+  color: #0c2016;
+  animation: bid-chip-confirm 420ms var(--ease-pop) forwards;
+}
+
+@keyframes bid-chip-confirm {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--positive) 55%, transparent);
+  }
+  45% {
+    transform: scale(1.4);
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--positive) 35%, transparent);
+  }
+  100% {
+    transform: scale(1.16);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--positive) 0%, transparent);
+  }
+}
+
+.bid-chip--dimmed {
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+  opacity: 0.3;
+  transform: scale(0.85);
 }
 
 .modal__waiting {
@@ -1455,6 +1611,11 @@ button.seat:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    transform var(--t-quick) ease-out,
+    opacity var(--t-quick) ease-out,
+    background var(--t-quick) ease-out,
+    border-color var(--t-quick) ease-out;
 }
 
 .role__targets.is-big .role__target {
@@ -1466,6 +1627,34 @@ button.seat:hover {
 .role__target.is-selected {
   background: var(--primary);
   border-color: var(--accent);
+  animation: target-pick 260ms var(--ease-pop);
+}
+
+@keyframes target-pick {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* QuickAbility's own confirm flourish: the option you tapped punches up in
+   the ability's accent colour, its siblings step back -- same "one answer,
+   made obvious" language as the bidding chips. */
+.role__target--picked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #281e06;
+  animation: target-pick 320ms var(--ease-pop);
+}
+
+.role__target--dimmed {
+  opacity: 0.3;
+  transform: scale(0.92);
 }
 
 /* Time Branches picks a card out of your own hand. Scaled down from --card-w so
@@ -1618,6 +1807,15 @@ button.seat:hover {
   border-bottom: 1px solid color-mix(in srgb, var(--stroke) 30%, transparent);
   font-family: var(--font-heading);
   font-size: 1.15rem;
+  opacity: 0;
+  animation: standing-in var(--t-normal) var(--ease-pop) both;
+}
+
+@keyframes standing-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .modal--end.is-compact .standings li {
@@ -1627,6 +1825,24 @@ button.seat:hover {
 
 .standings li.is-winner {
   color: var(--accent);
+}
+
+.standings li.is-winner .standings__rank {
+  animation: trophy-bounce 700ms var(--ease-pop) 380ms both;
+}
+
+@keyframes trophy-bounce {
+  0% {
+    transform: scale(0) rotate(-15deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.3) rotate(8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
 }
 
 .standings__rank {

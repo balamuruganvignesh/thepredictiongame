@@ -61,7 +61,11 @@ export function HeartsScoresheet({
                         key={player.id}
                         className={score == null ? '' : score === 0 ? 'is-good' : 'is-bad'}
                       >
-                        {score ?? ''}
+                        {score != null && (
+                          <span key={score} className="score-pop">
+                            {score}
+                          </span>
+                        )}
                       </td>
                     )
                   })}

@@ -47,6 +47,7 @@ export function TopBar({ roundNumber, trickNumber, totalTricks, trumpSuit, playe
         return (
           <div
             key={player.id}
+            data-player-id={player.id}
             className={`chip${player.isTurn ? ' chip--turn' : ''}`}
             title={`${player.name}: ${player.won} won / ${player.bid ?? '—'} bid`}
           >
@@ -56,7 +57,9 @@ export function TopBar({ roundNumber, trickNumber, totalTricks, trumpSuit, playe
                 player.bid == null ? ' chip__score--none' : onTarget ? ' is-good' : ' is-bad'
               }`}
             >
-              {player.bid == null ? '—' : `${player.won} / ${player.bid}`}
+              <span key={`${player.won}-${player.bid}`} className="score-pop">
+                {player.bid == null ? '—' : `${player.won} / ${player.bid}`}
+              </span>
             </span>
           </div>
         )
