@@ -17,6 +17,7 @@ import { Scoreboard } from './Scoreboard'
 import { SettingsMenu } from './SettingsMenu'
 import { TopBar, type ChipData } from './TopBar'
 import { TrickArea } from './TrickArea'
+import { useEffectsEnabled } from '../effectsSettings'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -25,6 +26,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
   // The score sheet is open by default on desktop and opened on demand on
   // phones, where it would otherwise eat the table.
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
+  const { enabled: effectsEnabled } = useEffectsEnabled()
   const [chatOpen, setChatOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(0)
@@ -116,7 +118,11 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         players={chips}
       />
 
-      <EffectLayer effects={store.activeEffects} onDismiss={actions.dismissEffect} />
+      <EffectLayer
+        effects={store.activeEffects}
+        onDismiss={actions.dismissEffect}
+        enabled={effectsEnabled}
+      />
 
       {scoresOpen && (
         <Scoreboard

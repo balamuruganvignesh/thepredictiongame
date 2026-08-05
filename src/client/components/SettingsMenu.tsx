@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import type { RestartVote as RestartVoteState } from '@shared/protocol'
 import { DeckToggleButton } from './DeckToggle'
+import { EffectsToggleButton } from './EffectsToggle'
 import { RestartVoteButton } from './RestartVote'
 import { SoundToggleButton } from './SoundToggle'
 
@@ -42,6 +43,7 @@ export function SettingsMenu({
           aria-label="Settings"
         >
           <DeckToggleButton className="settings__item" />
+          <EffectsToggleButton className="settings__item" />
           <SoundToggleButton className="settings__item" />
           <button
             className="dock__button settings__item"

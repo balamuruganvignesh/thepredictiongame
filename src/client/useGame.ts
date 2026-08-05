@@ -32,7 +32,7 @@ import type {
 import { displayName } from '@shared/cards'
 import type { PassDirection } from '@shared/heartsRules'
 import { rememberName, rememberPlayerId, socket, storedPlayerId } from './socket'
-import { playAbilityEffect } from './sound'
+import { playAbilityEffect, playCardPlay, playRoundEnd, playTrickWin } from './sound'
 
 export type FeedCard = { id: number; message: string; secret: boolean; createdAt: number }
 
@@ -695,6 +695,11 @@ export function useGame() {
   const seatRef = useRef<{ roomCode: string | null; name: string }>({ roomCode: null, name: '' })
   seatRef.current = { roomCode: store.roomCode, name: store.myName }
 
+  // How many cards `trickUpdate` last reported in the live trick, so a card
+  // sound fires only for a genuinely NEW play, not the empty-plays broadcast
+  // that opens every trick or the shrink a Rewind causes mid-trick.
+  const lastPlaysLengthRef = useRef(0)
+
   useEffect(() => {
     socket.on('connect', () => {
       dispatch({ type: 'connected', value: true })
@@ -733,10 +738,20 @@ export function useGame() {
     )
     socket.on('illusion', (data) => dispatch({ type: 'illusion', cards: data.cards }))
     socket.on('rebidPrompt', (data) => dispatch({ type: 'rebidPrompt', data }))
-    socket.on('trickUpdate', (data) => dispatch({ type: 'trickUpdate', data }))
-    socket.on('trickResolved', (data) => dispatch({ type: 'trickResolved', data }))
+    socket.on('trickUpdate', (data) => {
+      if (data.plays.length > lastPlaysLengthRef.current) playCardPlay()
+      lastPlaysLengthRef.current = data.plays.length
+      dispatch({ type: 'trickUpdate', data })
+    })
+    socket.on('trickResolved', (data) => {
+      dispatch({ type: 'trickResolved', data })
+      playTrickWin()
+    })
     socket.on('scoreUpdate', (data) => dispatch({ type: 'score', data }))
-    socket.on('roundEnded', () => dispatch({ type: 'roundEnded' }))
+    socket.on('roundEnded', () => {
+      dispatch({ type: 'roundEnded' })
+      playRoundEnd()
+    })
     socket.on('gameEnded', (data) =>
       dispatch({ type: 'gameEnded', standings: data.standings, lowestWins: data.lowestWins }),
     )

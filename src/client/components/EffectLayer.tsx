@@ -7,6 +7,11 @@
 // no-source pulse on the target only, for abilities whose actor must stay
 // anonymous -- see AbilityEffect in shared/protocol.ts for why the split
 // exists.
+//
+// `enabled` (../effectsSettings) gates only the rendering below, never the
+// dismiss timer -- Effect's useEffect still runs and calls onDone on
+// schedule while disabled, so a muted-visuals table still clears its queue
+// instead of leaking an entry per ability into activeEffects forever.
 
 import { useEffect, useRef } from 'react'
 import type { AbilityEffect } from '@shared/protocol'
@@ -17,14 +22,20 @@ const IMPACT_MS = 450
 type Props = {
   effects: (AbilityEffect & { key: number })[]
   onDismiss: (key: number) => void
+  enabled: boolean
 }
 
-export function EffectLayer({ effects, onDismiss }: Props) {
+export function EffectLayer({ effects, onDismiss, enabled }: Props) {
   if (effects.length === 0) return null
   return (
     <div className="effect-layer">
       {effects.map((effect) => (
-        <Effect key={effect.key} effect={effect} onDone={() => onDismiss(effect.key)} />
+        <Effect
+          key={effect.key}
+          effect={effect}
+          enabled={enabled}
+          onDone={() => onDismiss(effect.key)}
+        />
       ))}
     </div>
   )
@@ -37,7 +48,15 @@ function seatCenter(id: string): { x: number; y: number } | null {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
-function Effect({ effect, onDone }: { effect: AbilityEffect; onDone: () => void }) {
+function Effect({
+  effect,
+  enabled,
+  onDone,
+}: {
+  effect: AbilityEffect
+  enabled: boolean
+  onDone: () => void
+}) {
   // The parent re-renders often; hold the latest callback in a ref so the
   // dismiss timer below is set up once per instance, not restarted on every
   // unrelated store update.
@@ -50,6 +69,8 @@ function Effect({ effect, onDone }: { effect: AbilityEffect; onDone: () => void 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  if (!enabled) return null
 
   const target = seatCenter(effect.targetId)
   // Defensive only: TopBar is always mounted during the 'game' view, so a

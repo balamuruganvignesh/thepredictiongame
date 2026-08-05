@@ -4,6 +4,7 @@
 // last-bidder number shows crossed out. Double is one click and FINAL.
 
 import { useEffect, useState } from 'react'
+import { playBidLock } from '../sound'
 import { trumpGlyph } from '../useGame'
 
 export type BidRow = { id: string; name: string; bid: number | null; isCurrentTurn: boolean }
@@ -56,6 +57,7 @@ export function BiddingModal({
 
   const handleBid = (n: number) => {
     setConfirming(n)
+    playBidLock()
     onBid(n)
   }
 

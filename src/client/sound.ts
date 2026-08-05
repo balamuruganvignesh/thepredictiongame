@@ -1,6 +1,9 @@
-// Tiny synthesized sound effects for EffectLayer's ability moments. No audio
-// assets -- every cue is one or two oscillators scheduled through the Web
-// Audio API, so there's nothing to source, license, or ship as a file.
+// Tiny synthesized sound effects for the table's moments -- chaos ability
+// effects, card plays, trick wins, round ends, bid lock-ins. No audio assets
+// -- every cue is one or two oscillators scheduled through the Web Audio API,
+// so there's nothing to source, license, or ship as a file. Mobile also gets
+// a `navigator.vibrate` pulse on the bigger moments, gated by this same mute
+// flag -- a muted table shouldn't keep buzzing either.
 
 import { useState } from 'react'
 import type { AbilityEffect } from '@shared/protocol'
@@ -43,6 +46,27 @@ function getAudio(): { ctx: AudioContext; master: GainNode } | null {
   }
   if (audioCtx.state === 'suspended') void audioCtx.resume()
   return { ctx: audioCtx, master: masterGain! }
+}
+
+/** Every exported cue below runs its synth through this one mute check. */
+function play(fn: (ctx: AudioContext, master: GainNode) => void) {
+  if (!isSoundEnabled()) return
+  const audio = getAudio()
+  if (!audio) return
+  fn(audio.ctx, audio.master)
+}
+
+/**
+ * Feature-detected -- most desktop browsers have no Vibration API at all, so
+ * this is a mobile-only no-op everywhere else. Tied to the SOUND flag, not
+ * ../effectsSettings' visual one: a buzz is feedback you feel, not something
+ * you watch, so it belongs with the channel that already covers "feedback
+ * you hear but don't see."
+ */
+function vibrate(pattern: number | number[]) {
+  if (!isSoundEnabled()) return
+  if (typeof navigator === 'undefined' || !navigator.vibrate) return
+  navigator.vibrate(pattern)
 }
 
 // Autoplay policy blocks audio until the page has seen a user gesture. An
@@ -163,9 +187,46 @@ const FALLBACK_VOICE: Record<AbilityEffect['kind'], VoiceName> = {
 }
 
 export function playAbilityEffect(effect: AbilityEffect) {
-  if (!isSoundEnabled()) return
-  const audio = getAudio()
-  if (!audio) return
   const voice = ICON_VOICE[effect.icon] ?? FALLBACK_VOICE[effect.kind]
-  VOICES[voice](audio.ctx, audio.master)
+  play((ctx, m) => VOICES[voice](ctx, m))
+  // Two seats are named in a trade, one in an impact -- the double-pulse vs.
+  // single-pulse mirrors that same shape by feel, not just by ear.
+  vibrate(effect.kind === 'trade' ? [12, 40, 12] : 15)
+}
+
+/** A card landing in the trick area -- deliberately the quietest cue here,
+ *  since it can fire dozens of times a round from every seat, not just yours. */
+export function playCardPlay() {
+  play((ctx, m) => tone(ctx, m, 640, { type: 'triangle', duration: 0.05, peak: 0.07 }))
+}
+
+/** A trick resolving, win or (Gravekeeper) voided win alike -- the void's own
+ *  curse cue narrates the twist right after this one. */
+export function playTrickWin() {
+  play((ctx, m) => {
+    tone(ctx, m, 700, { type: 'triangle', duration: 0.1, peak: 0.16 })
+    tone(ctx, m, 880, { type: 'triangle', delay: 0.07, duration: 0.2, peak: 0.18 })
+  })
+  vibrate(25)
+}
+
+/** A round settling -- shared by both games, since `roundEnded` is the one
+ *  broadcast Room fires from both `playRound` and `playHeartsRound`. */
+export function playRoundEnd() {
+  play((ctx, m) => {
+    tone(ctx, m, 880, { duration: 0.18, peak: 0.13 })
+    tone(ctx, m, 660, { delay: 0.12, duration: 0.22, peak: 0.13 })
+    tone(ctx, m, 523, { delay: 0.24, duration: 0.3, peak: 0.14 })
+  })
+  vibrate([20, 60, 20, 60, 30])
+}
+
+/** Your own bid locking in -- fired from BiddingModal's confirm flourish, not
+ *  a server round-trip, so it's instant even on a slow connection. No haptic:
+ *  it's already the direct result of a tap, so a buzz on top is redundant. */
+export function playBidLock() {
+  play((ctx, m) => {
+    tone(ctx, m, 380, { type: 'square', duration: 0.05, peak: 0.13 })
+    tone(ctx, m, 190, { type: 'square', delay: 0.03, duration: 0.09, peak: 0.11 })
+  })
 }
