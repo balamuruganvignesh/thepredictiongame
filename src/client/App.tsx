@@ -3,6 +3,7 @@ import { BackgroundFX } from './components/BackgroundFX'
 import { Feed } from './components/Feed'
 import { Join } from './components/Join'
 import { Lobby } from './components/Lobby'
+import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { Table } from './components/Table'
 import { useGame } from './useGame'
@@ -43,6 +44,8 @@ export default function App() {
       {(store.view === 'game' || store.view === 'gameover') &&
         (store.gameType === 'hearts' ? (
           <HeartsTable store={store} actions={actions} />
+        ) : store.gameType === 'golf' ? (
+          <GolfTable store={store} actions={actions} />
         ) : (
           <Table store={store} actions={actions} />
         ))}

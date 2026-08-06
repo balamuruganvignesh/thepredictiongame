@@ -3,7 +3,7 @@
 // joining by code puts you in whatever game that table is already set to.
 
 import { useEffect, useState } from 'react'
-import { Config, HeartsConfig } from '@shared/config'
+import { Config, GolfConfig, HeartsConfig } from '@shared/config'
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
@@ -21,6 +21,7 @@ export function Join({ connected, error, onJoin }: Props) {
   const [mode, setMode] = useState<'create' | 'join'>('create')
   const [game, setGame] = useState<GameType>('prediction')
   const isHearts = game === 'hearts'
+  const isGolf = game === 'golf'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
 
@@ -74,22 +75,34 @@ export function Join({ connected, error, onJoin }: Props) {
         {/* Joining by code: the table already has a game, so this screen
             stops advertising one and says so instead. */}
         <h1 className="join__title">
-          {creating ? (isHearts ? 'HEARTS' : 'THE PREDICTION GAME') : 'JOIN A TABLE'}
+          {creating ? (isHearts ? 'HEARTS' : isGolf ? 'GOLF' : 'THE PREDICTION GAME') : 'JOIN A TABLE'}
         </h1>
         <p className="join__subtitle">
-          {creating ? (isHearts ? 'take no tricks worth taking' : '5 up 5 down') : 'two games, one table'}
+          {creating
+            ? isHearts
+              ? 'take no tricks worth taking'
+              : isGolf
+                ? 'lowest grid wins'
+                : '5 up 5 down'
+            : 'three games, one table'}
         </p>
         <p className="join__blurb">
           {!creating ? (
             <>
-              You’ll land in whichever game that table is playing — The Prediction Game or Hearts.
-              The host picks.
+              You’ll land in whichever game that table is playing — The Prediction Game, Hearts, or
+              Golf. The host picks.
             </>
           ) : isHearts ? (
             <>
               Every ♥ is a point and the Q♠ is thirteen — and points are BAD. Duck them all, or take
               every one and shoot the moon. {HeartsConfig.minPlayers}–{HeartsConfig.maxPlayers}{' '}
               players.
+            </>
+          ) : isGolf ? (
+            <>
+              Six face-down cards each. Draw, swap, or flip to learn your grid — match a column and
+              it scores zero. Lowest total after {GolfConfig.totalHoles} holes wins.{' '}
+              {GolfConfig.minPlayers}–{GolfConfig.maxPlayers} players.
             </>
           ) : (
             <>
@@ -104,8 +117,8 @@ export function Join({ connected, error, onJoin }: Props) {
           <button
             type="button"
             role="tab"
-            aria-selected={!isHearts}
-            className={`segmented__option${!isHearts ? ' is-active' : ''}`}
+            aria-selected={game === 'prediction'}
+            className={`segmented__option${game === 'prediction' ? ' is-active' : ''}`}
             onClick={() => setGame('prediction')}
           >
             prediction
@@ -118,6 +131,15 @@ export function Join({ connected, error, onJoin }: Props) {
             onClick={() => setGame('hearts')}
           >
             hearts ♥
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isGolf}
+            className={`segmented__option${isGolf ? ' is-active' : ''}`}
+            onClick={() => setGame('golf')}
+          >
+            golf ⛳
           </button>
         </div>
         )}

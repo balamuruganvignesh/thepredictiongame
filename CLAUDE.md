@@ -4,12 +4,12 @@
 tricks they'll win each round, then play them out. Hit the prediction, score
 big; miss, and the score drops.
 
-**Two games live here.** The landing screen picks which game a NEW table opens
-on (carried on the `join` payload, applied by `Room.openOn` — only valid before
-anyone is seated), and a lobby card lets the host switch it afterwards between
-The Prediction Game and **Hearts** — see the Hearts section below. They share
-the table (roster, codes, chat, spectators, reconnect) and nothing else; the
-round loop forks once, in `Room.runGameLoop`.
+**Three games live here.** The landing screen picks which game a NEW table
+opens on (carried on the `join` payload, applied by `Room.openOn` — only valid
+before anyone is seated), and a lobby card lets the host switch it afterwards
+between The Prediction Game, **Hearts**, and **Golf** — see the Hearts and
+Golf sections below. They share the table (roster, codes, chat, spectators,
+reconnect) and nothing else; the round loop forks once, in `Room.runGameLoop`.
 
 Node + Socket.IO server, React + Vite client, one `src/shared/` folder imported
 by both. See README.md for the player-facing rules.
@@ -47,13 +47,19 @@ by both. See README.md for the player-facing rules.
   - `npx tsx scripts/hearts-test.ts` — every Hearts rule that is pure: the deck
     trim per table size, the forced opening club, the legality matrix, moon
     scoring, the passing cycle.
+  - `npx tsx scripts/golf-test.ts` — every Golf rule that is pure: card values
+    (including the Joker's -2 and a lone King's 0), column-match cancellation,
+    a worked-example grid score.
 - **Hearts end-to-end: `npx tsx scripts/hearts-playtest.ts <n> <target>`** (~1–3
   min). TypeScript rather than `.mjs` on purpose — the bots pick cards with the
   same shared `isLegalHeartsPlay` the browser uses, so **any rejection means the
   client and server disagree and a real round would hang**. Zero rejections is
   the pass condition.
-- All three socket-driven scripts take `PORT=` to hit a second server instance
-  when :3001 is busy with a dev server you'd rather not disturb.
+- **Golf end-to-end: `npx tsx scripts/golf-playtest.ts <n>`** (~1–2 min for a
+  full 9-hole game). Same TypeScript-on-purpose reasoning as Hearts' playtest,
+  and the same zero-rejections pass condition.
+- All socket-driven scripts take `PORT=` to hit a second server instance when
+  :3001 is busy with a dev server you'd rather not disturb.
 - Commit after each accepted chunk of work (user expects it).
 
 ## Architecture
@@ -70,9 +76,10 @@ legality is decided in the browser.
   table is a Socket.IO room keyed by its 4-letter code, and ALL state is
   instance state, because one process hosts many tables.
 - `src/server/engine/` — `bidding.ts`, `tricks.ts`, `scoring.ts`, `roles.ts`,
-  `deck.ts`, plus `hearts/` (`deck.ts`, `passing.ts`, `play.ts`, `scoring.ts`).
-  Phase managers talk to clients only through the narrow `EngineIO` interface
-  in `io.ts` — which is what lets the two games share one Room.
+  `deck.ts`, plus `hearts/` (`deck.ts`, `passing.ts`, `play.ts`, `scoring.ts`)
+  and `golf/` (`deck.ts`, `reveal.ts`, `turns.ts`, `scoring.ts`). Phase
+  managers talk to clients only through the narrow `EngineIO` interface in
+  `io.ts` — which is what lets all three games share one Room.
 - `src/client/useGame.ts` — all display state; a reducer fed by socket events.
 - `src/client/components/` — one per panel. `styles/tokens.css` is the design
   system: every color, font and radius comes from there, so restyling the whole
@@ -216,6 +223,10 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
 `PassManager` / `HeartsTrickManager` the way `RoleManager` is injected into
 `BiddingManager` / `TrickManager`.
 
+Golf (below) is the third game, added the same way: its own `golf*` protocol
+events, its own `src/server/engine/golf/` phase managers, its own
+`GolfTable.tsx`, no RoleManager either.
+
 - **3–7 players.** The whole deck is dealt every round, so a bigger table gets
   hands too short for the penalty cards to move. `Room.limits` returns the
   ACTIVE game's min/max — the seat cap on join stays at 10, and `canStart()` is
@@ -242,6 +253,63 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
 - Scores are golf: `gameEnded` carries `lowestWins` and the standings are sorted
   ascending. The game runs until a seat crosses the host-chosen target
   (50/100/200) and always finishes that round.
+
+## Golf
+
+The third game: six-card grids, nine holes, lowest cumulative total wins
+(`GolfConfig`, `src/shared/golfRules.ts`). Fixed round count like the
+Prediction Game (`runGolfGame` loops `GolfConfig.totalHoles`), not Hearts'
+"until someone crosses a target".
+
+- **2–6 players.** `Room.limits` adds Golf as a third branch alongside
+  Hearts/Prediction; the join-time seat cap still stays at `Config.maxPlayers`
+  (10), same as it does for Hearts — `canStart()` is what actually refuses an
+  over-large Golf table.
+- **The one privacy model this app doesn't otherwise have: nobody sees their
+  own face-down cards either.** Every other game always shows a player their
+  own full hand privately; Golf's live state (`golfState`) is almost entirely
+  PUBLIC — every seat's grid, with `null` standing in for any slot still
+  face-down, the same shape for the grid's own owner as for everyone else. The
+  one private moment is the card you just drew (`golfDrawResult`, sent only to
+  the acting seat), before you decide what to do with it.
+- **A turn is two sequential waits, not one** — `GolfTurnManager.runTurnPhase`
+  chains `waitForDraw` (stock or discard) into `waitForResolve` (swap into a
+  slot, or discard-and-flip a still-face-down one), the same two-stage shape
+  `BiddingManager` already uses for bid-then-double-window. No turn timers
+  either wait: a disconnected seat auto-draws from stock, then auto-resolves
+  via the "swap in if it beats your worst known card, else learn something
+  with a flip, else you have to swap it in somewhere" heuristic
+  (`autoResolve`) — the same "least damaging" spirit as Hearts' `autoPlay`.
+- **`discardAndFlip` is only legal on a card drawn from stock.** A card taken
+  from the discard pile is already known information and must be placed
+  (`swap`) — the standard rule that stops an infinite pass-through, enforced
+  in `GolfTurnManager.handleResolve` by checking `pendingSource`.
+- **The stock and discard piles live on `GolfTurnManager`, never on `Seat`** —
+  they're table furniture, like the Prediction Game's deck. If the stock ever
+  runs dry mid-hole, `reshuffleDiscardIntoStock` keeps the current discard top
+  where it is and shuffles everything under it into a fresh stock; the total
+  card count across both piles never actually changes turn to turn (a draw
+  always returns exactly one card to the discard pile), so this is a rare
+  path, not a required one.
+- **The "last lap"**: the moment any seat's `golfRevealed` is all `true`,
+  `finalLapTriggeredBy` locks in and every OTHER seat gets exactly one more
+  turn (`finalLapRemaining`, one entry per remaining seat) before
+  `scoreGolfHole` runs. The trigger check is guarded on
+  `!this.finalLapTriggeredBy`, so a second seat completing its own grid during
+  its final-lap turn never re-triggers or extends the lap.
+- **Column scoring**: `golfRules.gridScore` sums 3 columns
+  (`grid[i]`/`grid[i+3]` for `i` in 0-2); two cards of the same RANK in a
+  column cancel it to 0, even two Kings (which would already be 0 on their
+  own — the cancellation is about the match, not the value). Card values:
+  Joker −2, King 0, Ace 1, 2–10 face value, J/Q 10 (`cardValue`). At
+  `scoreGolfHole`, every remaining face-down card is revealed (win or lose,
+  the whole grid is shown) before the total is added to `seat.totalScore` —
+  **Golf reuses the Prediction/Hearts `totalScore`/`lastRoundScore` fields
+  directly rather than adding a new score field**, since the shape is
+  identical.
+- Jokers are dealt IN, always, regardless of table size — a permanent Golf
+  rule (`dealGolfGrids` calls `buildFullDeck(true)`), unlike the Prediction
+  Game's overflow-only joker logic.
 
 ## UI conventions (user-driven, keep these)
 
@@ -276,11 +344,11 @@ takes no RoleManager — if a Hearts role set is ever added, inject it into
   SCORES menu item toggles it.
 - Top bar: trump glyph, Round X/Y, Hand K/M, per-player "won / bid" chips
   (green on-target / red off, accent ring = turn).
-- **The dock is deliberately small: SETTINGS + CHAT in both games, plus ROLE
+- **The dock is deliberately small: SETTINGS + CHAT in every game, plus ROLE
   and ABILITY in chaos.** Everything that isn't a moment-to-moment action —
   which card art renders, the score sheet toggle, the restart vote — lives
   behind `SettingsMenu.tsx`, a popover opened from one SETTINGS button and
-  shared by both games' tables. A live restart vote still shows through as a
+  shared by every game's table. A live restart vote still shows through as a
   badge on the closed SETTINGS button (`restart.votes.length`), so a vote
   in progress is never missed just because it's tucked in the menu.
 - **`SettingsMenu`'s popover must clear the chaos `.quick` column, not

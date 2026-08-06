@@ -10,6 +10,12 @@ import type {
   GameMode,
   GameStateUpdate,
   GameType,
+  GolfDrawResult,
+  GolfDrawSource,
+  GolfResolveAction,
+  GolfRoundStart,
+  GolfScoreUpdate,
+  GolfState,
   HeartsRoundStart,
   HeartsScoreUpdate,
   HeartsState,
@@ -71,6 +77,38 @@ const emptyHearts: HeartsStore = {
   received: [],
 }
 
+/**
+ * The Golf slice. Only meaningful while `gameType === 'golf'`. Unlike every
+ * other game's private `hand`, `grids` is fully public -- nobody sees their
+ * own face-down cards either, so this is the same shape everyone at the
+ * table receives.
+ */
+export type GolfStore = {
+  holeNumber: number
+  grids: Record<string, (Card | null)[]>
+  discardTop: Card | null
+  stockCount: number
+  currentTurnId: string | null
+  /** The current-turn seat has drawn and is choosing swap vs. discard-and-flip. */
+  awaitingResolve: boolean
+  finalLap: boolean
+  finalLapTriggeredBy: string | null
+  /** A card YOU drew and haven't placed yet -- the one private moment in Golf. */
+  pendingDraw: { card: Card; source: GolfDrawSource } | null
+}
+
+const emptyGolf: GolfStore = {
+  holeNumber: 0,
+  grids: {},
+  discardTop: null,
+  stockCount: 0,
+  currentTurnId: null,
+  awaitingResolve: false,
+  finalLap: false,
+  finalLapTriggeredBy: null,
+  pendingDraw: null,
+}
+
 export type Store = {
   connected: boolean
   joinError: string | null
@@ -82,6 +120,7 @@ export type Store = {
   /** Which game this table is playing. Everything below branches off it. */
   gameType: GameType
   hearts: HeartsStore
+  golf: GolfStore
   /** Hearts standings read the other way up: fewest penalty points wins. */
   lowestWins: boolean
   /** Watching a game that was already running: no hand, no turn, no abilities. */
@@ -176,6 +215,7 @@ const initialStore: Store = {
   lobby: null,
   gameType: 'prediction',
   hearts: emptyHearts,
+  golf: emptyGolf,
   lowestWins: false,
   spectating: false,
   watchedSeat: null,
@@ -239,6 +279,11 @@ type Action =
   | { type: 'passSubmitted' }
   | { type: 'heartsState'; data: HeartsState }
   | { type: 'heartsScore'; data: HeartsScoreUpdate }
+  | { type: 'golfRoundStart'; data: GolfRoundStart }
+  | { type: 'golfState'; data: GolfState }
+  | { type: 'golfDrawResult'; data: GolfDrawResult }
+  | { type: 'golfResolveSubmitted' }
+  | { type: 'golfScore'; data: GolfScoreUpdate }
   | { type: 'roleState'; data: RoleState }
   | { type: 'roleSync'; data: RoleSync }
   | { type: 'announce'; message: string }
@@ -302,6 +347,7 @@ function reducer(state: Store, action: Action): Store {
         lobby: action.data,
         gameType: action.data.gameType,
         hearts: { ...emptyHearts, targetScore: action.data.targetScore },
+        golf: emptyGolf,
         names,
         totals,
         history: {},
@@ -543,6 +589,62 @@ function reducer(state: Store, action: Action): Store {
       }
     }
 
+    // ---- Golf ---------------------------------------------------------------
+
+    case 'golfRoundStart': {
+      const { data } = action
+      const order =
+        data.holeNumber === 1 || state.order.length === 0 ? [...data.turnOrder] : state.order
+      return {
+        ...state,
+        view: 'game',
+        gameType: 'golf',
+        standings: null,
+        roundNumber: data.holeNumber,
+        turnOrder: data.turnOrder,
+        order,
+        history: data.holeNumber === 1 ? {} : state.history,
+        phase: 'passing',
+        golf: { ...emptyGolf, holeNumber: data.holeNumber },
+      }
+    }
+
+    case 'golfState':
+      return {
+        ...state,
+        golf: {
+          ...state.golf,
+          grids: action.data.grids,
+          discardTop: action.data.discardTop,
+          stockCount: action.data.stockCount,
+          currentTurnId: action.data.currentTurnId,
+          awaitingResolve: action.data.awaitingResolve,
+          finalLap: action.data.finalLap,
+          finalLapTriggeredBy: action.data.finalLapTriggeredBy,
+        },
+      }
+
+    case 'golfDrawResult':
+      return { ...state, golf: { ...state.golf, pendingDraw: action.data } }
+
+    case 'golfResolveSubmitted':
+      return { ...state, golf: { ...state.golf, pendingDraw: null } }
+
+    case 'golfScore': {
+      const { data } = action
+      const totals = { ...state.totals }
+      const roundScores: Record<string, number> = {}
+      for (const line of data.results) {
+        totals[line.id] = line.totalScore
+        roundScores[line.id] = line.gridScore
+      }
+      return {
+        ...state,
+        totals,
+        history: { ...state.history, [data.holeNumber]: roundScores },
+      }
+    }
+
     case 'roleState': {
       // A fresh round intro replays the reveal banner + ability slot roll.
       const bump = action.data.roundIntro ? state.roleBannerKey + 1 : state.roleBannerKey
@@ -652,6 +754,19 @@ function reducer(state: Store, action: Action): Store {
               mustLeadCard: data.hearts.mustLeadCard,
             }
           : emptyHearts,
+        golf: data.golf
+          ? {
+              holeNumber: data.golf.holeNumber,
+              grids: data.golf.grids,
+              discardTop: data.golf.discardTop,
+              stockCount: data.golf.stockCount,
+              currentTurnId: data.golf.currentTurnId,
+              awaitingResolve: data.golf.awaitingResolve,
+              finalLap: data.golf.finalLap,
+              finalLapTriggeredBy: data.golf.finalLapTriggeredBy,
+              pendingDraw: data.golf.pendingDraw,
+            }
+          : emptyGolf,
         phase:
           data.phase === 'Playing' ? 'playing' : data.phase === 'Passing' ? 'passing' : 'bidding',
         bids: data.bids,
@@ -761,6 +876,10 @@ export function useGame() {
     socket.on('passResult', (data) => dispatch({ type: 'passResult', data }))
     socket.on('heartsState', (data) => dispatch({ type: 'heartsState', data }))
     socket.on('heartsScoreUpdate', (data) => dispatch({ type: 'heartsScore', data }))
+    socket.on('golfRoundStart', (data) => dispatch({ type: 'golfRoundStart', data }))
+    socket.on('golfState', (data) => dispatch({ type: 'golfState', data }))
+    socket.on('golfDrawResult', (data) => dispatch({ type: 'golfDrawResult', data }))
+    socket.on('golfScoreUpdate', (data) => dispatch({ type: 'golfScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
@@ -872,6 +991,19 @@ export function useGame() {
       },
       playCard(card: Card) {
         socket.emit('playCard', card)
+      },
+      /** Golf: your two starting flips. */
+      revealInitial(slots: [number, number]) {
+        socket.emit('golfRevealInitial', slots)
+      },
+      /** Golf: draw from the stock or take the discard pile's top card. */
+      golfDraw(source: GolfDrawSource) {
+        socket.emit('golfDraw', source)
+      },
+      /** Golf: what to do with the card you just drew. */
+      golfResolve(resolveAction: GolfResolveAction) {
+        dispatch({ type: 'golfResolveSubmitted' })
+        socket.emit('golfResolve', resolveAction)
       },
       useAbility(payload: UseAbilityPayload) {
         socket.emit('useAbility', payload)

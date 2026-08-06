@@ -69,6 +69,23 @@ export const HeartsConfig = {
 
 export type HeartsTargetScore = (typeof HeartsConfig.targetScoreOptions)[number]
 
+/**
+ * Golf. Fixed round count like the Prediction Game (nine holes, not "until
+ * someone crosses a target" like Hearts) -- lowest cumulative score when the
+ * ninth hole ends wins.
+ */
+export const GolfConfig = {
+  minPlayers: 2,
+  maxPlayers: 6,
+
+  totalHoles: 9,
+
+  // Pacing.
+  revealPause: 2, // after everyone's initial two cards are up, before turns start
+  turnPause: 1, // beat after a swap/flip lands, so it can be read
+  holeEndPause: 4, // scoreboard reading time between holes
+} as const
+
 export const TOTAL_ROUNDS = Config.cardSequence.length
 
 export function trumpForRound(roundNumber: number): string {

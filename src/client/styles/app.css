@@ -1973,6 +1973,150 @@ button.seat:hover {
   color: var(--text-muted);
 }
 
+/* ---- Golf -------------------------------------------------------------------- */
+
+.golf-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  max-width: min(96vw, 1100px);
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 20px;
+  background: rgb(14 14 18 / 75%);
+}
+
+.golf-piles {
+  display: flex;
+  gap: 22px;
+  align-items: flex-end;
+}
+
+.golf-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.golf-pile__label {
+  color: var(--text-faint);
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.golf-pile__count {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.golf-pile__button {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  border-radius: var(--card-radius);
+  transition: transform var(--t-quick) var(--ease-pop);
+}
+
+.golf-pile__button:disabled {
+  cursor: default;
+}
+
+.golf-pile__button:not(:disabled):hover {
+  transform: translateY(-4px);
+}
+
+.golf-pile__button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.golf-pile__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--card-w);
+  height: var(--card-h);
+  color: var(--text-faint);
+  font-size: 0.7rem;
+}
+
+.golf-grids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.golf-panel {
+  --card-w: clamp(28px, 3.6vw, 42px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  min-width: calc(var(--card-w) * 3.6);
+}
+
+.golf-panel--turn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.golf-panel__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+}
+
+.golf-panel--turn .golf-panel__name {
+  color: var(--accent);
+}
+
+.golf-panel__score {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+}
+
+.golf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--card-w));
+  gap: 6px;
+}
+
+.golf-grid--interactive {
+  --card-w: clamp(46px, 7vw, 68px);
+  gap: 10px;
+}
+
+.golf-resolve__hint {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+}
+
+.golf-resolve__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.golf-resolve__card-label {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
 /* ---- Responsive -------------------------------------------------------------- */
 
 @media (max-width: 1099px) {
@@ -2046,6 +2190,20 @@ button.seat:hover {
   .feed {
     top: auto;
     bottom: 62px;
+  }
+
+  .golf-board {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .golf-panel {
+    --card-w: clamp(24px, 8vw, 34px);
+    padding: 6px;
+  }
+
+  .golf-grid--interactive {
+    --card-w: clamp(38px, 15vw, 54px);
   }
 }
 

@@ -2,18 +2,20 @@
 //
 // Client -> Server: join, toggleReady, startGame, setMode, setGameType,
 //                   setTargetScore, submitBid, submitRebid, declareDouble,
-//                   playCard, passCards, useAbility, requestState, voteRestart
+//                   playCard, passCards, useAbility, requestState, voteRestart,
+//                   golfRevealInitial, golfDraw, golfResolve
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
 //                   abilityResult, roleAnnounce, abilityEffect, roleSync,
 //                   rebidPrompt, snapshot, heartsRoundStart, passPrompt,
-//                   passResult, heartsState, heartsScoreUpdate, restartVote
+//                   passResult, heartsState, heartsScoreUpdate, restartVote,
+//                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate
 //
-// Two games share this protocol. Everything about the table -- joining, the
+// Three games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
-// bidding events belong to the Prediction Game and the hearts* / pass* events
-// to Hearts, and neither game ever emits the other's.
+// bidding events belong to the Prediction Game, the hearts* / pass* events to
+// Hearts, and the golf* events to Golf -- no game ever emits another's.
 
 import type { Card, Suit } from './cards'
 import type { PassDirection } from './heartsRules'
@@ -21,7 +23,7 @@ import type { PassDirection } from './heartsRules'
 export type PlayerId = string
 export type GameMode = 'classic' | 'chaos'
 /** Which game this table is playing. Chaos is a Prediction Game mode only. */
-export type GameType = 'prediction' | 'hearts'
+export type GameType = 'prediction' | 'hearts' | 'golf'
 export type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
 // ---- Lobby ------------------------------------------------------------------
@@ -322,6 +324,64 @@ export type HeartsSnapshot = {
   mustLeadCard: Card | null
 }
 
+// ---- Golf ---------------------------------------------------------------
+//
+// Deliberately its own set of events, like Hearts. The one thing that makes
+// Golf different from every other game here: nobody sees their own face-down
+// cards either -- a player only knows what's been flipped face-up, exactly
+// like everyone watching them. So almost all of Golf's live state is public
+// and fits in one broadcast (`golfState`); the single private moment is the
+// card you just drew, before you decide what to do with it.
+
+export type GolfRoundStart = {
+  holeNumber: number
+  turnOrder: PlayerId[]
+  dealerId: PlayerId
+}
+
+export type GolfDrawSource = 'stock' | 'discard'
+
+export type GolfResolveAction =
+  | { type: 'swap'; slot: number }
+  /** Only legal when the held card came from the stock pile. */
+  | { type: 'discardAndFlip'; slot: number }
+
+/**
+ * The live public table: every seat's grid (a face-down slot is `null` for
+ * EVERYONE, including its own owner), the piles, and whose turn it is.
+ */
+export type GolfState = {
+  grids: Record<PlayerId, (Card | null)[]>
+  discardTop: Card | null
+  stockCount: number
+  currentTurnId: PlayerId | null
+  /** The current-turn seat has drawn and is choosing swap vs. discard-and-flip. */
+  awaitingResolve: boolean
+  finalLap: boolean
+  /** Whoever flipped their grid all face-up and triggered the last lap. */
+  finalLapTriggeredBy: PlayerId | null
+}
+
+/** Sent only to the seat who just drew -- the one private moment in Golf. */
+export type GolfDrawResult = { card: Card; source: GolfDrawSource }
+
+export type GolfHoleResult = { id: PlayerId; gridScore: number; totalScore: number }
+export type GolfScoreUpdate = { holeNumber: number; results: GolfHoleResult[] }
+
+/** The Golf half of a reconnect snapshot; null while playing another game. */
+export type GolfSnapshot = {
+  holeNumber: number
+  grids: Record<PlayerId, (Card | null)[]>
+  discardTop: Card | null
+  stockCount: number
+  currentTurnId: PlayerId | null
+  awaitingResolve: boolean
+  finalLap: boolean
+  finalLapTriggeredBy: PlayerId | null
+  /** A card this viewer drew and hasn't resolved yet, so a refresh keeps it. */
+  pendingDraw: GolfDrawResult | null
+}
+
 // ---- Reconnect --------------------------------------------------------------
 
 /**
@@ -333,8 +393,10 @@ export type Snapshot = {
   roster: RosterEntry[]
   mode: GameMode
   gameType: GameType
-  /** Everything Hearts-specific; null when the table is playing the other game. */
+  /** Everything Hearts-specific; null when the table is playing another game. */
   hearts: HeartsSnapshot | null
+  /** Everything Golf-specific; null when the table is playing another game. */
+  golf: GolfSnapshot | null
   roundNumber: number
   cardsDealt: number
   trumpSuit: string
@@ -407,6 +469,10 @@ export interface ServerToClientEvents {
   passResult: (data: PassResult) => void
   heartsState: (data: HeartsState) => void
   heartsScoreUpdate: (data: HeartsScoreUpdate) => void
+  golfRoundStart: (data: GolfRoundStart) => void
+  golfState: (data: GolfState) => void
+  golfDrawResult: (data: GolfDrawResult) => void
+  golfScoreUpdate: (data: GolfScoreUpdate) => void
   restartVote: (data: RestartVote) => void
   /** Spectator-only: the hand of whichever seat they're currently watching. */
   watchedHand: (data: WatchedHand) => void
@@ -438,6 +504,12 @@ export interface ClientToServerEvents {
   declareDouble: () => void
   playCard: (card: Card) => void
   useAbility: (payload: UseAbilityPayload) => void
+  /** Golf: your two starting flips. */
+  golfRevealInitial: (slots: [number, number]) => void
+  /** Golf: draw from the stock or take the discard pile's top card. */
+  golfDraw: (source: GolfDrawSource) => void
+  /** Golf: what to do with the card you just drew. */
+  golfResolve: (action: GolfResolveAction) => void
   requestState: () => void
   chat: (text: string) => void
   /**

@@ -3,13 +3,15 @@
 // because a single process hosts many tables at once.
 
 import type { Server as SocketServer } from 'socket.io'
-import { Config, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
+import { Config, GolfConfig, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
 import type { Card } from '@shared/cards'
 import type {
   ChatMessage,
   ClientToServerEvents,
   GameMode,
   GameType,
+  GolfResolveAction,
+  GolfSnapshot,
   HeartsSnapshot,
   RestartVote,
   RosterEntry,
@@ -20,6 +22,7 @@ import type {
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
 import { passDirection, passTargetIndex } from '@shared/heartsRules'
+import { GRID_SIZE } from '@shared/golfRules'
 import type { Seat, Spectator } from './types'
 import { sleep } from './types'
 import type { EngineIO } from './engine/io'
@@ -32,6 +35,10 @@ import { dealHearts } from './engine/hearts/deck'
 import { PassManager } from './engine/hearts/passing'
 import { HeartsTrickManager } from './engine/hearts/play'
 import { scoreHeartsRoundForSeats } from './engine/hearts/scoring'
+import { dealGolfGrids } from './engine/golf/deck'
+import { GolfRevealManager } from './engine/golf/reveal'
+import { GolfTurnManager } from './engine/golf/turns'
+import { scoreGolfHole } from './engine/golf/scoring'
 import { postGameEndedToDiscord, postGameAbandonedToDiscord } from './discord'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
@@ -64,6 +71,9 @@ export class Room {
   private targetScore: number = HeartsConfig.defaultTargetScore
   private passing: PassManager
   private heartsTricks: HeartsTrickManager
+  private golfReveal: GolfRevealManager
+  private golfTurns: GolfTurnManager
+  private golfDealerIndex = 0
 
   // Round state, kept so a reconnecting client can be handed a full snapshot.
   private roundNumber = 0
@@ -127,6 +137,10 @@ export class Room {
     // Hearts-specific role manager could be injected here later the same way.
     this.passing = new PassManager(this.io)
     this.heartsTricks = new HeartsTrickManager(this.io)
+
+    // Golf. No RoleManager either -- chaos roles are a Prediction Game feature.
+    this.golfReveal = new GolfRevealManager(this.io)
+    this.golfTurns = new GolfTurnManager(this.io)
   }
 
   // ---- Which game --------------------------------------------------------
@@ -135,11 +149,15 @@ export class Room {
     return this.gameType === 'hearts'
   }
 
+  private get isGolf(): boolean {
+    return this.gameType === 'golf'
+  }
+
   /** Table size limits for the game currently selected. */
   private get limits(): { min: number; max: number } {
-    return this.isHearts
-      ? { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
-      : { min: Config.minPlayers, max: Config.maxPlayers }
+    if (this.isHearts) return { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
+    if (this.isGolf) return { min: GolfConfig.minPlayers, max: GolfConfig.maxPlayers }
+    return { min: Config.minPlayers, max: Config.maxPlayers }
   }
 
   // ---- Roster ---------------------------------------------------------------
@@ -224,6 +242,8 @@ export class Room {
       tricksWon: 0,
       collected: [],
       passSelection: null,
+      golfGrid: [],
+      golfRevealed: new Array(GRID_SIZE).fill(false),
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
@@ -268,6 +288,8 @@ export class Room {
       this.tricks.onSeatDisconnected(seat)
       this.passing.onSeatDisconnected(seat)
       this.heartsTricks.onSeatDisconnected(seat)
+      this.golfReveal.onSeatDisconnected(seat)
+      this.golfTurns.onSeatDisconnected(seat)
       // Their vote goes with them, and the bar drops with the table size.
       this.settleRestartVote()
     }
@@ -363,6 +385,8 @@ export class Room {
         tricksWon: 0,
         collected: [],
         passSelection: null,
+        golfGrid: [],
+        golfRevealed: new Array(GRID_SIZE).fill(false),
         totalScore: 0,
         lastRoundScore: null,
         disconnectedAt: null,
@@ -460,25 +484,25 @@ export class Room {
    */
   openOn(gameType: GameType) {
     if (this.seats.length > 0 || this.gameState !== 'Lobby') return
-    if (gameType !== 'prediction' && gameType !== 'hearts') return
+    if (gameType !== 'prediction' && gameType !== 'hearts' && gameType !== 'golf') return
     this.gameType = gameType
   }
 
-  /** Switches the table between the two games. Host only, lobby only. */
+  /** Switches the table between games. Host only, lobby only. */
   setGameType(seat: Seat, gameType: GameType) {
     if (this.gameState !== 'Lobby') return
     if (!this.isHost(seat)) {
       this.io.send(seat, 'actionError', 'Only the host can change the game.')
       return
     }
-    if (gameType !== 'prediction' && gameType !== 'hearts') return
+    if (gameType !== 'prediction' && gameType !== 'hearts' && gameType !== 'golf') return
     if (this.gameType === gameType) return
     this.gameType = gameType
-    // Chaos roles are a Prediction Game feature; a Hearts table is always plain.
-    if (gameType === 'hearts') this.roles.setMode('classic')
-    this.systemChat(
-      gameType === 'hearts' ? 'The table switches to Hearts ♥' : 'The table switches to The Prediction Game',
-    )
+    // Chaos roles are a Prediction Game feature; every other table is always plain.
+    if (gameType !== 'prediction') this.roles.setMode('classic')
+    const label =
+      gameType === 'hearts' ? 'Hearts ♥' : gameType === 'golf' ? 'Golf ⛳' : 'The Prediction Game'
+    this.systemChat(`The table switches to ${label}`)
     this.broadcastLobby()
   }
 
@@ -537,6 +561,27 @@ export class Room {
     this.lastActivity = Date.now()
     if (!this.isHearts) return
     this.passing.handlePassSelection(seat, cards)
+  }
+
+  /** Golf: this seat's two starting flips. */
+  golfRevealInitial(seat: Seat, slots: unknown) {
+    this.lastActivity = Date.now()
+    if (!this.isGolf) return
+    this.golfReveal.handleReveal(seat, slots)
+  }
+
+  /** Golf: draw from the stock or take the discard pile's top card. */
+  golfDraw(seat: Seat, source: unknown) {
+    this.lastActivity = Date.now()
+    if (!this.isGolf) return
+    this.golfTurns.handleDraw(seat, source)
+  }
+
+  /** Golf: what to do with the card just drawn. */
+  golfResolve(seat: Seat, action: GolfResolveAction) {
+    this.lastActivity = Date.now()
+    if (!this.isGolf) return
+    this.golfTurns.handleResolve(seat, action)
   }
 
   useAbility(seat: Seat, payload: UseAbilityPayload) {
@@ -629,6 +674,8 @@ export class Room {
     this.tricks.cancel()
     this.passing.cancel()
     this.heartsTricks.cancel()
+    this.golfReveal.cancel()
+    this.golfTurns.cancel()
 
     postGameAbandonedToDiscord({
       code: this.code,
@@ -683,6 +730,11 @@ export class Room {
       return
     }
 
+    if (this.isGolf) {
+      this.sendGolfState(viewer, seat)
+      return
+    }
+
     // A seated viewer always sees their OWN bid undisguised; a watcher is an
     // outsider and gets the fully disguised view.
     const bids = this.roles.isActive()
@@ -699,6 +751,7 @@ export class Room {
       mode: this.roles.getMode(),
       gameType: 'prediction',
       hearts: null,
+      golf: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: this.trumpSuit,
@@ -749,6 +802,7 @@ export class Room {
       mode: 'classic',
       gameType: 'hearts',
       hearts,
+      golf: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: '',
@@ -768,6 +822,65 @@ export class Room {
       restart: this.restartVoteState(),
       spectating: seat == null,
       ...this.heartsTricks.snapshot(),
+    }
+
+    if (seat) this.io.send(seat, 'snapshot', snapshot)
+    else this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
+  }
+
+  /**
+   * Every seat's grid as the table can see it -- a face-down slot is `null`
+   * for EVERYONE, including its own owner. Built from the seats directly
+   * (not golfTurns) because it has to stay right during the reveal phase too,
+   * before golfTurns has anything of its own to say.
+   */
+  private golfGridsSnapshot(): Record<string, (Card | null)[]> {
+    return Object.fromEntries(
+      this.seats.map((seat) => [
+        seat.id,
+        seat.golfGrid.map((card, i) => (seat.golfRevealed[i] ? card : null)),
+      ]),
+    )
+  }
+
+  /** The Golf branch of sendState. */
+  private sendGolfState(viewer: Seat | Spectator, seat: Seat | null) {
+    const golf: GolfSnapshot = {
+      holeNumber: this.roundNumber,
+      ...this.golfTurns.snapshot(),
+      grids: this.golfGridsSnapshot(),
+      pendingDraw: seat ? this.golfTurns.pendingDrawFor(seat) : null,
+    }
+
+    const snapshot: Snapshot = {
+      inGame: true,
+      roster: this.roster(),
+      mode: 'classic',
+      gameType: 'golf',
+      hearts: null,
+      golf,
+      roundNumber: this.roundNumber,
+      cardsDealt: 0,
+      trumpSuit: '',
+      turnOrder: this.turnOrderIds,
+      phase: this.phase,
+      bids: {},
+      bidSum: 0,
+      tricksWon: {},
+      totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
+      history: this.history,
+      currentTurnId: null,
+      leadSuit: null,
+      plays: [],
+      trickNumber: 0,
+      hand: [],
+      roleState: null,
+      illusion: [],
+      rebid: null,
+      barred: null,
+      chat: this.chatLog,
+      restart: this.restartVoteState(),
+      spectating: seat == null,
     }
 
     if (seat) this.io.send(seat, 'snapshot', snapshot)
@@ -945,9 +1058,9 @@ export class Room {
     }
   }
 
-  /** Sorted the way each game reads a leaderboard -- Hearts ascending (golf), the Prediction Game descending. */
+  /** Sorted the way each game reads a leaderboard -- Hearts and Golf ascending, the Prediction Game descending. */
   private currentStandings(): Standing[] {
-    const lowestWins = this.isHearts
+    const lowestWins = this.isHearts || this.isGolf
     return this.seats
       .map((seat) => {
         const reveal = this.roles.getRoleReveal(seat.id)
@@ -966,11 +1079,12 @@ export class Room {
 
   private gameName(): string {
     if (this.isHearts) return 'Hearts'
+    if (this.isGolf) return 'Golf'
     return this.roles.getMode() === 'chaos' ? 'The Prediction Game (Chaos)' : 'The Prediction Game'
   }
 
   private broadcastGameEnded() {
-    const lowestWins = this.isHearts
+    const lowestWins = this.isHearts || this.isGolf
     const standings = this.currentStandings()
 
     this.io.broadcast('gameEnded', { standings, lowestWins })
@@ -989,6 +1103,8 @@ export class Room {
 
     if (this.isHearts) {
       await this.runHeartsGame()
+    } else if (this.isGolf) {
+      await this.runGolfGame()
     } else {
       await this.runPredictionGame()
     }
@@ -1002,6 +1118,8 @@ export class Room {
     this.tricks.reset()
     this.passing.reset()
     this.heartsTricks.reset()
+    this.golfReveal.reset()
+    this.golfTurns.reset()
     this.gameState = 'Lobby'
     this.roundNumber = 0
     this.history = {}
@@ -1030,6 +1148,84 @@ export class Room {
       dealerIndex = (dealerIndex % this.seats.length) + 1
       await this.playRound(roundNumber, Config.cardSequence[roundNumber - 1], dealerIndex)
       if (this.aborted) break
+    }
+  }
+
+  /**
+   * One Golf hole: deal a 6-card grid to everyone, let everyone flip their
+   * starting two at once, then play turns (draw, decide) until someone's
+   * whole grid is face-up and the resulting last lap completes.
+   */
+  private async playGolfHole(holeNumber: number) {
+    for (const seat of this.seats) {
+      seat.golfGrid = []
+      seat.golfRevealed = new Array(GRID_SIZE).fill(false)
+    }
+    this.golfReveal.reset()
+    this.golfTurns.reset()
+
+    const order = [...this.seats]
+    const { grids, stock, discardTop } = dealGolfGrids(order)
+    for (const seat of order) seat.golfGrid = grids.get(seat.id) as Card[]
+
+    this.roundNumber = holeNumber
+    this.cardsDealt = GRID_SIZE
+    this.trumpSuit = ''
+    this.turnOrderIds = order.map((s) => s.id)
+    this.phase = 'RoundStart'
+
+    const dealerId = order[this.golfDealerIndex % order.length].id
+
+    this.io.broadcast('golfRoundStart', { holeNumber, turnOrder: this.turnOrderIds, dealerId })
+    this.broadcastGolfGrids()
+
+    this.phase = 'Passing'
+    await this.golfReveal.runRevealPhase(order)
+    if (this.aborted) return
+    this.broadcastGolfGrids()
+    await sleep(GolfConfig.revealPause)
+
+    this.phase = 'Playing'
+    this.io.broadcast('gameState', { phase: 'Playing', roundNumber: holeNumber })
+
+    // First to act is the seat after the dealer.
+    const dealerPos = order.findIndex((s) => s.id === dealerId)
+    const turnOrder = order.map((_, i) => order[(dealerPos + 1 + i) % order.length])
+    await this.golfTurns.runTurnPhase(turnOrder, stock, discardTop)
+    if (this.aborted) return
+
+    const results = scoreGolfHole(this.io, this.seats, holeNumber)
+    this.history[holeNumber] = Object.fromEntries(results.map((r) => [r.id, r.gridScore]))
+
+    this.io.broadcast('roundEnded', { roundNumber: holeNumber })
+    await sleep(GolfConfig.holeEndPause)
+
+    this.golfDealerIndex++
+  }
+
+  /** A golfState broadcast that only updates the grids -- used before turns start. */
+  private broadcastGolfGrids() {
+    this.io.broadcast('golfState', {
+      grids: this.golfGridsSnapshot(),
+      discardTop: null,
+      stockCount: 0,
+      currentTurnId: null,
+      awaitingResolve: false,
+      finalLap: false,
+      finalLapTriggeredBy: null,
+    })
+  }
+
+  /** Nine holes, lowest cumulative score when the ninth ends wins. */
+  private async runGolfGame() {
+    this.golfDealerIndex = 0
+    for (let holeNumber = 1; holeNumber <= GolfConfig.totalHoles; holeNumber++) {
+      if (this.isEmpty) {
+        this.aborted = true
+        return
+      }
+      await this.playGolfHole(holeNumber)
+      if (this.aborted) return
     }
   }
 }

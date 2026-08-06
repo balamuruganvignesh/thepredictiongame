@@ -19,6 +19,10 @@ export type Seat = {
   collected: Card[]
   /** Hearts: the three cards chosen for the pass, until the pass resolves. */
   passSelection: Card[] | null
+  /** Golf: this seat's 6-card grid, row-major (0-2 top row, 3-5 bottom row). */
+  golfGrid: Card[]
+  /** Golf: which of the 6 grid slots are face-up. Nobody -- not even the owner -- sees the rest. */
+  golfRevealed: boolean[]
   totalScore: number
   lastRoundScore: number | null
   /** ms timestamp of the disconnect, for the lobby's reconnect grace period. */
