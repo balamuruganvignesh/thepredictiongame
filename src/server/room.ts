@@ -69,6 +69,7 @@ export class Room {
    */
   private gameType: GameType = 'prediction'
   private targetScore: number = HeartsConfig.defaultTargetScore
+  private holeCount: number = GolfConfig.defaultHoleCount
   private passing: PassManager
   private heartsTricks: HeartsTrickManager
   private golfReveal: GolfRevealManager
@@ -456,6 +457,7 @@ export class Room {
       mode: this.roles.getMode(),
       gameType: this.gameType,
       targetScore: this.targetScore,
+      holeCount: this.holeCount,
       spectators: this.spectators.map((s) => s.name),
     })
   }
@@ -515,6 +517,18 @@ export class Room {
     }
     if (!(HeartsConfig.targetScoreOptions as readonly number[]).includes(score)) return
     this.targetScore = score
+    this.broadcastLobby()
+  }
+
+  /** How many holes a Golf game runs. Host only, lobby only. */
+  setHoleCount(seat: Seat, holes: number) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the hole count.')
+      return
+    }
+    if (!(GolfConfig.holeCountOptions as readonly number[]).includes(holes)) return
+    this.holeCount = holes
     this.broadcastLobby()
   }
 
@@ -847,6 +861,7 @@ export class Room {
   private sendGolfState(viewer: Seat | Spectator, seat: Seat | null) {
     const golf: GolfSnapshot = {
       holeNumber: this.roundNumber,
+      totalHoles: this.holeCount,
       ...this.golfTurns.snapshot(),
       grids: this.golfGridsSnapshot(),
       pendingDraw: seat ? this.golfTurns.pendingDrawFor(seat) : null,
@@ -1176,7 +1191,12 @@ export class Room {
 
     const dealerId = order[this.golfDealerIndex % order.length].id
 
-    this.io.broadcast('golfRoundStart', { holeNumber, turnOrder: this.turnOrderIds, dealerId })
+    this.io.broadcast('golfRoundStart', {
+      holeNumber,
+      totalHoles: this.holeCount,
+      turnOrder: this.turnOrderIds,
+      dealerId,
+    })
     this.broadcastGolfGrids()
 
     this.phase = 'Passing'
@@ -1216,10 +1236,10 @@ export class Room {
     })
   }
 
-  /** Nine holes, lowest cumulative score when the ninth ends wins. */
+  /** Host-chosen hole count, lowest cumulative score when the last one ends wins. */
   private async runGolfGame() {
     this.golfDealerIndex = 0
-    for (let holeNumber = 1; holeNumber <= GolfConfig.totalHoles; holeNumber++) {
+    for (let holeNumber = 1; holeNumber <= this.holeCount; holeNumber++) {
       if (this.isEmpty) {
         this.aborted = true
         return

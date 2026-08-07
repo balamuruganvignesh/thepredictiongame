@@ -7,7 +7,6 @@
 // card backs everywhere else.
 
 import { useEffect, useMemo, useState } from 'react'
-import { GolfConfig } from '@shared/config'
 import type { Card } from '@shared/cards'
 import type { GolfResolveAction } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
@@ -88,7 +87,7 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
             ⛳
           </span>
           <span className="topbar__round">
-            Hole {golf.holeNumber} / {GolfConfig.totalHoles}
+            Hole {golf.holeNumber} / {golf.totalHoles}
           </span>
           <span className="topbar__hand">
             {golf.finalLap
@@ -121,6 +120,7 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
           history={store.history}
           totals={store.totals}
           currentHole={golf.holeNumber}
+          totalHoles={golf.totalHoles}
           onClose={() => setScoresOpen(false)}
         />
       )}

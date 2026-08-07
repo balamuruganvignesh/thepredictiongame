@@ -162,6 +162,7 @@ io.on('connection', (socket) => {
   socket.on('setMode', (mode) => withSeat((r, s) => r.setMode(s, mode)))
   socket.on('setGameType', (gameType) => withSeat((r, s) => r.setGameType(s, gameType)))
   socket.on('setTargetScore', (score) => withSeat((r, s) => r.setTargetScore(s, Number(score))))
+  socket.on('setHoleCount', (holes) => withSeat((r, s) => r.setHoleCount(s, Number(holes))))
   socket.on('passCards', (cards) => withSeat((r, s) => r.passCards(s, cards)))
   socket.on('golfRevealInitial', (slots) => withSeat((r, s) => r.golfRevealInitial(s, slots)))
   socket.on('golfDraw', (source) => withSeat((r, s) => r.golfDraw(s, source)))

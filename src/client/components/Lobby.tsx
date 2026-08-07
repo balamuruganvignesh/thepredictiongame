@@ -22,6 +22,7 @@ type Props = {
   onSetMode: (mode: 'classic' | 'chaos') => void
   onSetGameType: (gameType: GameType) => void
   onSetTargetScore: (score: number) => void
+  onSetHoleCount: (holes: number) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -36,6 +37,7 @@ export function Lobby({
   onSetMode,
   onSetGameType,
   onSetTargetScore,
+  onSetHoleCount,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -124,7 +126,7 @@ export function Lobby({
               <br />
               match both cards in a column and it scores zero.
               <br />
-              lowest total after {GolfConfig.totalHoles} holes wins.
+              lowest total after {lobby.holeCount} holes wins.
             </p>
           ) : (
             <p>
@@ -155,8 +157,7 @@ export function Lobby({
           </button>
 
           {/* Chaos roles are a Prediction Game feature; a Hearts or Golf table
-              swaps that card for the score the game plays to (or nothing, for
-              Golf, which has no host-tunable rule beyond the game itself). */}
+              swaps that card for the score/hole count the game plays to. */}
           {isHearts ? (
             <button
               className="note lobby__mode"
@@ -175,11 +176,22 @@ export function Lobby({
               </span>
             </button>
           ) : isGolf ? (
-            <div className="note lobby__mode" aria-disabled="true">
+            <button
+              className="note lobby__mode"
+              onClick={() => {
+                if (!isHost) return
+                const options = GolfConfig.holeCountOptions as readonly number[]
+                const next = options[(options.indexOf(lobby.holeCount) + 1) % options.length]
+                onSetHoleCount(next)
+              }}
+              disabled={!isHost}
+            >
               <span className="lobby__mode-kicker">play to</span>
-              <span className="lobby__mode-value">{GolfConfig.totalHoles} holes</span>
-              <span className="lobby__mode-hint">lowest total wins</span>
-            </div>
+              <span className="lobby__mode-value">{lobby.holeCount} holes</span>
+              <span className="lobby__mode-hint">
+                {isHost ? 'tap to change' : 'lowest total wins'}
+              </span>
+            </button>
           ) : (
             <button
               className={`note lobby__mode${isChaos ? ' is-chaos' : ''}`}

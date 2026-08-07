@@ -101,7 +101,7 @@ export function Join({ connected, error, onJoin }: Props) {
           ) : isGolf ? (
             <>
               Six face-down cards each. Draw, swap, or flip to learn your grid — match a column and
-              it scores zero. Lowest total after {GolfConfig.totalHoles} holes wins.{' '}
+              it scores zero. Lowest total after {GolfConfig.defaultHoleCount} holes wins.{' '}
               {GolfConfig.minPlayers}–{GolfConfig.maxPlayers} players.
             </>
           ) : (

@@ -36,6 +36,7 @@ export default function App() {
           onSetMode={actions.setMode}
           onSetGameType={actions.setGameType}
           onSetTargetScore={actions.setTargetScore}
+          onSetHoleCount={actions.setHoleCount}
           onSendChat={actions.sendChat}
           onChatRead={actions.markChatRead}
         />

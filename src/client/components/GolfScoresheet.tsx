@@ -1,18 +1,25 @@
-// Golf's score sheet, modeled on Scoreboard.tsx: Golf has a fixed nine-hole
-// count just like the Prediction Game has a fixed ten rounds, so this reuses
-// that shape rather than the dynamic row count Hearts needs.
-
-import { GolfConfig } from '@shared/config'
+// Golf's score sheet, modeled on Scoreboard.tsx: Golf has a fixed row count
+// per game just like the Prediction Game has a fixed ten rounds, so this
+// reuses that shape rather than the dynamic row count Hearts needs -- the
+// row count itself (`totalHoles`) is just host-chosen rather than constant.
 
 type Props = {
   players: { id: string; name: string }[]
   history: Record<number, Record<string, number>>
   totals: Record<string, number>
   currentHole: number
+  totalHoles: number
   onClose: () => void
 }
 
-export function GolfScoresheet({ players, history, totals, currentHole, onClose }: Props) {
+export function GolfScoresheet({
+  players,
+  history,
+  totals,
+  currentHole,
+  totalHoles,
+  onClose,
+}: Props) {
   const leader = players.reduce<number | null>((lowest, player) => {
     const total = totals[player.id] ?? 0
     return lowest == null || total < lowest ? total : lowest
@@ -34,7 +41,7 @@ export function GolfScoresheet({ players, history, totals, currentHole, onClose 
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: GolfConfig.totalHoles }, (_, i) => {
+            {Array.from({ length: totalHoles }, (_, i) => {
               const hole = i + 1
               const scores = history[hole]
               return (

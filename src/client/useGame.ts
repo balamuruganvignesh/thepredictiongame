@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { Card } from '@shared/cards'
+import { GolfConfig } from '@shared/config'
 import type {
   AbilityEffect,
   ChatMessage,
@@ -85,6 +86,7 @@ const emptyHearts: HeartsStore = {
  */
 export type GolfStore = {
   holeNumber: number
+  totalHoles: number
   grids: Record<string, (Card | null)[]>
   discardTop: Card | null
   stockCount: number
@@ -99,6 +101,7 @@ export type GolfStore = {
 
 const emptyGolf: GolfStore = {
   holeNumber: 0,
+  totalHoles: GolfConfig.defaultHoleCount,
   grids: {},
   discardTop: null,
   stockCount: 0,
@@ -347,7 +350,7 @@ function reducer(state: Store, action: Action): Store {
         lobby: action.data,
         gameType: action.data.gameType,
         hearts: { ...emptyHearts, targetScore: action.data.targetScore },
-        golf: emptyGolf,
+        golf: { ...emptyGolf, totalHoles: action.data.holeCount },
         names,
         totals,
         history: {},
@@ -605,7 +608,7 @@ function reducer(state: Store, action: Action): Store {
         order,
         history: data.holeNumber === 1 ? {} : state.history,
         phase: 'passing',
-        golf: { ...emptyGolf, holeNumber: data.holeNumber },
+        golf: { ...emptyGolf, holeNumber: data.holeNumber, totalHoles: data.totalHoles },
       }
     }
 
@@ -757,6 +760,7 @@ function reducer(state: Store, action: Action): Store {
         golf: data.golf
           ? {
               holeNumber: data.golf.holeNumber,
+              totalHoles: data.golf.totalHoles,
               grids: data.golf.grids,
               discardTop: data.golf.discardTop,
               stockCount: data.golf.stockCount,
@@ -962,6 +966,9 @@ export function useGame() {
       },
       setTargetScore(score: number) {
         socket.emit('setTargetScore', score)
+      },
+      setHoleCount(holes: number) {
+        socket.emit('setHoleCount', holes)
       },
       /**
        * Hearts: give three cards away. Closed optimistically -- the server

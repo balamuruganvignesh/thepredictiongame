@@ -1,7 +1,7 @@
 // The wire protocol: every server<->client message the game sends.
 //
 // Client -> Server: join, toggleReady, startGame, setMode, setGameType,
-//                   setTargetScore, submitBid, submitRebid, declareDouble,
+//                   setTargetScore, setHoleCount, submitBid, submitRebid, declareDouble,
 //                   playCard, passCards, useAbility, requestState, voteRestart,
 //                   golfRevealInitial, golfDraw, golfResolve
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
@@ -46,8 +46,10 @@ export type LobbyUpdate = {
   mode: GameMode
   /** Which game the host has the table set to. */
   gameType: GameType
-  /** Hearts only: the score that ends the game. Ignored by the other game. */
+  /** Hearts only: the score that ends the game. Ignored by the other games. */
   targetScore: number
+  /** Golf only: how many holes the game runs. Ignored by the other games. */
+  holeCount: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
 }
@@ -335,6 +337,7 @@ export type HeartsSnapshot = {
 
 export type GolfRoundStart = {
   holeNumber: number
+  totalHoles: number
   turnOrder: PlayerId[]
   dealerId: PlayerId
 }
@@ -371,6 +374,7 @@ export type GolfScoreUpdate = { holeNumber: number; results: GolfHoleResult[] }
 /** The Golf half of a reconnect snapshot; null while playing another game. */
 export type GolfSnapshot = {
   holeNumber: number
+  totalHoles: number
   grids: Record<PlayerId, (Card | null)[]>
   discardTop: Card | null
   stockCount: number
@@ -496,6 +500,8 @@ export interface ClientToServerEvents {
   setGameType: (gameType: GameType) => void
   /** Host only, lobby only: the score that ends a Hearts game. */
   setTargetScore: (score: number) => void
+  /** Host only, lobby only: how many holes a Golf game runs. */
+  setHoleCount: (holes: number) => void
   /** Hearts: the three cards you're giving away. */
   passCards: (cards: Card[]) => void
   submitBid: (bid: number) => void
