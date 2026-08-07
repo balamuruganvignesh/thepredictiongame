@@ -108,6 +108,14 @@ export function QuickAbility({ roleState, players, meId, onUse, onOpenPanel }: P
 
   return (
     <>
+      <button
+        className={`dock__button dock__button--quick${locked ? ' is-firing' : ''}`}
+        onClick={press}
+        disabled={locked}
+      >
+        ⚡ {def.name.toUpperCase()}
+      </button>
+
       {open && (
         <div className="note quick__pop" role="dialog" aria-label={`Use ${def.name}`}>
           <p className="quick__name">{def.name}</p>
@@ -213,14 +221,6 @@ export function QuickAbility({ roleState, players, meId, onUse, onOpenPanel }: P
           </button>
         </div>
       )}
-
-      <button
-        className={`dock__button dock__button--quick${locked ? ' is-firing' : ''}`}
-        onClick={press}
-        disabled={locked}
-      >
-        ⚡ {def.name.toUpperCase()}
-      </button>
     </>
   )
 }

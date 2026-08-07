@@ -49,7 +49,12 @@ export function Hand({
         const key = cardKey(card)
         const barred = key === barredCard
         const legal = isMyTurn && !barred && allowed(card, hand)
-        const illusioned = legal && illusionCards.includes(key)
+        // Independent of `legal`/`isMyTurn` on purpose: gating the veil on
+        // legality let a dimmed-vs-blacked-out card leak its own suit (only
+        // off-suit cards fell through to the muted look), and it vanished
+        // entirely outside your own turn. The illusion has to hold for as
+        // long as the card is in illusionCards, full stop.
+        const illusioned = illusionCards.includes(key)
 
         return (
           <button
@@ -59,11 +64,11 @@ export function Hand({
               'card-button ' +
               (barred
                 ? 'card-button--barred'
-                : !legal
-                  ? 'card-button--muted'
-                  : illusioned
-                    ? 'card-button--illusion'
-                    : 'card-button--playable')
+                : illusioned
+                  ? 'card-button--illusion'
+                  : legal
+                    ? 'card-button--playable'
+                    : 'card-button--muted')
             }
             style={{ animationDelay: `${i * 55}ms` }}
             onClick={() => legal && onPlay(card)}

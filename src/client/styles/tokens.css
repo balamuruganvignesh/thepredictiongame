@@ -44,13 +44,19 @@
   --font-body: 'Nunito', system-ui, -apple-system, sans-serif;
   --font-card: Georgia, 'Times New Roman', 'Iowan Old Style', serif;
 
-  /* Card geometry. --card-aspect matches the active deck's sprites exactly
-     so nothing stretches: the pixel deck is 42x60 source (60/42 = 1.4286),
-     overridden below for the classic deck's 691x1056 source (1056/691 =
-     1.5282). Everything else (hand, trick area, lifts) derives from
-     --card-w. */
-  --card-w: clamp(52px, 6.2vw, 82px);
-  --card-aspect: 1.4286;
+  /* Card geometry. --card-aspect defaults to 1.524 -- the ratio the original
+     82x125 reference deck used, before the pixel-art sprites (42x60, a
+     1.4286 ratio) replaced it. On desktop this is a deliberate ~7% stretch
+     of the pixel deck's native ratio, chosen over the crisper 1.4286 fit
+     because the taller card reads as bigger; the mobile breakpoint below
+     overrides back to 1.4286 (the pixel deck's true, unstretched ratio) since
+     screen space is tighter there. The classic deck's photographed sprites
+     get their own override for their real 691x1056 source (1056/691 =
+     1.5282), which is close enough to 1.524 that it's not a meaningful
+     stretch either way. Everything else (hand, trick area, lifts) derives
+     from --card-w. */
+  --card-w: clamp(64px, 7.6vw, 100px);
+  --card-aspect: 1.524;
   --card-h: calc(var(--card-w) * var(--card-aspect));
   --card-radius: calc(var(--card-w) * 0.075);
 

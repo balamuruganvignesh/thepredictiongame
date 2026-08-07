@@ -70,12 +70,12 @@
 }
 
 .button {
-  padding: 12px 22px;
+  padding: 14px 26px;
   border-radius: var(--radius-button);
   background: var(--primary);
   color: var(--text);
   font-family: var(--font-heading);
-  font-size: 1rem;
+  font-size: 1.08rem;
   transition:
     filter var(--t-quick) ease-out,
     transform var(--t-quick) ease-out;
@@ -980,13 +980,13 @@ button.seat:hover {
 }
 
 .dock__button {
-  padding: 9px 16px;
+  padding: 12px 20px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: rgb(30 30 37 / 88%);
   color: var(--text-muted);
   font-family: var(--font-heading);
-  font-size: 0.85rem;
+  font-size: 0.94rem;
   letter-spacing: 0.04em;
 }
 
@@ -1087,22 +1087,18 @@ button.seat:hover {
   text-align: left;
 }
 
-/* Chaos's ROLE + ABILITY buttons stack directly above the dock in the same
-   corner -- pushed up clear of them rather than opening underneath. */
-.settings__pop--raised {
-  bottom: calc(100% + 104px);
-}
-
 /* ---- Quick ability (chaos) -------------------------------------------------- */
 
-/* Sits directly above the dock, same right edge. Deliberately NOT a modal and
-   deliberately without a backdrop: the whole point is that the trick stays
-   visible while you aim. */
+/* Docked top-right, clear of the trick and the dock. Deliberately NOT a modal
+   and deliberately without a backdrop: the whole point is that the trick
+   stays visible while you aim. Sits above chat (z-index 30) so an open chat
+   panel -- which also docks top-right -- never buries it; ChatPanel gets
+   pushed down clear of this column instead (see .chat--raised). */
 .quick {
   position: fixed;
+  top: 14px;
   right: 14px;
-  bottom: 60px;
-  z-index: 26;
+  z-index: 31;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1202,14 +1198,15 @@ button.seat:hover {
   width: min(320px, calc(100vw - 28px));
   padding: 12px 14px 10px;
   text-align: left;
-  transform-origin: bottom right;
+  /* Opens downward from the top-right dock now, not upward. */
+  transform-origin: top right;
   animation: quick-pop 200ms var(--ease-pop);
 }
 
 @keyframes quick-pop {
   from {
     opacity: 0;
-    transform: scale(0.85) translateY(8px);
+    transform: scale(0.85) translateY(-8px);
   }
 }
 
@@ -1250,6 +1247,10 @@ button.seat:hover {
 
 .backdrop--bidding {
   z-index: 20;
+  /* The trick underneath is worth glancing at while you bid -- much lighter
+     than the default modal scrim, which is tuned for backdrops that fully
+     take over the screen. */
+  background: rgb(0 0 0 / 28%);
 }
 
 .modal--bid {
@@ -1518,6 +1519,12 @@ button.seat:hover {
   display: flex;
   flex-direction: column;
   width: min(340px, calc(100vw - 28px));
+}
+
+/* Chaos's ROLE + ABILITY column docks in this same top-right corner (see
+   .quick) -- drop below it instead of opening underneath. */
+.chat--raised {
+  top: 104px;
 }
 
 .chat__header {
@@ -1845,14 +1852,21 @@ button.seat:hover {
   border-bottom: 1px solid color-mix(in srgb, var(--stroke) 30%, transparent);
   font-family: var(--font-heading);
   font-size: 1.15rem;
-  opacity: 0;
   animation: standing-in var(--t-normal) var(--ease-pop) both;
 }
 
+/* `to` has to be spelled out: with only `from` given, the animation's end
+   state falls back to the property's own cascaded value, which is the
+   `opacity: 0` this rule used to declare directly -- so every row animated
+   from invisible to invisible and the whole list stayed permanently blank. */
 @keyframes standing-in {
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -2149,7 +2163,11 @@ button.seat:hover {
 
 @media (max-width: 720px) {
   :root {
+    /* Mobile keeps the original pre-bump width and the pixel deck's true,
+       unstretched 1.4286 ratio -- screen space is tight, so this is not the
+       place for the desktop-only "og size" ratio restore above. */
     --card-w: clamp(46px, 13vw, 64px);
+    --card-aspect: 1.4286;
   }
 
   .table {
@@ -2183,8 +2201,8 @@ button.seat:hover {
   }
 
   .dock__button {
-    padding: 8px 12px;
-    font-size: 0.78rem;
+    padding: 10px 15px;
+    font-size: 0.86rem;
   }
 
   .feed {

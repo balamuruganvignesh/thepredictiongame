@@ -11,9 +11,13 @@ type Props = {
   meId: string | null
   onSend: (text: string) => void
   onClose: () => void
+  /** Chaos deals a ROLE + ABILITY column top-right (see Table.tsx) that shares
+   *  this corner -- drop the panel's top edge clear of it instead of letting
+   *  chat bury it underneath. */
+  raised?: boolean
 }
 
-export function ChatPanel({ messages, meId, onSend, onClose }: Props) {
+export function ChatPanel({ messages, meId, onSend, onClose, raised = false }: Props) {
   const [draft, setDraft] = useState('')
   const bottom = useRef<HTMLDivElement>(null)
 
@@ -30,7 +34,7 @@ export function ChatPanel({ messages, meId, onSend, onClose }: Props) {
   }
 
   return (
-    <aside className="note chat" aria-label="Table chat">
+    <aside className={`note chat${raised ? ' chat--raised' : ''}`} aria-label="Table chat">
       <header className="note__header chat__header">
         chat
         <button className="modal__close" onClick={onClose} aria-label="Close the chat">

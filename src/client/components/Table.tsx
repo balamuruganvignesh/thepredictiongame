@@ -230,7 +230,6 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           meId={store.meId}
           spectating={store.spectating}
           onVoteRestart={actions.voteRestart}
-          raised={chaosActive && !store.spectating && store.roleState != null}
         />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
@@ -246,6 +245,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           meId={store.meId}
           onSend={actions.sendChat}
           onClose={() => setChatOpen(false)}
+          raised={chaosActive && !store.spectating && store.roleState != null}
         />
       )}
 

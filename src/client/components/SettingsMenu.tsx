@@ -18,10 +18,6 @@ export function SettingsMenu({
   meId,
   spectating,
   onVoteRestart,
-  /** Chaos deals a ROLE + ABILITY button above the dock (see Table.tsx) that
-   *  shares this same corner -- lift the popover clear of them instead of
-   *  letting it render underneath. */
-  raised = false,
 }: {
   scoresOpen: boolean
   onToggleScores: () => void
@@ -29,7 +25,6 @@ export function SettingsMenu({
   meId: string | null
   spectating: boolean
   onVoteRestart: (vote: boolean) => void
-  raised?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const restartLive = restart.votes.length > 0
@@ -37,11 +32,7 @@ export function SettingsMenu({
   return (
     <div className="settings">
       {open && (
-        <div
-          className={`note settings__pop${raised ? ' settings__pop--raised' : ''}`}
-          role="dialog"
-          aria-label="Settings"
-        >
+        <div className="note settings__pop" role="dialog" aria-label="Settings">
           <DeckToggleButton className="settings__item" />
           <EffectsToggleButton className="settings__item" />
           <SoundToggleButton className="settings__item" />

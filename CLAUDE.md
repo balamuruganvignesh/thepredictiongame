@@ -319,11 +319,16 @@ Prediction Game (`runGolfGame` loops `GolfConfig.totalHoles`), not Hearts'
 - **Card faces are Kenney's CC0 pixel-art deck** in `src/client/public/cards/`
   (~22KB for all 55), cropped to the artwork so each sprite IS the card. They
   render as `<img class="card__face">` with `image-rendering: pixelated` — the
-  upscale is deliberate, so never "fix" it with smoothing. `--card-h` is pinned
-  to the sprites' 60/42 ratio; changing it stretches the art. Everything AROUND
-  the face (radius, shadow, winner/playable rings, muted + illusion veils) is
-  still CSS on the `.card` wrapper, and everything scales off `--card-w`.
-  (This replaced an earlier all-CSS deck — no pip layouts or court panels now.)
+  upscale is deliberate, so never "fix" it with smoothing. The sprites' true
+  ratio is 60/42 = 1.4286; `--card-aspect` deliberately does NOT pin to that
+  everywhere any more. On desktop it defaults to 1.524 (a ~7% stretch) to
+  restore the taller "og size" of the original 82x125 reference deck that
+  predates these sprites; the `@media (max-width: 720px)` block overrides it
+  back to the true 1.4286 because mobile has no room to spare for a stretch
+  nobody asked for there. Everything AROUND the face (radius, shadow,
+  winner/playable rings, muted + illusion veils) is still CSS on the `.card`
+  wrapper, and everything scales off `--card-w`. (This replaced an earlier
+  all-CSS deck — no pip layouts or court panels now.)
 - **Three card states, three distinct looks.** `--muted` (illegal): the real
   face, darkened right down but still readable — you must be able to see your
   own hand. `--barred` (a Rewind): red-ringed, genuinely unclickable.
@@ -351,22 +356,26 @@ Prediction Game (`runGolfGame` loops `GolfConfig.totalHoles`), not Hearts'
   shared by every game's table. A live restart vote still shows through as a
   badge on the closed SETTINGS button (`restart.votes.length`), so a vote
   in progress is never missed just because it's tucked in the menu.
-- **`SettingsMenu`'s popover must clear the chaos `.quick` column, not
-  overlap it.** Both float above the dock in the same bottom-right corner;
-  `Table.tsx` passes `raised` (true whenever the ROLE/ABILITY buttons are
-  rendered) so the popover opens far enough up to clear them — the collision
-  is vertical-only by design, because `.quick`'s WIDTH is unbounded (ability
-  names vary a lot) but its HEIGHT is capped at two stacked buttons. Widening
-  the gap sideways instead would be fragile; don't revert to that.
+- **`.quick` (chaos's ROLE + ABILITY column) docks top-right, the same corner
+  chat opens in.** `ChatPanel` takes a `raised` prop (`Table.tsx` passes it
+  whenever the ROLE/ABILITY buttons are rendered) that drops its top edge
+  below `.quick` instead of opening underneath it — mirrors the old
+  bottom-corner clearance trick, just flipped to the top edge, because
+  `.quick`'s WIDTH is unbounded (ability names vary a lot) but its HEIGHT is
+  capped at two stacked buttons, so vertical clearance is the stable axis.
+  `.quick` itself sits above chat in z-index too, as a second line of defense.
+  `SettingsMenu` no longer needs any of this — it's back in its own
+  bottom-right corner with nothing sharing it.
 - **ROLE and ABILITY are two separate, always-available buttons in chaos**,
-  stacked in `.quick` just above the dock. `QuickAbility` renders only the
-  ABILITY button and disappears once the ability is spent (or nothing was
-  dealt) — it does NOT collapse into a ROLE button anymore. The ROLE button is
-  rendered by `Table.tsx` itself, always present alongside it, opening
-  `RolePanel` so a player can read their role and this round's ability
-  (including ones already spent) to plan what card to play. `QuickAbility`'s
-  popover still has NO backdrop on purpose — the trick stays visible while you
-  aim — and still punts to `RolePanel` for the two-target abilities and the
+  stacked in `.quick` top-right. `QuickAbility` renders only the ABILITY
+  button (first, so its popover opens downward beneath it) and disappears
+  once the ability is spent (or nothing was dealt) — it does NOT collapse into
+  a ROLE button anymore. The ROLE button is rendered by `Table.tsx` itself,
+  always present alongside it, opening `RolePanel` so a player can read their
+  role and this round's ability (including ones already spent) to plan what
+  card to play. `QuickAbility`'s popover still has NO backdrop on purpose —
+  the trick stays visible while you aim — and still punts to `RolePanel` for
+  the two-target abilities and the
   two that need a gallery (Alternate Universe's roles, Time Branches' hand).
 - **The panel's private log is a LIST (`store.abilityLog`), never "the latest
   one".** Your own ability's result and whatever another player quietly did TO
