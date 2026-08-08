@@ -4,9 +4,15 @@
 
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { Card } from '@shared/cards'
-import { GolfConfig } from '@shared/config'
+import { BlackjackConfig, GolfConfig } from '@shared/config'
 import type {
   AbilityEffect,
+  BlackjackAction as BlackjackActionKind,
+  BlackjackHandPublic,
+  BlackjackMode,
+  BlackjackRoundStart,
+  BlackjackScoreUpdate,
+  BlackjackState,
   ChatMessage,
   GameMode,
   GameStateUpdate,
@@ -112,6 +118,35 @@ const emptyGolf: GolfStore = {
   pendingDraw: null,
 }
 
+/**
+ * The Blackjack slice. Only meaningful while `gameType === 'blackjack'`.
+ * Unlike every other game's private `hand`, `hands` is fully public -- cards
+ * are dealt and stay face up, the way blackjack is actually played. The one
+ * hidden card in the whole game is the dealer's hole card, a `null` slot in
+ * `dealerHand` until the dealer plays.
+ */
+export type BlackjackStore = {
+  roundNumber: number
+  totalRounds: number
+  mode: BlackjackMode
+  hands: Record<string, BlackjackHandPublic>
+  dealerHand: (Card | null)[] | null
+  dealerTotal: number | null
+  dealerBusted: boolean
+  currentTurnId: string | null
+}
+
+const emptyBlackjack: BlackjackStore = {
+  roundNumber: 0,
+  totalRounds: BlackjackConfig.defaultRounds,
+  mode: 'dealer',
+  hands: {},
+  dealerHand: null,
+  dealerTotal: null,
+  dealerBusted: false,
+  currentTurnId: null,
+}
+
 export type Store = {
   connected: boolean
   joinError: string | null
@@ -124,6 +159,7 @@ export type Store = {
   gameType: GameType
   hearts: HeartsStore
   golf: GolfStore
+  blackjack: BlackjackStore
   /** Hearts standings read the other way up: fewest penalty points wins. */
   lowestWins: boolean
   /** Watching a game that was already running: no hand, no turn, no abilities. */
@@ -219,6 +255,7 @@ const initialStore: Store = {
   gameType: 'prediction',
   hearts: emptyHearts,
   golf: emptyGolf,
+  blackjack: emptyBlackjack,
   lowestWins: false,
   spectating: false,
   watchedSeat: null,
@@ -287,6 +324,9 @@ type Action =
   | { type: 'golfDrawResult'; data: GolfDrawResult }
   | { type: 'golfResolveSubmitted' }
   | { type: 'golfScore'; data: GolfScoreUpdate }
+  | { type: 'blackjackRoundStart'; data: BlackjackRoundStart }
+  | { type: 'blackjackState'; data: BlackjackState }
+  | { type: 'blackjackScore'; data: BlackjackScoreUpdate }
   | { type: 'roleState'; data: RoleState }
   | { type: 'roleSync'; data: RoleSync }
   | { type: 'announce'; message: string }
@@ -351,6 +391,11 @@ function reducer(state: Store, action: Action): Store {
         gameType: action.data.gameType,
         hearts: { ...emptyHearts, targetScore: action.data.targetScore },
         golf: { ...emptyGolf, totalHoles: action.data.holeCount },
+        blackjack: {
+          ...emptyBlackjack,
+          mode: action.data.blackjackMode,
+          totalRounds: action.data.blackjackRounds,
+        },
         names,
         totals,
         history: {},
@@ -648,6 +693,60 @@ function reducer(state: Store, action: Action): Store {
       }
     }
 
+    // ---- Blackjack ------------------------------------------------------------
+
+    case 'blackjackRoundStart': {
+      const { data } = action
+      const order =
+        data.roundNumber === 1 || state.order.length === 0 ? [...data.turnOrder] : state.order
+      return {
+        ...state,
+        view: 'game',
+        gameType: 'blackjack',
+        standings: null,
+        roundNumber: data.roundNumber,
+        turnOrder: data.turnOrder,
+        order,
+        history: data.roundNumber === 1 ? {} : state.history,
+        phase: 'playing',
+        blackjack: {
+          ...emptyBlackjack,
+          roundNumber: data.roundNumber,
+          totalRounds: data.totalRounds,
+          mode: data.mode,
+        },
+      }
+    }
+
+    case 'blackjackState':
+      return {
+        ...state,
+        blackjack: {
+          ...state.blackjack,
+          hands: action.data.hands,
+          dealerHand: action.data.dealerHand,
+          dealerTotal: action.data.dealerTotal,
+          dealerBusted: action.data.dealerBusted,
+          currentTurnId: action.data.currentTurnId,
+          mode: action.data.mode,
+        },
+      }
+
+    case 'blackjackScore': {
+      const { data } = action
+      const totals = { ...state.totals }
+      const roundScores: Record<string, number> = {}
+      for (const line of data.results) {
+        totals[line.id] = line.totalScore
+        roundScores[line.id] = line.roundScore
+      }
+      return {
+        ...state,
+        totals,
+        history: { ...state.history, [data.roundNumber]: roundScores },
+      }
+    }
+
     case 'roleState': {
       // A fresh round intro replays the reveal banner + ability slot roll.
       const bump = action.data.roundIntro ? state.roleBannerKey + 1 : state.roleBannerKey
@@ -771,6 +870,18 @@ function reducer(state: Store, action: Action): Store {
               pendingDraw: data.golf.pendingDraw,
             }
           : emptyGolf,
+        blackjack: data.blackjack
+          ? {
+              roundNumber: data.blackjack.roundNumber,
+              totalRounds: data.blackjack.totalRounds,
+              mode: data.blackjack.mode,
+              hands: data.blackjack.hands,
+              dealerHand: data.blackjack.dealerHand,
+              dealerTotal: data.blackjack.dealerTotal,
+              dealerBusted: data.blackjack.dealerBusted,
+              currentTurnId: data.blackjack.currentTurnId,
+            }
+          : emptyBlackjack,
         phase:
           data.phase === 'Playing' ? 'playing' : data.phase === 'Passing' ? 'passing' : 'bidding',
         bids: data.bids,
@@ -884,6 +995,9 @@ export function useGame() {
     socket.on('golfState', (data) => dispatch({ type: 'golfState', data }))
     socket.on('golfDrawResult', (data) => dispatch({ type: 'golfDrawResult', data }))
     socket.on('golfScoreUpdate', (data) => dispatch({ type: 'golfScore', data }))
+    socket.on('blackjackRoundStart', (data) => dispatch({ type: 'blackjackRoundStart', data }))
+    socket.on('blackjackState', (data) => dispatch({ type: 'blackjackState', data }))
+    socket.on('blackjackScoreUpdate', (data) => dispatch({ type: 'blackjackScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
@@ -970,6 +1084,12 @@ export function useGame() {
       setHoleCount(holes: number) {
         socket.emit('setHoleCount', holes)
       },
+      setBlackjackMode(mode: BlackjackMode) {
+        socket.emit('setBlackjackMode', mode)
+      },
+      setBlackjackRounds(rounds: number) {
+        socket.emit('setBlackjackRounds', rounds)
+      },
       /**
        * Hearts: give three cards away. Closed optimistically -- the server
        * answers with passResult only once EVERYONE has chosen, and leaving the
@@ -1011,6 +1131,10 @@ export function useGame() {
       golfResolve(resolveAction: GolfResolveAction) {
         dispatch({ type: 'golfResolveSubmitted' })
         socket.emit('golfResolve', resolveAction)
+      },
+      /** Blackjack: hit, stand, or double on your turn. */
+      blackjackAction(action: BlackjackActionKind) {
+        socket.emit('blackjackAction', action)
       },
       useAbility(payload: UseAbilityPayload) {
         socket.emit('useAbility', payload)

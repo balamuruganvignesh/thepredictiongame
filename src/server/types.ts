@@ -23,6 +23,12 @@ export type Seat = {
   golfGrid: Card[]
   /** Golf: which of the 6 grid slots are face-up. Nobody -- not even the owner -- sees the rest. */
   golfRevealed: boolean[]
+  /** Blackjack: this seat's hand for the current round. Always dealt face up. */
+  blackjackHand: Card[]
+  /** Blackjack: stood, busted, doubled-and-drew, or dealt a natural -- no more actions this round. */
+  blackjackDone: boolean
+  /** Blackjack: doubled down this round, so the round's point swing is x2. */
+  blackjackDoubled: boolean
   totalScore: number
   lastRoundScore: number | null
   /** ms timestamp of the disconnect, for the lobby's reconnect grace period. */

@@ -3,9 +3,11 @@
 // because a single process hosts many tables at once.
 
 import type { Server as SocketServer } from 'socket.io'
-import { Config, GolfConfig, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
+import { BlackjackConfig, Config, GolfConfig, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
 import type { Card } from '@shared/cards'
 import type {
+  BlackjackMode,
+  BlackjackSnapshot,
   ChatMessage,
   ClientToServerEvents,
   GameMode,
@@ -14,6 +16,7 @@ import type {
   GolfSnapshot,
   HeartsSnapshot,
   RestartVote,
+  RoleAnnounce,
   RosterEntry,
   ServerToClientEvents,
   Snapshot,
@@ -39,6 +42,9 @@ import { dealGolfGrids } from './engine/golf/deck'
 import { GolfRevealManager } from './engine/golf/reveal'
 import { GolfTurnManager } from './engine/golf/turns'
 import { scoreGolfHole } from './engine/golf/scoring'
+import { dealBlackjackRound } from './engine/blackjack/deck'
+import { BlackjackTurnManager } from './engine/blackjack/turns'
+import { scoreBlackjackRound } from './engine/blackjack/scoring'
 import { postGameEndedToDiscord, postGameAbandonedToDiscord } from './discord'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
@@ -70,11 +76,14 @@ export class Room {
   private gameType: GameType = 'prediction'
   private targetScore: number = HeartsConfig.defaultTargetScore
   private holeCount: number = GolfConfig.defaultHoleCount
+  private blackjackMode: BlackjackMode = 'dealer'
+  private blackjackRounds: number = BlackjackConfig.defaultRounds
   private passing: PassManager
   private heartsTricks: HeartsTrickManager
   private golfReveal: GolfRevealManager
   private golfTurns: GolfTurnManager
   private golfDealerIndex = 0
+  private blackjackTurns: BlackjackTurnManager
 
   // Round state, kept so a reconnecting client can be handed a full snapshot.
   private roundNumber = 0
@@ -107,6 +116,14 @@ export class Room {
     this.io = {
       broadcast: (event, payload) => {
         ;(this.server.to(this.code).emit as (e: string, p: unknown) => void)(event, payload)
+        // Every public announcement (role abilities, moon shots, restart-vote
+        // tallies) is also logged to chat so it survives after the floating
+        // feed card expires -- one choke point, so no phase manager has to
+        // know chat exists. Never fires for abilityResult, which is sent
+        // privately and never broadcast.
+        if (event === 'roleAnnounce') {
+          this.pushChat({ from: null, name: '', text: (payload as RoleAnnounce).message })
+        }
       },
       send: (seat, event, payload) => {
         if (!seat.socketId) return
@@ -142,6 +159,9 @@ export class Room {
     // Golf. No RoleManager either -- chaos roles are a Prediction Game feature.
     this.golfReveal = new GolfRevealManager(this.io)
     this.golfTurns = new GolfTurnManager(this.io)
+
+    // Blackjack. No RoleManager either.
+    this.blackjackTurns = new BlackjackTurnManager(this.io)
   }
 
   // ---- Which game --------------------------------------------------------
@@ -154,10 +174,15 @@ export class Room {
     return this.gameType === 'golf'
   }
 
+  private get isBlackjack(): boolean {
+    return this.gameType === 'blackjack'
+  }
+
   /** Table size limits for the game currently selected. */
   private get limits(): { min: number; max: number } {
     if (this.isHearts) return { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
     if (this.isGolf) return { min: GolfConfig.minPlayers, max: GolfConfig.maxPlayers }
+    if (this.isBlackjack) return { min: BlackjackConfig.minPlayers, max: BlackjackConfig.maxPlayers }
     return { min: Config.minPlayers, max: Config.maxPlayers }
   }
 
@@ -245,6 +270,9 @@ export class Room {
       passSelection: null,
       golfGrid: [],
       golfRevealed: new Array(GRID_SIZE).fill(false),
+      blackjackHand: [],
+      blackjackDone: false,
+      blackjackDoubled: false,
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
@@ -291,6 +319,7 @@ export class Room {
       this.heartsTricks.onSeatDisconnected(seat)
       this.golfReveal.onSeatDisconnected(seat)
       this.golfTurns.onSeatDisconnected(seat)
+      this.blackjackTurns.onSeatDisconnected(seat)
       // Their vote goes with them, and the bar drops with the table size.
       this.settleRestartVote()
     }
@@ -388,6 +417,9 @@ export class Room {
         passSelection: null,
         golfGrid: [],
         golfRevealed: new Array(GRID_SIZE).fill(false),
+        blackjackHand: [],
+        blackjackDone: false,
+        blackjackDoubled: false,
         totalScore: 0,
         lastRoundScore: null,
         disconnectedAt: null,
@@ -458,6 +490,8 @@ export class Room {
       gameType: this.gameType,
       targetScore: this.targetScore,
       holeCount: this.holeCount,
+      blackjackMode: this.blackjackMode,
+      blackjackRounds: this.blackjackRounds,
       spectators: this.spectators.map((s) => s.name),
     })
   }
@@ -486,7 +520,7 @@ export class Room {
    */
   openOn(gameType: GameType) {
     if (this.seats.length > 0 || this.gameState !== 'Lobby') return
-    if (gameType !== 'prediction' && gameType !== 'hearts' && gameType !== 'golf') return
+    if (!['prediction', 'hearts', 'golf', 'blackjack'].includes(gameType)) return
     this.gameType = gameType
   }
 
@@ -497,13 +531,19 @@ export class Room {
       this.io.send(seat, 'actionError', 'Only the host can change the game.')
       return
     }
-    if (gameType !== 'prediction' && gameType !== 'hearts' && gameType !== 'golf') return
+    if (!['prediction', 'hearts', 'golf', 'blackjack'].includes(gameType)) return
     if (this.gameType === gameType) return
     this.gameType = gameType
     // Chaos roles are a Prediction Game feature; every other table is always plain.
     if (gameType !== 'prediction') this.roles.setMode('classic')
     const label =
-      gameType === 'hearts' ? 'Hearts ♥' : gameType === 'golf' ? 'Golf ⛳' : 'The Prediction Game'
+      gameType === 'hearts'
+        ? 'Hearts ♥'
+        : gameType === 'golf'
+          ? 'Golf ⛳'
+          : gameType === 'blackjack'
+            ? 'Blackjack 🂡'
+            : 'The Prediction Game'
     this.systemChat(`The table switches to ${label}`)
     this.broadcastLobby()
   }
@@ -529,6 +569,30 @@ export class Room {
     }
     if (!(GolfConfig.holeCountOptions as readonly number[]).includes(holes)) return
     this.holeCount = holes
+    this.broadcastLobby()
+  }
+
+  /** Blackjack between a shared dealer and ranked-against-each-other. Host only, lobby only. */
+  setBlackjackMode(seat: Seat, mode: BlackjackMode) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the blackjack mode.')
+      return
+    }
+    if (mode !== 'dealer' && mode !== 'players') return
+    this.blackjackMode = mode
+    this.broadcastLobby()
+  }
+
+  /** How many rounds a Blackjack game runs. Host only, lobby only. */
+  setBlackjackRounds(seat: Seat, rounds: number) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the round count.')
+      return
+    }
+    if (!(BlackjackConfig.roundOptions as readonly number[]).includes(rounds)) return
+    this.blackjackRounds = rounds
     this.broadcastLobby()
   }
 
@@ -596,6 +660,13 @@ export class Room {
     this.lastActivity = Date.now()
     if (!this.isGolf) return
     this.golfTurns.handleResolve(seat, action)
+  }
+
+  /** Blackjack: hit, stand, or double on your turn. */
+  blackjackAction(seat: Seat, action: unknown) {
+    this.lastActivity = Date.now()
+    if (!this.isBlackjack) return
+    this.blackjackTurns.handleAction(seat, action)
   }
 
   useAbility(seat: Seat, payload: UseAbilityPayload) {
@@ -690,6 +761,7 @@ export class Room {
     this.heartsTricks.cancel()
     this.golfReveal.cancel()
     this.golfTurns.cancel()
+    this.blackjackTurns.cancel()
 
     postGameAbandonedToDiscord({
       code: this.code,
@@ -749,6 +821,11 @@ export class Room {
       return
     }
 
+    if (this.isBlackjack) {
+      this.sendBlackjackState(viewer, seat)
+      return
+    }
+
     // A seated viewer always sees their OWN bid undisguised; a watcher is an
     // outsider and gets the fully disguised view.
     const bids = this.roles.isActive()
@@ -766,6 +843,7 @@ export class Room {
       gameType: 'prediction',
       hearts: null,
       golf: null,
+      blackjack: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: this.trumpSuit,
@@ -817,6 +895,7 @@ export class Room {
       gameType: 'hearts',
       hearts,
       golf: null,
+      blackjack: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: '',
@@ -874,6 +953,51 @@ export class Room {
       gameType: 'golf',
       hearts: null,
       golf,
+      blackjack: null,
+      roundNumber: this.roundNumber,
+      cardsDealt: 0,
+      trumpSuit: '',
+      turnOrder: this.turnOrderIds,
+      phase: this.phase,
+      bids: {},
+      bidSum: 0,
+      tricksWon: {},
+      totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
+      history: this.history,
+      currentTurnId: null,
+      leadSuit: null,
+      plays: [],
+      trickNumber: 0,
+      hand: [],
+      roleState: null,
+      illusion: [],
+      rebid: null,
+      barred: null,
+      chat: this.chatLog,
+      restart: this.restartVoteState(),
+      spectating: seat == null,
+    }
+
+    if (seat) this.io.send(seat, 'snapshot', snapshot)
+    else this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
+  }
+
+  /** The Blackjack branch of sendState. */
+  private sendBlackjackState(viewer: Seat | Spectator, seat: Seat | null) {
+    const blackjack: BlackjackSnapshot = {
+      roundNumber: this.roundNumber,
+      totalRounds: this.blackjackRounds,
+      ...this.blackjackTurns.snapshot(),
+    }
+
+    const snapshot: Snapshot = {
+      inGame: true,
+      roster: this.roster(),
+      mode: 'classic',
+      gameType: 'blackjack',
+      hearts: null,
+      golf: null,
+      blackjack,
       roundNumber: this.roundNumber,
       cardsDealt: 0,
       trumpSuit: '',
@@ -1095,6 +1219,7 @@ export class Room {
   private gameName(): string {
     if (this.isHearts) return 'Hearts'
     if (this.isGolf) return 'Golf'
+    if (this.isBlackjack) return 'Blackjack'
     return this.roles.getMode() === 'chaos' ? 'The Prediction Game (Chaos)' : 'The Prediction Game'
   }
 
@@ -1120,6 +1245,8 @@ export class Room {
       await this.runHeartsGame()
     } else if (this.isGolf) {
       await this.runGolfGame()
+    } else if (this.isBlackjack) {
+      await this.runBlackjackGame()
     } else {
       await this.runPredictionGame()
     }
@@ -1135,6 +1262,7 @@ export class Room {
     this.heartsTricks.reset()
     this.golfReveal.reset()
     this.golfTurns.reset()
+    this.blackjackTurns.reset()
     this.gameState = 'Lobby'
     this.roundNumber = 0
     this.history = {}
@@ -1245,6 +1373,70 @@ export class Room {
         return
       }
       await this.playGolfHole(holeNumber)
+      if (this.aborted) return
+    }
+  }
+
+  /**
+   * One Blackjack round: deal two cards to everyone (and the dealer, in
+   * vs-Dealer mode), let each seat hit/stand/double in turn -- a natural
+   * settles immediately, before any decision -- then, in vs-Dealer mode, the
+   * dealer plays its fixed rule.
+   */
+  private async playBlackjackRound(roundNumber: number) {
+    for (const seat of this.seats) {
+      seat.blackjackHand = []
+      seat.blackjackDone = false
+      seat.blackjackDoubled = false
+    }
+    this.blackjackTurns.reset()
+
+    const order = [...this.seats]
+    const { hands, dealerHand, shoe } = dealBlackjackRound(order, this.blackjackMode)
+    for (const seat of order) seat.blackjackHand = hands.get(seat.id) as Card[]
+
+    this.roundNumber = roundNumber
+    this.cardsDealt = 0
+    this.trumpSuit = ''
+    this.turnOrderIds = order.map((s) => s.id)
+    this.phase = 'RoundStart'
+
+    this.io.broadcast('blackjackRoundStart', {
+      roundNumber,
+      totalRounds: this.blackjackRounds,
+      mode: this.blackjackMode,
+      turnOrder: this.turnOrderIds,
+    })
+
+    this.phase = 'Playing'
+    this.io.broadcast('gameState', { phase: 'Playing', roundNumber })
+
+    await this.blackjackTurns.runTurnPhase(order, hands, dealerHand, shoe, this.blackjackMode)
+    if (this.aborted) return
+
+    // dealerHand is mutated in place by runTurnPhase's dealer auto-play, so
+    // this reference already carries the dealer's final cards.
+    const results = scoreBlackjackRound(
+      this.io,
+      this.seats,
+      this.blackjackMode,
+      dealerHand,
+      roundNumber,
+    )
+    this.history[roundNumber] = Object.fromEntries(results.map((r) => [r.id, r.roundScore]))
+
+    this.io.broadcast('roundEnded', { roundNumber })
+    await sleep(BlackjackConfig.roundEndPause)
+  }
+
+  /** Host-chosen round count, most points when the last round ends wins. */
+  private async runBlackjackGame() {
+    for (let roundNumber = 1; roundNumber <= this.blackjackRounds; roundNumber++) {
+      if (this.isEmpty) {
+        this.aborted = true
+        return
+      }
+      await this.playBlackjackRound(roundNumber)
       if (this.aborted) return
     }
   }

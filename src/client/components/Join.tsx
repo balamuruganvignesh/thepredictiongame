@@ -3,7 +3,7 @@
 // joining by code puts you in whatever game that table is already set to.
 
 import { useEffect, useState } from 'react'
-import { Config, GolfConfig, HeartsConfig } from '@shared/config'
+import { BlackjackConfig, Config, GolfConfig, HeartsConfig } from '@shared/config'
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
@@ -22,6 +22,7 @@ export function Join({ connected, error, onJoin }: Props) {
   const [game, setGame] = useState<GameType>('prediction')
   const isHearts = game === 'hearts'
   const isGolf = game === 'golf'
+  const isBlackjack = game === 'blackjack'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
 
@@ -75,7 +76,15 @@ export function Join({ connected, error, onJoin }: Props) {
         {/* Joining by code: the table already has a game, so this screen
             stops advertising one and says so instead. */}
         <h1 className="join__title">
-          {creating ? (isHearts ? 'HEARTS' : isGolf ? 'GOLF' : 'THE PREDICTION GAME') : 'JOIN A TABLE'}
+          {creating
+            ? isHearts
+              ? 'HEARTS'
+              : isGolf
+                ? 'GOLF'
+                : isBlackjack
+                  ? 'BLACKJACK'
+                  : 'THE PREDICTION GAME'
+            : 'JOIN A TABLE'}
         </h1>
         <p className="join__subtitle">
           {creating
@@ -83,14 +92,16 @@ export function Join({ connected, error, onJoin }: Props) {
               ? 'take no tricks worth taking'
               : isGolf
                 ? 'lowest grid wins'
-                : '5 up 5 down'
-            : 'three games, one table'}
+                : isBlackjack
+                  ? 'get closer to 21'
+                  : '5 up 5 down'
+            : 'four games, one table'}
         </p>
         <p className="join__blurb">
           {!creating ? (
             <>
-              You’ll land in whichever game that table is playing — The Prediction Game, Hearts, or
-              Golf. The host picks.
+              You’ll land in whichever game that table is playing — The Prediction Game, Hearts,
+              Golf, or Blackjack. The host picks.
             </>
           ) : isHearts ? (
             <>
@@ -103,6 +114,13 @@ export function Join({ connected, error, onJoin }: Props) {
               Six face-down cards each. Draw, swap, or flip to learn your grid — match a column and
               it scores zero. Lowest total after {GolfConfig.defaultHoleCount} holes wins.{' '}
               {GolfConfig.minPlayers}–{GolfConfig.maxPlayers} players.
+            </>
+          ) : isBlackjack ? (
+            <>
+              Hit, stand, or double, trying to land closer to 21 than the dealer without busting —
+              or the host can flip it to everyone racing each other instead. Most points after{' '}
+              {BlackjackConfig.defaultRounds} rounds wins. {BlackjackConfig.minPlayers}–
+              {BlackjackConfig.maxPlayers} players.
             </>
           ) : (
             <>
@@ -140,6 +158,15 @@ export function Join({ connected, error, onJoin }: Props) {
             onClick={() => setGame('golf')}
           >
             golf ⛳
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isBlackjack}
+            className={`segmented__option${isBlackjack ? ' is-active' : ''}`}
+            onClick={() => setGame('blackjack')}
+          >
+            blackjack 🂡
           </button>
         </div>
         )}

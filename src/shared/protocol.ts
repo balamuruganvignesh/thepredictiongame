@@ -3,19 +3,22 @@
 // Client -> Server: join, toggleReady, startGame, setMode, setGameType,
 //                   setTargetScore, setHoleCount, submitBid, submitRebid, declareDouble,
 //                   playCard, passCards, useAbility, requestState, voteRestart,
-//                   golfRevealInitial, golfDraw, golfResolve
+//                   golfRevealInitial, golfDraw, golfResolve, setBlackjackMode,
+//                   setBlackjackRounds, blackjackAction
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
 //                   abilityResult, roleAnnounce, abilityEffect, roleSync,
 //                   rebidPrompt, snapshot, heartsRoundStart, passPrompt,
 //                   passResult, heartsState, heartsScoreUpdate, restartVote,
-//                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate
+//                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate,
+//                   blackjackRoundStart, blackjackState, blackjackScoreUpdate
 //
-// Three games share this protocol. Everything about the table -- joining, the
+// Four games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
 // bidding events belong to the Prediction Game, the hearts* / pass* events to
-// Hearts, and the golf* events to Golf -- no game ever emits another's.
+// Hearts, the golf* events to Golf, and the blackjack* events to Blackjack --
+// no game ever emits another's.
 
 import type { Card, Suit } from './cards'
 import type { PassDirection } from './heartsRules'
@@ -23,7 +26,9 @@ import type { PassDirection } from './heartsRules'
 export type PlayerId = string
 export type GameMode = 'classic' | 'chaos'
 /** Which game this table is playing. Chaos is a Prediction Game mode only. */
-export type GameType = 'prediction' | 'hearts' | 'golf'
+export type GameType = 'prediction' | 'hearts' | 'golf' | 'blackjack'
+/** Blackjack only: a shared dealer hand, or players ranked against each other with no dealer. */
+export type BlackjackMode = 'dealer' | 'players'
 export type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
 // ---- Lobby ------------------------------------------------------------------
@@ -50,6 +55,10 @@ export type LobbyUpdate = {
   targetScore: number
   /** Golf only: how many holes the game runs. Ignored by the other games. */
   holeCount: number
+  /** Blackjack only: vs a shared dealer, or ranked against each other. */
+  blackjackMode: BlackjackMode
+  /** Blackjack only: how many rounds the game runs. Ignored by the other games. */
+  blackjackRounds: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
 }
@@ -386,6 +395,61 @@ export type GolfSnapshot = {
   pendingDraw: GolfDrawResult | null
 }
 
+// ---- Blackjack ----------------------------------------------------------
+//
+// Deliberately its own set of events, like Hearts and Golf. Unlike either of
+// them, hands are dealt and stay face up -- the way blackjack is actually
+// played -- so every seat's cards are public the moment they're dealt. The
+// one hidden card in the whole game is the dealer's hole card in vs-Dealer
+// mode, kept out of `dealerHand` (as a `null` slot) until the dealer plays.
+
+export type BlackjackRoundStart = {
+  roundNumber: number
+  totalRounds: number
+  mode: BlackjackMode
+  turnOrder: PlayerId[]
+}
+
+export type BlackjackAction = 'hit' | 'stand' | 'double'
+
+/** One seat's hand as the whole table can see it. */
+export type BlackjackHandPublic = {
+  cards: Card[]
+  total: number
+  soft: boolean
+  busted: boolean
+  /** A natural 21 on the first two cards. */
+  blackjack: boolean
+  doubled: boolean
+  /** Stood, busted, doubled-and-drew, or dealt a natural -- no more actions this round. */
+  done: boolean
+}
+
+export type BlackjackState = {
+  hands: Record<PlayerId, BlackjackHandPublic>
+  /** vs-Dealer mode only; null in vs-Players mode (no dealer at all). */
+  dealerHand: (Card | null)[] | null
+  dealerTotal: number | null
+  dealerBusted: boolean
+  currentTurnId: PlayerId | null
+  mode: BlackjackMode
+}
+
+export type BlackjackHandResult = { id: PlayerId; roundScore: number; totalScore: number }
+export type BlackjackScoreUpdate = { roundNumber: number; results: BlackjackHandResult[] }
+
+/** The Blackjack half of a reconnect snapshot; null while playing another game. */
+export type BlackjackSnapshot = {
+  roundNumber: number
+  totalRounds: number
+  mode: BlackjackMode
+  hands: Record<PlayerId, BlackjackHandPublic>
+  dealerHand: (Card | null)[] | null
+  dealerTotal: number | null
+  dealerBusted: boolean
+  currentTurnId: PlayerId | null
+}
+
 // ---- Reconnect --------------------------------------------------------------
 
 /**
@@ -401,6 +465,8 @@ export type Snapshot = {
   hearts: HeartsSnapshot | null
   /** Everything Golf-specific; null when the table is playing another game. */
   golf: GolfSnapshot | null
+  /** Everything Blackjack-specific; null when the table is playing another game. */
+  blackjack: BlackjackSnapshot | null
   roundNumber: number
   cardsDealt: number
   trumpSuit: string
@@ -477,6 +543,9 @@ export interface ServerToClientEvents {
   golfState: (data: GolfState) => void
   golfDrawResult: (data: GolfDrawResult) => void
   golfScoreUpdate: (data: GolfScoreUpdate) => void
+  blackjackRoundStart: (data: BlackjackRoundStart) => void
+  blackjackState: (data: BlackjackState) => void
+  blackjackScoreUpdate: (data: BlackjackScoreUpdate) => void
   restartVote: (data: RestartVote) => void
   /** Spectator-only: the hand of whichever seat they're currently watching. */
   watchedHand: (data: WatchedHand) => void
@@ -516,6 +585,12 @@ export interface ClientToServerEvents {
   golfDraw: (source: GolfDrawSource) => void
   /** Golf: what to do with the card you just drew. */
   golfResolve: (action: GolfResolveAction) => void
+  /** Host only, lobby only: switch Blackjack between vs-Dealer and vs-Players. */
+  setBlackjackMode: (mode: BlackjackMode) => void
+  /** Host only, lobby only: how many rounds a Blackjack game runs. */
+  setBlackjackRounds: (rounds: number) => void
+  /** Blackjack: hit, stand, or double on your turn. */
+  blackjackAction: (action: BlackjackAction) => void
   requestState: () => void
   chat: (text: string) => void
   /**

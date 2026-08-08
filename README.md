@@ -8,10 +8,11 @@ prediction and you score big. Miss and your score drops.
 code, deal.
 
 
-**Two games at one table.** Pick The Prediction Game or [Hearts](#hearts) on
-the landing screen when you open a table, and the host can still switch it from
-a card in the lobby. Joining by code puts you in whatever that table is already
-playing. Same table, same code, same chat — different game.
+**Four games at one table.** Pick The Prediction Game, [Hearts](#hearts), Golf,
+or [Blackjack](#blackjack) on the landing screen when you open a table, and
+the host can still switch it from a card in the lobby. Joining by code puts
+you in whatever that table is already playing. Same table, same code, same
+chat — different game.
 
 ## How to play
 
@@ -72,6 +73,37 @@ Every card in the deck is dealt out, so a round is as long as your hand. Each
   isn't losing by itself, it just calls time.
 
 Chaos roles are a Prediction Game feature; a Hearts table is always straight.
+
+## Blackjack
+
+The fourth game. 2–7 players, dealt fresh from a multi-deck shoe every round.
+**Hands are dealt face up and stay that way** — everyone at the table can see
+everyone's cards, the way blackjack is actually played.
+
+The host picks a mode from the lobby:
+
+- **Vs Dealer** — classic blackjack. Each seat plays its hand against one
+  shared dealer, whose second card stays hidden until the dealer's own turn.
+- **Vs Players** — no dealer. Whoever lands closest to 21 without busting
+  wins the round; a tie for the best hand splits the win.
+
+On your turn: **Hit** for another card, **Stand** to lock in your total, or
+**Double** — take exactly one more card and your turn ends immediately, for
+double the round's points either way. Double is only on offer as your very
+first decision.
+
+- **A natural — 21 on your first two cards — settles on the spot**, before
+  you're even offered a turn.
+- **The dealer plays a fixed rule**: hit under 17, stand on 17 or more, soft
+  or hard. No insurance, no peeking.
+- **Scoring is simple points, not chips.** Push scores 0; a natural beats a
+  non-natural for +2; a regular win or loss is ±1 (±2 if you doubled). In Vs
+  Players, busting always costs −1 and everyone else who isn't the winner
+  scores 0.
+- **Most points after the host-chosen round count wins.**
+
+No Split, no chip stacks — just hit, stand, and double. Chaos roles are a
+Prediction Game feature; a Blackjack table is always straight.
 
 ## Chaos mode
 

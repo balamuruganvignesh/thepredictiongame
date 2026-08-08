@@ -7,8 +7,8 @@
 // The table code and share link live here: players arrive by URL.
 
 import { useState } from 'react'
-import { GolfConfig, HeartsConfig } from '@shared/config'
-import type { ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
+import { BlackjackConfig, GolfConfig, HeartsConfig } from '@shared/config'
+import type { BlackjackMode, ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { RolesGallery } from './RolesGallery'
 
@@ -23,6 +23,8 @@ type Props = {
   onSetGameType: (gameType: GameType) => void
   onSetTargetScore: (score: number) => void
   onSetHoleCount: (holes: number) => void
+  onSetBlackjackMode: (mode: BlackjackMode) => void
+  onSetBlackjackRounds: (rounds: number) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -38,6 +40,8 @@ export function Lobby({
   onSetGameType,
   onSetTargetScore,
   onSetHoleCount,
+  onSetBlackjackMode,
+  onSetBlackjackRounds,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -51,19 +55,20 @@ export function Lobby({
   const isChaos = lobby.mode === 'chaos'
   const isHearts = lobby.gameType === 'hearts'
   const isGolf = lobby.gameType === 'golf'
+  const isBlackjack = lobby.gameType === 'blackjack'
   const tooMany = lobby.roster.length > lobby.maxPlayers
   const compact = lobby.roster.length > 6
 
-  // Cycle prediction -> hearts -> golf -> prediction. A binary toggle doesn't
-  // scale past two games.
-  const GAME_CYCLE: GameType[] = ['prediction', 'hearts', 'golf']
+  // Cycle prediction -> hearts -> golf -> blackjack -> prediction. A binary
+  // toggle doesn't scale past two games.
+  const GAME_CYCLE: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack']
   const nextGameType = GAME_CYCLE[(GAME_CYCLE.indexOf(lobby.gameType) + 1) % GAME_CYCLE.length]
 
   const status = () => {
-    // Hearts and Golf both seat fewer players than the Prediction Game, so a
-    // big table can be over the limit rather than under it.
+    // Hearts, Golf and Blackjack all seat fewer players than the Prediction
+    // Game, so a big table can be over the limit rather than under it.
     if (tooMany) {
-      return `too many players for ${isHearts ? 'hearts' : isGolf ? 'golf' : 'this game'} — ${lobby.maxPlayers} max`
+      return `too many players for ${isHearts ? 'hearts' : isGolf ? 'golf' : isBlackjack ? 'blackjack' : 'this game'} — ${lobby.maxPlayers} max`
     }
     if (missing > 0) return `waiting for ${missing} more player${missing === 1 ? '' : 's'}`
     if (!lobby.canStart) return 'waiting for everyone to ready up…'
@@ -88,10 +93,16 @@ export function Lobby({
       <div className="lobby__left">
         <section className="note lobby__title-card">
           <h1 className="lobby__title">
-            {isHearts ? 'HEARTS' : isGolf ? 'GOLF' : 'THE PREDICTION GAME'}
+            {isHearts ? 'HEARTS' : isGolf ? 'GOLF' : isBlackjack ? 'BLACKJACK' : 'THE PREDICTION GAME'}
           </h1>
           <p className="lobby__subtitle">
-            {isHearts ? 'take no tricks worth taking' : isGolf ? 'lowest grid wins' : '5 up 5 down'}
+            {isHearts
+              ? 'take no tricks worth taking'
+              : isGolf
+                ? 'lowest grid wins'
+                : isBlackjack
+                  ? 'get closer to 21'
+                  : '5 up 5 down'}
           </p>
 
           <button className="code-chip" onClick={share} title="Copy the invite link">
@@ -128,6 +139,17 @@ export function Lobby({
               <br />
               lowest total after {lobby.holeCount} holes wins.
             </p>
+          ) : isBlackjack ? (
+            <p>
+              hit, stand, or double, trying to land closer to 21 than{' '}
+              {lobby.blackjackMode === 'dealer' ? 'the dealer' : 'everyone else'} without busting.
+              <br />
+              hands are dealt face up — everyone can see everyone's cards.
+              <br />
+              a natural blackjack settles on the spot; doubling doubles the swing.
+              <br />
+              most points after {lobby.blackjackRounds} rounds wins.
+            </p>
           ) : (
             <p>
               bid how many hands you’ll win each round.
@@ -143,21 +165,22 @@ export function Lobby({
 
         <div className="lobby__small-cards">
           <button
-            className={`note lobby__mode${isHearts ? ' is-hearts' : ''}${isGolf ? ' is-golf' : ''}`}
+            className={`note lobby__mode${isHearts ? ' is-hearts' : ''}${isGolf ? ' is-golf' : ''}${isBlackjack ? ' is-blackjack' : ''}`}
             onClick={() => isHost && onSetGameType(nextGameType)}
             disabled={!isHost}
           >
             <span className="lobby__mode-kicker">game</span>
             <span className="lobby__mode-value">
-              {isHearts ? 'HEARTS ♥' : isGolf ? 'GOLF ⛳' : 'PREDICTION'}
+              {isHearts ? 'HEARTS ♥' : isGolf ? 'GOLF ⛳' : isBlackjack ? 'BLACKJACK 🂡' : 'PREDICTION'}
             </span>
             <span className="lobby__mode-hint">
               {isHost ? 'tap to switch' : 'host picks the game'}
             </span>
           </button>
 
-          {/* Chaos roles are a Prediction Game feature; a Hearts or Golf table
-              swaps that card for the score/hole count the game plays to. */}
+          {/* Chaos roles are a Prediction Game feature; a Hearts, Golf, or
+              Blackjack table swaps that card for the choice(s) that game
+              plays to instead. */}
           {isHearts ? (
             <button
               className="note lobby__mode"
@@ -192,6 +215,41 @@ export function Lobby({
                 {isHost ? 'tap to change' : 'lowest total wins'}
               </span>
             </button>
+          ) : isBlackjack ? (
+            <>
+              <button
+                className="note lobby__mode"
+                onClick={() =>
+                  isHost && onSetBlackjackMode(lobby.blackjackMode === 'dealer' ? 'players' : 'dealer')
+                }
+                disabled={!isHost}
+              >
+                <span className="lobby__mode-kicker">mode</span>
+                <span className="lobby__mode-value">
+                  {lobby.blackjackMode === 'dealer' ? 'VS DEALER' : 'VS PLAYERS'}
+                </span>
+                <span className="lobby__mode-hint">
+                  {isHost ? 'tap to switch' : 'host picks the mode'}
+                </span>
+              </button>
+              <button
+                className="note lobby__mode"
+                onClick={() => {
+                  if (!isHost) return
+                  const options = BlackjackConfig.roundOptions as readonly number[]
+                  const next =
+                    options[(options.indexOf(lobby.blackjackRounds) + 1) % options.length]
+                  onSetBlackjackRounds(next)
+                }}
+                disabled={!isHost}
+              >
+                <span className="lobby__mode-kicker">play to</span>
+                <span className="lobby__mode-value">{lobby.blackjackRounds} rounds</span>
+                <span className="lobby__mode-hint">
+                  {isHost ? 'tap to change' : 'most points wins'}
+                </span>
+              </button>
+            </>
           ) : (
             <button
               className={`note lobby__mode${isChaos ? ' is-chaos' : ''}`}
@@ -206,7 +264,7 @@ export function Lobby({
             </button>
           )}
 
-          {!isHearts && !isGolf && (
+          {!isHearts && !isGolf && !isBlackjack && (
             <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>
               <span className="lobby__roles-title">🎭 THE ROLES</span>
               <span className="lobby__mode-hint">tap to browse chaos roles</span>
@@ -264,7 +322,7 @@ export function Lobby({
               {!lobby.canStart && (
                 <p className="lobby__hint">
                   {tooMany
-                    ? `${isHearts ? 'hearts' : isGolf ? 'golf' : 'this game'} seats ${lobby.maxPlayers} at most`
+                    ? `${isHearts ? 'hearts' : isGolf ? 'golf' : isBlackjack ? 'blackjack' : 'this game'} seats ${lobby.maxPlayers} at most`
                     : missing > 0
                       ? 'need more players…'
                       : 'everyone must ready up first'}

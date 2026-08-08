@@ -3,6 +3,7 @@ import { BackgroundFX } from './components/BackgroundFX'
 import { Feed } from './components/Feed'
 import { Join } from './components/Join'
 import { Lobby } from './components/Lobby'
+import { BlackjackTable } from './components/BlackjackTable'
 import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { Table } from './components/Table'
@@ -37,6 +38,8 @@ export default function App() {
           onSetGameType={actions.setGameType}
           onSetTargetScore={actions.setTargetScore}
           onSetHoleCount={actions.setHoleCount}
+          onSetBlackjackMode={actions.setBlackjackMode}
+          onSetBlackjackRounds={actions.setBlackjackRounds}
           onSendChat={actions.sendChat}
           onChatRead={actions.markChatRead}
         />
@@ -47,6 +50,8 @@ export default function App() {
           <HeartsTable store={store} actions={actions} />
         ) : store.gameType === 'golf' ? (
           <GolfTable store={store} actions={actions} />
+        ) : store.gameType === 'blackjack' ? (
+          <BlackjackTable store={store} actions={actions} />
         ) : (
           <Table store={store} actions={actions} />
         ))}

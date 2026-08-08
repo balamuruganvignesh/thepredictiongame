@@ -90,6 +90,32 @@ export const GolfConfig = {
 
 export type GolfHoleCount = (typeof GolfConfig.holeCountOptions)[number]
 
+/**
+ * Blackjack. Fixed round count like Golf/the Prediction Game (not "until
+ * someone crosses a target" like Hearts) -- most points when the last round
+ * ends wins. Two host choices instead of one: the sub-mode (vs a shared
+ * dealer, or ranked against each other with no dealer) and the round count.
+ */
+export const BlackjackConfig = {
+  minPlayers: 2,
+  maxPlayers: 7, // mirrors a real blackjack table's seat cap
+
+  roundOptions: [5, 9, 15],
+  defaultRounds: 9,
+
+  // A fresh shoe every round, same spirit as Golf's stock pile: this many
+  // standard 52-card decks (no jokers) shuffled together, more than enough
+  // depth that a mid-round reshuffle is a near-impossible path.
+  deckCount: 4,
+
+  // Pacing.
+  actPause: 1, // beat after a hit/stand/double lands, so it can be read
+  settleReveal: 2, // dealer's hole card flip, before scoring
+  roundEndPause: 4, // scoreboard reading time between rounds
+} as const
+
+export type BlackjackRoundCount = (typeof BlackjackConfig.roundOptions)[number]
+
 export const TOTAL_ROUNDS = Config.cardSequence.length
 
 export function trumpForRound(roundNumber: number): string {

@@ -4,12 +4,13 @@
 tricks they'll win each round, then play them out. Hit the prediction, score
 big; miss, and the score drops.
 
-**Three games live here.** The landing screen picks which game a NEW table
+**Four games live here.** The landing screen picks which game a NEW table
 opens on (carried on the `join` payload, applied by `Room.openOn` — only valid
 before anyone is seated), and a lobby card lets the host switch it afterwards
-between The Prediction Game, **Hearts**, and **Golf** — see the Hearts and
-Golf sections below. They share the table (roster, codes, chat, spectators,
-reconnect) and nothing else; the round loop forks once, in `Room.runGameLoop`.
+between The Prediction Game, **Hearts**, **Golf**, and **Blackjack** — see the
+Hearts, Golf, and Blackjack sections below. They share the table (roster,
+codes, chat, spectators, reconnect) and nothing else; the round loop forks
+once, in `Room.runGameLoop`.
 
 Node + Socket.IO server, React + Vite client, one `src/shared/` folder imported
 by both. See README.md for the player-facing rules.
@@ -50,6 +51,10 @@ by both. See README.md for the player-facing rules.
   - `npx tsx scripts/golf-test.ts` — every Golf rule that is pure: card values
     (including the Joker's -2 and a lone King's 0), column-match cancellation,
     a worked-example grid score.
+  - `npx tsx scripts/blackjack-test.ts` — every Blackjack rule that is pure:
+    hand values (including multi-ace demotion and soft/hard totals), bust and
+    natural-blackjack detection, the dealer's fixed hit/stand boundary, and
+    every branch of the vs-Dealer and vs-Players point tables.
 - **Hearts end-to-end: `npx tsx scripts/hearts-playtest.ts <n> <target>`** (~1–3
   min). TypeScript rather than `.mjs` on purpose — the bots pick cards with the
   same shared `isLegalHeartsPlay` the browser uses, so **any rejection means the
@@ -58,6 +63,10 @@ by both. See README.md for the player-facing rules.
 - **Golf end-to-end: `npx tsx scripts/golf-playtest.ts <n>`** (~1–2 min for a
   full 9-hole game). Same TypeScript-on-purpose reasoning as Hearts' playtest,
   and the same zero-rejections pass condition.
+- **Blackjack end-to-end: `npx tsx scripts/blackjack-playtest.ts <n> <dealer|players>`**
+  (~1–2 min). Same TypeScript-on-purpose reasoning and zero-rejections pass
+  condition; run it in BOTH sub-modes, since they settle rounds through two
+  different point-table paths.
 - All socket-driven scripts take `PORT=` to hit a second server instance when
   :3001 is busy with a dev server you'd rather not disturb.
 - Commit after each accepted chunk of work (user expects it).
@@ -76,10 +85,11 @@ legality is decided in the browser.
   table is a Socket.IO room keyed by its 4-letter code, and ALL state is
   instance state, because one process hosts many tables.
 - `src/server/engine/` — `bidding.ts`, `tricks.ts`, `scoring.ts`, `roles.ts`,
-  `deck.ts`, plus `hearts/` (`deck.ts`, `passing.ts`, `play.ts`, `scoring.ts`)
-  and `golf/` (`deck.ts`, `reveal.ts`, `turns.ts`, `scoring.ts`). Phase
-  managers talk to clients only through the narrow `EngineIO` interface in
-  `io.ts` — which is what lets all three games share one Room.
+  `deck.ts`, plus `hearts/` (`deck.ts`, `passing.ts`, `play.ts`, `scoring.ts`),
+  `golf/` (`deck.ts`, `reveal.ts`, `turns.ts`, `scoring.ts`), and
+  `blackjack/` (`deck.ts`, `turns.ts`, `scoring.ts`). Phase managers talk to
+  clients only through the narrow `EngineIO` interface in `io.ts` — which is
+  what lets all four games share one Room.
 - `src/client/useGame.ts` — all display state; a reducer fed by socket events.
 - `src/client/components/` — one per panel. `styles/tokens.css` is the design
   system: every color, font and radius comes from there, so restyling the whole
@@ -311,6 +321,74 @@ Prediction Game (`runGolfGame` loops `GolfConfig.totalHoles`), not Hearts'
   rule (`dealGolfGrids` calls `buildFullDeck(true)`), unlike the Prediction
   Game's overflow-only joker logic.
 
+## Blackjack
+
+The fourth game (`BlackjackConfig`, `src/shared/blackjackRules.ts`). Fixed
+round count like Golf/the Prediction Game, not Hearts' "until someone crosses
+a target" — most points when the last round ends wins (`lowestWins` stays
+`false`, the same read as the Prediction Game's sheet).
+
+- **2–7 players**, mirroring a real blackjack table's seat cap. `Room.limits`
+  adds Blackjack as a fourth branch; the join-time seat cap still stays at
+  `Config.maxPlayers` (10) — `canStart()` is what actually refuses an
+  over-large Blackjack table.
+- **Host-toggleable sub-mode, not a fixed ruleset**: `BlackjackMode` is
+  `'dealer'` (classic casino blackjack, one shared dealer hand) or `'players'`
+  (no dealer — the highest non-busted total among the table wins the round,
+  ties split it). Same lobby-card pattern as Hearts' target score / Golf's
+  hole count (`setBlackjackMode`), except Blackjack needs a SECOND host
+  choice at once (the round count), so its lobby row renders two small cards
+  instead of one.
+- **Hands are dealt and stay face up — the one game here where a player's own
+  hand is never private.** `BlackjackState.hands` is broadcast in full to
+  everyone, the same public-state shape Golf's grids use, because that's
+  genuinely how blackjack is played (and it's what lets a Golf-style
+  spectator watch the same board a seated player sees). The ONE hidden card
+  in the whole game is the dealer's hole card in vs-Dealer mode — represented
+  as a `null` slot in `dealerHand`, exactly like a Golf face-down slot — until
+  `BlackjackTurnManager.playDealer` reveals it.
+- **A natural blackjack (21 on the first two cards) settles before any
+  decision is made.** `runTurnPhase` marks every seat holding one `done`
+  before the turn loop even opens, so that seat's turn never comes up — no
+  hit/stand/double prompt to skip, just nothing to wait on.
+- **Turns are sequential, one seat at a time**, unlike Golf's simultaneous
+  reveal or Hearts' simultaneous pass — closer to `TrickManager`'s shape, but
+  each seat can act MULTIPLE times in a row (hit, hit, hit…) before its turn
+  ends, so `runTurnPhase` loops `waitForAction` in a `while` per seat rather
+  than once. No turn timers, ever: a disconnected seat auto-resolves via
+  "hit under 17, stand at 17+" (`autoAction`) — the same threshold the dealer
+  itself plays to.
+- **Double is only legal as your first decision** (`hands.get(seat.id).length
+  === 2`, checked in `handleAction`) — take exactly one forced card and your
+  turn ends immediately, win or lose. It doubles this round's point swing,
+  never the bet — there is no chip economy in this app, so "doubling" here
+  means doubling `settleVsDealer`/`settlePlayerTable`'s output, not a wager.
+- **The dealer's rule is fixed, not configurable**: hit under 17, stand on
+  ALL 17s including a soft one (`dealerShouldHit`) — the simplest common
+  house rule, chosen specifically to avoid a soft-17 special case in both the
+  engine and its tests. `BlackjackTurnManager.playDealer` only runs in
+  vs-Dealer mode, after every seat is done; there is no insurance / dealer
+  peek mechanic (a stated non-goal) — the hole card just stays hidden like
+  normal until the dealer's own turn.
+- **Scoring is an integer point table, not real blackjack payouts**
+  (`settleVsDealer` / `settlePlayerTable` in `shared/blackjackRules.ts`, kept
+  pure and separate from `scoring.ts` so every branch is unit-testable without
+  a Seat or EngineIO): push → 0; a natural beating a non-natural → +2 (never
+  doubled — a natural settles before any decision exists to double); a
+  regular win/loss → ±1, doubled to ±2. **vs-Players mode has no dealer to
+  settle against**, so instead of a pairwise result it RANKS the whole table:
+  highest non-busted total wins (ties split it), every busted seat scores −1,
+  every other seat scores 0 — same doubled multiplier.
+- **A fresh multi-deck shoe is dealt every round** (`BlackjackConfig.deckCount`
+  standard decks, no jokers, shuffled together by `dealBlackjackRound`) —
+  redealt from scratch each round like every other game here, rather than a
+  shoe that persists and gets cut partway through. Four decks for up to seven
+  players is comfortably enough depth that `BlackjackTurnManager.drawCard`'s
+  reshuffle-on-empty fallback is a safety net, not a required path.
+- **No Split for v1** (a stated non-goal) — it would turn one seat into
+  multiple hands mid-round and meaningfully complicate turn order, the public
+  hand display, and scoring all at once. Hit/Stand/Double only.
+
 ## UI conventions (user-driven, keep these)
 
 - Dark "paper note" theme, slight card rotations, no ruled lines. Fonts:
@@ -341,9 +419,15 @@ Prediction Game (`runGolfGame` loops `GolfConfig.totalHoles`), not Hearts'
   sorted, so a blacked-out card between the 9♠ and the 5♠ names itself; and if
   only the marks were shuffled, the shuffle would be the tell. For the same
   reason `TrickManager`'s Rewind pushes the card back WITHOUT re-sorting.
-- Chat is for what PLAYERS say. Game events (doubling, ability announcements)
-  go to the floating feed via `roleAnnounce`, never `systemChat`. Only presence
-  lines — joined / left / watching / took a seat — belong in chat.
+- Chat is for what PLAYERS say, plus a log of what the table was just told.
+  Game events (ability announcements, moon shots, restart-vote tallies) go to
+  the floating feed via `roleAnnounce`; **`Room`'s `broadcast` closure also
+  logs every `roleAnnounce` into the persistent chat**, one choke point so no
+  phase manager needs to know chat exists. Doubling stays the one exception —
+  it's silent, never a `roleAnnounce`, so it never reaches chat either (see
+  the Double section above). `abilityResult` is sent privately via `send`,
+  never `broadcast`, so it can never leak into chat. Presence lines — joined /
+  left / watching / took a seat — go straight to chat via `systemChat`.
 - Score sheet docked LEFT (row per round + trump icon, column per player,
   totals bar), open by default on desktop, on demand on touch; Tab or the
   SCORES menu item toggles it.
