@@ -79,6 +79,22 @@ function loadState(): SheetState {
 const suitClass = (suit: string) =>
   suit === 'Hearts' || suit === 'Diamonds' ? 'is-red' : suit === 'NoTrump' ? 'is-faint' : ''
 
+// Chrome/Firefox bump a focused number input's value on mouse-wheel scroll
+// instead of scrolling the page underneath it -- with a whole grid of these
+// inputs, that turns an ordinary scroll into randomly changed bids. Blurring
+// on wheel hands the scroll back to the page.
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur()
+
+function downloadJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function IrlScoresheet() {
   const [state, setState] = useState<SheetState>(loadState)
 
@@ -151,6 +167,33 @@ export function IrlScoresheet() {
     })
   }
 
+  function exportScores() {
+    const rounds = Array.from({ length: TOTAL_ROUNDS }, (_, i) => {
+      const entries = state.rounds[i]
+      const scores: Record<string, { bid: number | null; tricksWon: number | null; doubled: boolean; score: number | null }> = {}
+      for (const player of state.players) {
+        const entry = entries[player.id] ?? { bid: null, tricksWon: null, doubled: false }
+        scores[player.name] = {
+          bid: entry.bid,
+          tricksWon: entry.tricksWon,
+          doubled: entry.doubled,
+          score:
+            entry.bid != null && entry.tricksWon != null
+              ? calculateScore(entry.bid, entry.tricksWon, entry.doubled)
+              : null,
+        }
+      }
+      return { round: i + 1, cards: Config.cardSequence[i], trump: state.trumps[i], scores }
+    })
+
+    downloadJson(`judgement-scores-${new Date().toISOString().slice(0, 10)}.json`, {
+      exportedAt: new Date().toISOString(),
+      players: state.players.map((p) => p.name),
+      rounds,
+      totals: Object.fromEntries(state.players.map((p) => [p.name, totals.get(p.id) ?? 0])),
+    })
+  }
+
   return (
     <div className="irl-page">
       <header className="irl-header">
@@ -192,6 +235,9 @@ export function IrlScoresheet() {
           </button>
           <button className="button button--ghost" onClick={resetGame}>
             New game
+          </button>
+          <button className="button button--ghost" onClick={exportScores}>
+            Export JSON
           </button>
         </div>
       </div>
@@ -279,6 +325,7 @@ export function IrlScoresheet() {
                                   bid: e.target.value === '' ? null : Number(e.target.value),
                                 })
                               }
+                              onWheel={blurOnWheel}
                             />
                           </label>
                           <label className="irl-field">
@@ -293,6 +340,7 @@ export function IrlScoresheet() {
                                   tricksWon: e.target.value === '' ? null : Number(e.target.value),
                                 })
                               }
+                              onWheel={blurOnWheel}
                             />
                           </label>
                           <label className="irl-double">
