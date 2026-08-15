@@ -227,6 +227,10 @@ export function Join({ connected, error, onJoin }: Props) {
 
         {!connected && <p className="join__status">connecting to the table…</p>}
         {error && <p className="join__status join__status--error">{error}</p>}
+
+        <a className="join__irl-link" href="/scoresheet">
+          Playing with real cards? Use the IRL score sheet instead →
+        </a>
       </form>
     </div>
   )

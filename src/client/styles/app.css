@@ -326,6 +326,20 @@
   color: var(--danger);
 }
 
+.join__irl-link {
+  display: block;
+  margin-top: 18px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.join__irl-link:hover {
+  color: var(--text-muted);
+}
+
 /* ---- Lobby ----------------------------------------------------------------- */
 
 .lobby {
@@ -2352,6 +2366,224 @@ button.seat:hover {
     --card-w: clamp(26px, 9vw, 38px);
     padding: 6px;
   }
+
+  .irl-page {
+    padding: 16px 10px 40px;
+  }
+
+  .irl-cell-inputs {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ---- IRL score sheet ---------------------------------------------------- */
+
+.irl-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.irl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.irl-header h1 {
+  font-family: var(--font-title);
+  font-size: 2.2rem;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  margin: 0;
+}
+
+.irl-players {
+  margin-bottom: 22px;
+  padding: 16px;
+}
+
+.irl-players h2 {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.irl-player-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.irl-player-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-header);
+  border-radius: var(--radius-button);
+  padding: 4px 4px 4px 10px;
+}
+
+.irl-name-input {
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  width: 9ch;
+}
+
+.irl-remove {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.irl-player-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.irl-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-panel);
+}
+
+.irl-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.irl-table th,
+.irl-table td {
+  border: 1px solid color-mix(in srgb, var(--stroke) 40%, transparent);
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.irl-table th {
+  font-family: var(--font-heading);
+  color: var(--text-muted);
+  background: var(--panel-header);
+  white-space: nowrap;
+}
+
+.irl-round-col {
+  min-width: 108px;
+  text-align: left;
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.irl-trump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.irl-trump:hover {
+  background: var(--panel-header);
+}
+
+.irl-trump.is-red {
+  color: #eb6064;
+}
+
+.irl-trump.is-faint {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.irl-check {
+  display: block;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.irl-check.is-good {
+  color: var(--positive);
+}
+
+.irl-check.is-bad {
+  color: var(--danger);
+}
+
+.irl-cell {
+  min-width: 118px;
+  background: var(--panel);
+}
+
+.irl-cell-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 4px;
+  align-items: end;
+}
+
+.irl-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  gap: 2px;
+}
+
+.irl-field input {
+  width: 100%;
+  padding: 3px 2px;
+  text-align: center;
+  border-radius: 6px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-bottom);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.irl-double {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  gap: 2px;
+}
+
+.irl-score {
+  margin-top: 4px;
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.irl-score.is-good {
+  color: var(--positive);
+}
+
+.irl-score.is-bad {
+  color: var(--danger);
+}
+
+.irl-table tfoot td {
+  background: var(--panel-header);
+  color: var(--accent);
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
 }
 
 /* Very short viewports (a landscape phone) can't afford the hover-lift gap. */
