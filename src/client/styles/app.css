@@ -508,6 +508,27 @@
   font-size: 1.5rem;
 }
 
+.lobby__tournament {
+  --tilt: 0.6deg;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+
+.lobby__tournament.is-active {
+  border-color: var(--accent);
+}
+
+.lobby__tournament-picks {
+  flex-wrap: wrap;
+}
+
+.lobby__tournament-picks .segmented__option {
+  flex: 1 1 auto;
+}
+
 .lobby__right {
   display: flex;
   flex-direction: column;

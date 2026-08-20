@@ -160,7 +160,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
       )}
 
       {store.view === 'gameover' && store.standings && (
-        <GameEnd standings={store.standings} lowestWins={store.lowestWins} />
+        <GameEnd standings={store.standings} lowestWins={store.lowestWins} tournament={store.tournamentEnded} />
       )}
     </div>
   )

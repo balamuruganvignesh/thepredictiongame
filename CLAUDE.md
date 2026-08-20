@@ -73,6 +73,12 @@ by both. See README.md for the player-facing rules.
   (~1–2 min). Same TypeScript-on-purpose reasoning and zero-rejections pass
   condition; run it in BOTH sub-modes, since they settle rounds through two
   different point-table paths.
+- **Tournament mode end-to-end: `npx tsx scripts/tournament-playtest.ts <n>`**
+  (~1 min). The one thing no single-game playtest can cover: a table
+  switching `gameType` mid-session with no lobby step in between. Combines
+  the Golf and Blackjack bots into one client and drives a real 2-leg
+  tournament; zero rejections AND a correct combined-points final ranking is
+  the pass condition.
 - All socket-driven scripts take `PORT=` to hit a second server instance when
   :3001 is busy with a dev server you'd rather not disturb.
 - Commit after each accepted chunk of work (user expects it).
@@ -394,6 +400,61 @@ a target" — most points when the last round ends wins (`lowestWins` stays
 - **No Split for v1** (a stated non-goal) — it would turn one seat into
   multiple hands mid-round and meaningfully complicate turn order, the public
   hand display, and scoring all at once. Hit/Stand/Double only.
+
+## Tournament mode
+
+Host-picked rotation of 2+ games (`Room.setTournamentGames`, lobby-only,
+host-only), played back to back with combined scoring. Not a 5th `gameType`
+— it's a sequence OF `gameType`s, layered on top of the existing per-game
+engines rather than a new one.
+
+- **`Room.runGameLoop` handles every leg by recursing into itself** once a
+  leg finishes: `this.gameType` advances to the next leg and
+  `await this.runGameLoop()` re-enters the top of the function, which already
+  resets `history`/scores/votes. This is deliberate — it means every
+  per-game branch (`runPredictionGame`/`runHeartsGame`/`runGolfGame`/
+  `runBlackjackGame`) is completely untouched by tournament mode; the
+  wrapper only adds logic at the function's two boundaries. With
+  `tournamentGames` null (the default), every new branch is a no-op and the
+  single-game path is provably byte-for-byte the original behavior.
+- **Round 1 of any game already resets the client's own view/history**
+  (`roundNumber === 1` branches in every `*RoundStart` case in
+  `useGame.ts`), which is what lets a leg transition skip
+  `broadcastLobby()` entirely — no lobby flicker between legs — while still
+  leaving each client in a clean state for the next leg. One real gap this
+  surfaced: the Prediction Game's `roundStart` case never set `gameType`
+  explicitly (every other game's round-start case already did) because
+  before tournaments existed a table could never switch INTO Prediction Game
+  mid-session without a lobby step. Now it does.
+- **Points are rank-based per leg, never raw score totals.** Different games'
+  scores live on incompatible scales (a Blackjack round swings by ±1–2, a
+  Prediction Game round by dozens), so summing raw totals would let whichever
+  game has the biggest numbers decide the whole tournament. `n` players in a
+  leg score `n` points for 1st down to `1` point for last
+  (`Room.applyTournamentPoints`); a tie splits its ranks' points evenly, the
+  same "ties split it" convention Blackjack's vs-Players mode already uses.
+  This means tournament fractional point totals (e.g. `3.5`) are correct, not
+  a bug.
+- **Every leg shows its own real standings before the tournament moves on —
+  including the last one.** `broadcastGameEnded()` fires for every leg;
+  `broadcastTournamentEnded()` (combined points, `GameEnded.tournament:
+  true`) fires ONLY once, after the final leg's own standings have already
+  been shown. Collapsing the last leg's result straight into the combined
+  score without showing it on its own was the one real bug the tournament
+  playtest caught — don't reintroduce it.
+- **Table size limits are the INTERSECTION across every included game**
+  (`Room.limitsFor` extracted per-game, `Room.limits` takes the max of every
+  min and the min of every max). Spades-style fixed-player-count games will
+  narrow this hard once added — that's correct, not a bug, and the lobby
+  shows the live intersection as players pick games.
+- **The lobby's game checkboxes are host-local optimistic state
+  (`Lobby.tsx`'s `hostPicks`), not derived from the server-confirmed
+  `lobby.tournamentGames`.** A selection under 2 games is, by design, not a
+  tournament yet and round-trips back as cleared — deriving the checkboxes
+  from that confirmed value would mean picking your first game visually
+  un-picks itself before you can click a second one. Only the host has
+  local state to optimistically edit; a guest just reads the confirmed value,
+  since they can't click anyway.
 
 ## UI conventions (user-driven, keep these)
 

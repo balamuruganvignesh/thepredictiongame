@@ -327,7 +327,7 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
       )}
 
       {store.view === 'gameover' && store.standings && (
-        <GameEnd standings={store.standings} lowestWins={store.lowestWins} />
+        <GameEnd standings={store.standings} lowestWins={store.lowestWins} tournament={store.tournamentEnded} />
       )}
     </div>
   )

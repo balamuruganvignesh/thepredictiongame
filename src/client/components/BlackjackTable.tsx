@@ -205,7 +205,7 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
       )}
 
       {store.view === 'gameover' && store.standings && (
-        <GameEnd standings={store.standings} lowestWins={store.lowestWins} />
+        <GameEnd standings={store.standings} lowestWins={store.lowestWins} tournament={store.tournamentEnded} />
       )}
     </div>
   )

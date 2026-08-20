@@ -61,6 +61,12 @@ export type LobbyUpdate = {
   blackjackRounds: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
+  /**
+   * Host-picked rotation of games to play back to back with combined scoring.
+   * Null/absent means a normal single-game table. At least 2 games, in the
+   * one canonical order every game list uses (see Room.setTournamentGames).
+   */
+  tournamentGames?: GameType[] | null
 }
 
 // ---- Game state -------------------------------------------------------------
@@ -153,6 +159,13 @@ export type GameEnded = {
    * lowest total is the winner. The Prediction Game is the other way round.
    */
   lowestWins: boolean
+  /**
+   * True only on the FINAL gameEnded of a tournament, carrying combined
+   * rank-based points across every leg instead of one game's own score.
+   * Each individual leg still fires its own gameEnded with this unset, so
+   * players see that leg's real standings before moving on.
+   */
+  tournament?: boolean
 }
 
 export type DoubleWindow = { seconds: number }
@@ -571,6 +584,12 @@ export interface ClientToServerEvents {
   setTargetScore: (score: number) => void
   /** Host only, lobby only: how many holes a Golf game runs. */
   setHoleCount: (holes: number) => void
+  /**
+   * Host only, lobby only: which games to rotate through as one tournament.
+   * Fewer than 2 (after de-duping/validating) clears tournament mode, back
+   * to a normal single-game table on whatever setGameType last picked.
+   */
+  setTournamentGames: (games: GameType[]) => void
   /** Hearts: the three cards you're giving away. */
   passCards: (cards: Card[]) => void
   submitBid: (bid: number) => void

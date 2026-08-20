@@ -6,10 +6,13 @@ import type { Standing } from '@shared/protocol'
 export function GameEnd({
   standings,
   lowestWins = false,
+  tournament = false,
 }: {
   standings: Standing[]
   /** Hearts is a golf score: the standings arrive lowest-first and win that way. */
   lowestWins?: boolean
+  /** The final combined leg of a tournament, not one game's own score. */
+  tournament?: boolean
 }) {
   const compact = standings.length > 7
 
@@ -19,10 +22,11 @@ export function GameEnd({
         className={`note modal modal--end${compact ? ' is-compact' : ''}`}
         role="dialog"
         aria-modal="true"
-        aria-label="Final standings"
+        aria-label={tournament ? 'Final tournament standings' : 'Final standings'}
       >
-        <h2 className="modal__end-title">Final Standings</h2>
-        {lowestWins && <p className="modal__round">fewest penalty points wins</p>}
+        <h2 className="modal__end-title">{tournament ? '🏆 Tournament Champion' : 'Final Standings'}</h2>
+        {tournament && <p className="modal__round">combined points across every game</p>}
+        {lowestWins && !tournament && <p className="modal__round">fewest penalty points wins</p>}
 
         <ol className="standings">
           {standings.map((standing, i) => (

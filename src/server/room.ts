@@ -79,6 +79,11 @@ export class Room {
   private holeCount: number = GolfConfig.defaultHoleCount
   private blackjackMode: BlackjackMode = 'dealer'
   private blackjackRounds: number = BlackjackConfig.defaultRounds
+  /** Host-picked rotation of games; null means a normal single-game table. */
+  private tournamentGames: GameType[] | null = null
+  private tournamentIndex = 0
+  /** seatId -> accumulated rank-based points across every finished leg so far. */
+  private tournamentScores = new Map<string, number>()
   private passing: PassManager
   private heartsTricks: HeartsTrickManager
   private golfReveal: GolfRevealManager
@@ -179,12 +184,25 @@ export class Room {
     return this.gameType === 'blackjack'
   }
 
-  /** Table size limits for the game currently selected. */
-  private get limits(): { min: number; max: number } {
-    if (this.isHearts) return { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
-    if (this.isGolf) return { min: GolfConfig.minPlayers, max: GolfConfig.maxPlayers }
-    if (this.isBlackjack) return { min: BlackjackConfig.minPlayers, max: BlackjackConfig.maxPlayers }
+  private limitsFor(gameType: GameType): { min: number; max: number } {
+    if (gameType === 'hearts') return { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
+    if (gameType === 'golf') return { min: GolfConfig.minPlayers, max: GolfConfig.maxPlayers }
+    if (gameType === 'blackjack') return { min: BlackjackConfig.minPlayers, max: BlackjackConfig.maxPlayers }
     return { min: Config.minPlayers, max: Config.maxPlayers }
+  }
+
+  /**
+   * Table size limits for the game currently selected -- or, in tournament
+   * mode, the INTERSECTION across every game in the rotation, since the same
+   * roster has to fit all of them for the whole tournament's duration.
+   */
+  private get limits(): { min: number; max: number } {
+    const gameTypes = this.tournamentGames ?? [this.gameType]
+    const all = gameTypes.map((g) => this.limitsFor(g))
+    return {
+      min: Math.max(...all.map((l) => l.min)),
+      max: Math.min(...all.map((l) => l.max)),
+    }
   }
 
   // ---- Roster ---------------------------------------------------------------
@@ -511,6 +529,7 @@ export class Room {
       blackjackMode: this.blackjackMode,
       blackjackRounds: this.blackjackRounds,
       spectators: this.spectators.map((s) => s.name),
+      tournamentGames: this.tournamentGames,
     })
   }
 
@@ -590,6 +609,26 @@ export class Room {
     this.broadcastLobby()
   }
 
+  /**
+   * Host only, lobby only: which games to rotate through as one tournament.
+   * Kept in the one canonical order every game list in this app uses,
+   * regardless of what order the host happened to toggle them in. Fewer than
+   * 2 distinct valid games clears tournament mode entirely -- a "tournament"
+   * of one game is just a normal game.
+   */
+  setTournamentGames(seat: Seat, games: GameType[]) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can set up a tournament.')
+      return
+    }
+    const known: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack']
+    const requested = new Set(games.filter((g) => known.includes(g)))
+    const ordered = known.filter((g) => requested.has(g))
+    this.tournamentGames = ordered.length >= 2 ? ordered : null
+    this.broadcastLobby()
+  }
+
   /** Blackjack between a shared dealer and ranked-against-each-other. Host only, lobby only. */
   setBlackjackMode(seat: Seat, mode: BlackjackMode) {
     if (this.gameState !== 'Lobby') return
@@ -623,6 +662,11 @@ export class Room {
     if (!this.canStart()) {
       this.io.send(seat, 'actionError', 'Everyone needs to ready up first.')
       return
+    }
+    if (this.tournamentGames) {
+      this.tournamentIndex = 0
+      this.tournamentScores = new Map(this.seats.map((s) => [s.id, 0]))
+      this.gameType = this.tournamentGames[0]
     }
     this.gameState = 'InProgress'
     void this.runGameLoop()
@@ -1262,6 +1306,15 @@ export class Room {
     })
   }
 
+  /**
+   * One game end-to-end. In tournament mode this recurses into the next leg
+   * instead of dropping to the lobby: `this.gameType` is advanced and the
+   * function re-enters itself, so every per-game branch below stays
+   * completely untouched by tournament mode -- it just runs one more time.
+   * Round 1 of any game already resets each client's own history/view (see
+   * `roundStart`-family reducer cases in useGame.ts), so a fresh leg starts
+   * clean without this function having to reach into per-game state itself.
+   */
   private async runGameLoop() {
     this.aborted = false
     this.restartVotes.clear()
@@ -1270,6 +1323,13 @@ export class Room {
       seat.totalScore = 0
       seat.lastRoundScore = null
       seat.ready = false
+    }
+
+    if (this.tournamentGames && this.tournamentGames.length > 1) {
+      const leg = this.tournamentIndex + 1
+      this.io.broadcast('roleAnnounce', {
+        message: `🏆 Tournament — game ${leg} of ${this.tournamentGames.length}: ${this.gameName()}`,
+      })
     }
 
     if (this.isHearts) {
@@ -1282,7 +1342,27 @@ export class Room {
       await this.runPredictionGame()
     }
 
-    if (!this.aborted) {
+    if (this.tournamentGames && !this.aborted) {
+      this.applyTournamentPoints()
+      // Every leg gets its own real standings shown, including the last one
+      // -- a tournament's final leg deserves to be seen on its own terms,
+      // not silently folded straight into the combined score.
+      this.broadcastGameEnded()
+      await sleep(Config.gameEndPause)
+
+      const hasNextLeg = this.tournamentIndex < this.tournamentGames.length - 1
+      if (hasNextLeg) {
+        // Advance and play the next leg without ever dropping to the lobby
+        // in between.
+        this.tournamentIndex++
+        this.gameType = this.tournamentGames[this.tournamentIndex]
+        await this.runGameLoop()
+        return
+      }
+
+      this.broadcastTournamentEnded()
+      await sleep(Config.gameEndPause)
+    } else if (!this.aborted) {
       this.broadcastGameEnded()
       await sleep(Config.gameEndPause)
     }
@@ -1297,6 +1377,9 @@ export class Room {
     this.gameState = 'Lobby'
     this.roundNumber = 0
     this.history = {}
+    this.tournamentGames = null
+    this.tournamentScores.clear()
+    this.tournamentIndex = 0
 
     // Anyone who dropped during the game gives up their chair now.
     for (const seat of [...this.seats]) {
@@ -1305,6 +1388,43 @@ export class Room {
     // ...and anyone who spent the game watching takes one of the free chairs.
     this.seatSpectators()
     this.broadcastLobby()
+  }
+
+  /**
+   * Folds one finished leg's standings into the running tournament total as
+   * rank-based points (like a points classification), NOT raw scores --
+   * different games' scores live on wildly different scales (a Blackjack
+   * round swings by ±1-2, a Prediction Game round by dozens), so summing raw
+   * totals across games would let whichever game has the biggest numbers
+   * decide the whole tournament. In an n-player leg, 1st gets n points, last
+   * gets 1; a tie splits its ranks' points evenly, the same "ties split it"
+   * convention Blackjack's vs-Players mode already uses.
+   */
+  private applyTournamentPoints() {
+    const standings = this.currentStandings()
+    const n = standings.length
+    let i = 0
+    while (i < n) {
+      let j = i
+      while (j + 1 < n && standings[j + 1].totalScore === standings[i].totalScore) j++
+      const tiedRanks = Array.from({ length: j - i + 1 }, (_, k) => n - (i + k))
+      const points = tiedRanks.reduce((a, b) => a + b, 0) / tiedRanks.length
+      for (let k = i; k <= j; k++) {
+        const seatId = standings[k].id
+        this.tournamentScores.set(seatId, (this.tournamentScores.get(seatId) ?? 0) + points)
+      }
+      i = j + 1
+    }
+  }
+
+  private broadcastTournamentEnded() {
+    const standings: Standing[] = this.seats
+      .map((seat) => ({ id: seat.id, name: seat.name, totalScore: this.tournamentScores.get(seat.id) ?? 0 }))
+      .sort((a, b) => b.totalScore - a.totalScore)
+
+    this.io.broadcast('gameEnded', { standings, lowestWins: false, tournament: true })
+    postGameEndedToDiscord({ code: this.code, gameName: 'Tournament', standings })
+    recordGameEnded({ roomCode: this.code, gameType: 'tournament', gameName: 'Tournament', standings })
   }
 
   /** Ten rounds of 5-4-3-2-1-1-2-3-4-5, with chaos roles if the host picked them. */

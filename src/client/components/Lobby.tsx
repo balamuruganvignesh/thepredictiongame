@@ -25,6 +25,7 @@ type Props = {
   onSetHoleCount: (holes: number) => void
   onSetBlackjackMode: (mode: BlackjackMode) => void
   onSetBlackjackRounds: (rounds: number) => void
+  onSetTournamentGames: (games: GameType[]) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -42,6 +43,7 @@ export function Lobby({
   onSetHoleCount,
   onSetBlackjackMode,
   onSetBlackjackRounds,
+  onSetTournamentGames,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -63,6 +65,22 @@ export function Lobby({
   // toggle doesn't scale past two games.
   const GAME_CYCLE: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack']
   const nextGameType = GAME_CYCLE[(GAME_CYCLE.indexOf(lobby.gameType) + 1) % GAME_CYCLE.length]
+  const GAME_LABEL: Record<GameType, string> = {
+    prediction: 'PREDICTION',
+    hearts: 'HEARTS ♥',
+    golf: 'GOLF ⛳',
+    blackjack: 'BLACKJACK 🂡',
+  }
+
+  // Host-only optimistic state. A selection under 2 games is, by design, not
+  // a tournament yet (setTournamentGames clears it back to null server-side)
+  // -- deriving the checkboxes straight from the server-confirmed
+  // lobby.tournamentGames would mean picking your first game round-trips to
+  // "cleared" before you can click a second one. A guest has nothing to
+  // optimistically edit, so they just read the confirmed value directly.
+  const [hostPicks, setHostPicks] = useState<GameType[]>(lobby.tournamentGames ?? [])
+  const tournamentGames = isHost ? hostPicks : (lobby.tournamentGames ?? [])
+  const isTournament = tournamentGames.length >= 2
 
   const status = () => {
     // Hearts, Golf and Blackjack all seat fewer players than the Prediction
@@ -271,6 +289,38 @@ export function Lobby({
             </button>
           )}
         </div>
+
+        <section className={`note lobby__tournament${isTournament ? ' is-active' : ''}`}>
+          <span className="lobby__mode-kicker">🏆 tournament</span>
+          <div className="segmented lobby__tournament-picks" role="group" aria-label="Tournament games">
+            {GAME_CYCLE.map((g) => {
+              const selected = tournamentGames.includes(g)
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  className={`segmented__option${selected ? ' is-active' : ''}`}
+                  disabled={!isHost}
+                  onClick={() => {
+                    if (!isHost) return
+                    const next = selected ? hostPicks.filter((x) => x !== g) : [...hostPicks, g]
+                    setHostPicks(next)
+                    onSetTournamentGames(next)
+                  }}
+                >
+                  {GAME_LABEL[g]}
+                </button>
+              )
+            })}
+          </div>
+          <span className="lobby__mode-hint">
+            {isTournament
+              ? `${tournamentGames.length} games back to back, combined points · ${lobby.minPlayers}–${lobby.maxPlayers} players`
+              : isHost
+                ? 'pick 2+ games to rotate through with combined scoring, or leave it alone for a normal game'
+                : 'host can set up a multi-game tournament here'}
+          </span>
+        </section>
       </div>
 
       <div className="lobby__right">

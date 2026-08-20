@@ -297,7 +297,9 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         />
       )}
 
-      {store.view === 'gameover' && store.standings && <GameEnd standings={store.standings} />}
+      {store.view === 'gameover' && store.standings && (
+        <GameEnd standings={store.standings} tournament={store.tournamentEnded} />
+      )}
     </div>
   )
 }

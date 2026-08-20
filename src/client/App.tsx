@@ -46,6 +46,7 @@ export default function App() {
           onSetGameType={actions.setGameType}
           onSetTargetScore={actions.setTargetScore}
           onSetHoleCount={actions.setHoleCount}
+          onSetTournamentGames={actions.setTournamentGames}
           onSetBlackjackMode={actions.setBlackjackMode}
           onSetBlackjackRounds={actions.setBlackjackRounds}
           onSendChat={actions.sendChat}

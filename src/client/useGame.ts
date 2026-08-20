@@ -162,6 +162,8 @@ export type Store = {
   blackjack: BlackjackStore
   /** Hearts standings read the other way up: fewest penalty points wins. */
   lowestWins: boolean
+  /** True only on the FINAL standings of a tournament -- combined points, not one game's score. */
+  tournamentEnded: boolean
   /** Watching a game that was already running: no hand, no turn, no abilities. */
   spectating: boolean
   /** Spectator-only: the seat they've chosen to peek at, read-only. */
@@ -257,6 +259,7 @@ const initialStore: Store = {
   golf: emptyGolf,
   blackjack: emptyBlackjack,
   lowestWins: false,
+  tournamentEnded: false,
   spectating: false,
   watchedSeat: null,
   names: {},
@@ -312,7 +315,7 @@ type Action =
   | { type: 'trickResolved'; data: TrickResolved }
   | { type: 'score'; data: ScoreUpdate }
   | { type: 'roundEnded' }
-  | { type: 'gameEnded'; standings: Standing[]; lowestWins: boolean }
+  | { type: 'gameEnded'; standings: Standing[]; lowestWins: boolean; tournament?: boolean }
   | { type: 'heartsRoundStart'; data: HeartsRoundStart }
   | { type: 'passPrompt'; data: PassPrompt }
   | { type: 'passResult'; data: PassResult }
@@ -419,6 +422,11 @@ function reducer(state: Store, action: Action): Store {
       return {
         ...state,
         view: 'game',
+        // Only ever wrong once a table can switch games without a lobby
+        // step in between (a tournament leg) -- every other round-start case
+        // already sets its own gameType explicitly, this one just never
+        // needed to before tournaments existed.
+        gameType: 'prediction',
         standings: null,
         roundNumber: data.roundNumber,
         cardsDealt: data.cardsDealt,
@@ -536,6 +544,7 @@ function reducer(state: Store, action: Action): Store {
         view: 'gameover',
         standings: action.standings,
         lowestWins: action.lowestWins,
+        tournamentEnded: action.tournament === true,
         phase: null,
         roleState: null,
       }
@@ -983,7 +992,12 @@ export function useGame() {
       playRoundEnd()
     })
     socket.on('gameEnded', (data) =>
-      dispatch({ type: 'gameEnded', standings: data.standings, lowestWins: data.lowestWins }),
+      dispatch({
+        type: 'gameEnded',
+        standings: data.standings,
+        lowestWins: data.lowestWins,
+        tournament: data.tournament,
+      }),
     )
 
     socket.on('heartsRoundStart', (data) => dispatch({ type: 'heartsRoundStart', data }))
@@ -1083,6 +1097,9 @@ export function useGame() {
       },
       setHoleCount(holes: number) {
         socket.emit('setHoleCount', holes)
+      },
+      setTournamentGames(games: GameType[]) {
+        socket.emit('setTournamentGames', games)
       },
       setBlackjackMode(mode: BlackjackMode) {
         socket.emit('setBlackjackMode', mode)
