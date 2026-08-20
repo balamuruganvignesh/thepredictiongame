@@ -9,3 +9,8 @@ data/
 
 graphify-out/
 !graphify-out/GRAPH_REPORT.md
+
+# Claude Code project context -- kept locally, not published to GitHub.
+CLAUDE.md
+HANDOFF.md
+.claude/
