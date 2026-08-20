@@ -7,21 +7,24 @@ import { BlackjackTable } from './components/BlackjackTable'
 import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { IrlScoresheet } from './components/IrlScoresheet'
+import { Leaderboard } from './components/Leaderboard'
 import { Table } from './components/Table'
 import { useGame } from './useGame'
 
 export default function App() {
   const { store, actions } = useGame()
   const isIrlScoresheet = window.location.pathname === '/scoresheet'
+  const isLeaderboard = window.location.pathname === '/leaderboard'
 
   // Keep the URL on the table code, so the address bar is a shareable invite.
   useEffect(() => {
-    if (isIrlScoresheet) return
+    if (isIrlScoresheet || isLeaderboard) return
     const path = store.roomCode ? `/${store.roomCode}` : '/'
     if (window.location.pathname !== path) window.history.replaceState({}, '', path)
-  }, [store.roomCode, isIrlScoresheet])
+  }, [store.roomCode, isIrlScoresheet, isLeaderboard])
 
   if (isIrlScoresheet) return <IrlScoresheet />
+  if (isLeaderboard) return <Leaderboard />
 
   return (
     <>

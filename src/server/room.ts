@@ -46,6 +46,7 @@ import { dealBlackjackRound } from './engine/blackjack/deck'
 import { BlackjackTurnManager } from './engine/blackjack/turns'
 import { scoreBlackjackRound } from './engine/blackjack/scoring'
 import { postGameEndedToDiscord, postGameAbandonedToDiscord } from './discord'
+import { recordGameEnded, recordGameAbandoned } from './db/persistence'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
@@ -190,6 +191,23 @@ export class Room {
 
   get isEmpty(): boolean {
     return this.seats.every((seat) => !seat.connected)
+  }
+
+  get spectatorCount(): number {
+    return this.spectators.length
+  }
+
+  /** Everything the admin status endpoint needs -- no player-level detail, just table shape. */
+  summary() {
+    return {
+      code: this.code,
+      gameType: this.gameType,
+      gameName: this.gameName(),
+      gameState: this.gameState,
+      players: this.seats.length,
+      spectators: this.spectatorCount,
+      lastActivity: this.lastActivity,
+    }
   }
 
   getSeat(id: string): Seat | undefined {
@@ -769,6 +787,13 @@ export class Room {
       roundNumber: this.roundNumber,
       standings: this.currentStandings(),
     })
+    recordGameAbandoned({
+      roomCode: this.code,
+      gameType: this.gameType,
+      gameName: this.gameName(),
+      roundNumber: this.roundNumber,
+      standings: this.currentStandings(),
+    })
   }
 
   // ---- Chat -----------------------------------------------------------------
@@ -1229,6 +1254,12 @@ export class Room {
 
     this.io.broadcast('gameEnded', { standings, lowestWins })
     postGameEndedToDiscord({ code: this.code, gameName: this.gameName(), standings })
+    recordGameEnded({
+      roomCode: this.code,
+      gameType: this.gameType,
+      gameName: this.gameName(),
+      standings,
+    })
   }
 
   private async runGameLoop() {

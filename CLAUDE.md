@@ -21,6 +21,12 @@ by both. See README.md for the player-facing rules.
   socket). `npm run build && npm start` is the production shape: one process
   serving the built client and the socket from the same origin.
 - `npm run typecheck` before committing. There is no linter configured.
+- **`npm test` (vitest) runs the six fast, sub-second in-process rule scripts
+  below as subprocesses** (`test/pure-logic.test.ts`) — one command for CI,
+  zero duplication of the scripts themselves. `.github/workflows/ci.yml` runs
+  typecheck + test + build on every PR and push to main, ahead of
+  `fly-deploy.yml`'s auto-deploy. The slower socket-driven playtests stay a
+  manual step; they need a live server and take minutes.
 - **Verify rules changes with `node scripts/playtest.mjs <classic|chaos> <n>`.**
   It drives N bot clients through a full game against a running server and
   prints the standings plus every rule rejection. A 10-player game takes ~10
@@ -537,3 +543,88 @@ count 1` fixes it.
 Static hosts (Firebase Hosting, Netlify, Pages) CANNOT host this: a catch-all
 rewrite swallows `/socket.io/**` and the socket never connects, which looks
 exactly like players being kicked the moment they join.
+
+## Persistence & observability
+
+- **The one piece of state that survives a redeploy** is the SQLite store at
+  `src/server/db/` (`better-sqlite3`), holding `players` / `game_results` /
+  `game_result_players` — one row per finished or abandoned game, written
+  fire-and-forget from `Room.broadcastGameEnded` / `Room.abandonGame` (same
+  pattern as the Discord webhook in `discord.ts`, right next to it at both
+  call sites). Everything else in this app is still in-process memory and
+  still vanishes on redeploy — that hasn't changed.
+- `DATABASE_PATH` env var points at the db file; defaults to `./data/game.db`
+  (gitignored) for local dev. Production points it at the mounted Fly volume
+  declared in `fly.toml` (`[[mounts]] source = 'data'` → `/data`) — **that
+  volume must exist before the first deploy after this change**
+  (`fly volumes create data --app thepredictiongame --region ewr --size 1`),
+  a step this repo's tooling deliberately never runs for you.
+- `src/server/logger.ts` is a dependency-free structured (JSON-line) logger;
+  `index.ts`'s `uncaughtException`/`unhandledRejection` handlers use it
+  instead of a bare `console.error`, and it's the thing to reach for logging
+  any other server lifecycle event (see `room.created` / `room.reaped`).
+- `src/server/errorTracking.ts` optionally POSTs uncaught errors to
+  `ERROR_WEBHOOK_URL` — no-op if unset, same shape as `discord.ts`.
+  Deliberately NOT the official Sentry SDK: it drags in the full
+  OpenTelemetry auto-instrumentation stack (tracing for DBs/frameworks this
+  app doesn't use) for a 256mb single-instance box, which isn't worth it here.
+- `GET /admin/status?token=…` exists only when `ADMIN_TOKEN` is set (404
+  otherwise, not a 401 — the route itself is meant to not exist by default on
+  a public host with no other auth in front of it). Returns uptime and each
+  live room's `Room.summary()`: code, game type/name, state, player and
+  spectator counts. No per-player detail.
+
+## Player stats, leaderboard, and recent games
+
+- `GET /api/leaderboard` and `GET /api/players/:id/stats`
+  (`src/server/db/stats.ts`) are plain REST, deliberately NOT added to
+  `protocol.ts` — they're cross-game reads, not table-scoped, so they don't
+  belong on the Socket.IO event map that's the source of truth for anything a
+  live table sends. Public, no auth: no PII beyond a display name already
+  visible to anyone at a table, and this app has no auth system to gate
+  behind anyway.
+- "Wins" and lifetime score only ever count games where `aborted = 0` — an
+  abandoned game (restart vote) has no real winner, just standings as they
+  stood, so counting it as a win/loss in the leaderboard would be wrong. It
+  still shows up in "recent games," just labeled "left early."
+  `:id` is the same seat-token `playerId` `localStorage` already persists —
+  the id `roleHistory` weighting already keys off, reused here as the
+  identity anchor rather than inventing accounts.
+- The client page is `src/client/components/Leaderboard.tsx` at the fixed
+  route `/leaderboard` (same `window.location.pathname` gate in `App.tsx`
+  that `/scoresheet` uses), linked from the landing screen in `Join.tsx`.
+  There is no live "one-click rematch": room codes are ephemeral (a table
+  gets TTL-reaped or the process restarts), so there's nothing left to
+  reconnect a stale code to. What persists and is actually useful is the
+  read-only "recent games" list — who you played with and how it went — so
+  you know who to invite into a fresh table. Don't build a rematch button
+  that tries to resurrect an old room code; it can't work.
+
+## Multi-machine groundwork (NOT a green light to raise machine count)
+
+`src/server/redis.ts` and `src/server/roomDirectory.ts` are opt-in via
+`REDIS_URL` (no-op, byte-for-byte the same behavior as before, with it
+unset). **Read this before touching `fly.toml`'s machine count.**
+
+- With `REDIS_URL` set, `@socket.io/redis-adapter` fans a broadcast made on
+  one instance out to sockets connected to any other instance in the same
+  Socket.IO room — necessary if more than one machine is ever going to serve
+  this app.
+- `roomDirectory.ts` records which instance currently holds each room code in
+  Redis (`registerRoom`/`refreshRoom`/`removeRoom`, wired into `Room`
+  creation and the existing TTL-reap sweep in `index.ts`).
+- **Neither of these makes it safe to run more than one machine**, and
+  `fly.toml`'s `min_machines_running = 1` / `auto_stop_machines = false`
+  pinning is UNCHANGED and still authoritative. The missing piece is
+  connection-level routing: nothing today ensures a `join` for an existing
+  room code actually lands on the instance that holds that `Room` in memory
+  — Socket.IO's redis adapter only fans out broadcasts *after* a socket is
+  already connected to some instance; it doesn't relocate a `Room`'s
+  in-memory game state or hand off a live connection between processes. On
+  Fly specifically, closing that gap looks like inspecting the room
+  directory during the WebSocket handshake and replying with a `Fly-Replay`
+  header to bounce the request to the right machine — genuinely fiddly,
+  every-connection-critical code that needs validating against real
+  multi-machine infrastructure before it ships, which is why it isn't here
+  yet. Until it is, raising machine count reproduces the exact "kicked on
+  join" bug the single-machine constraint above exists to prevent.

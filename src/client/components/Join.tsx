@@ -231,6 +231,9 @@ export function Join({ connected, error, onJoin }: Props) {
         <a className="join__irl-link" href="/scoresheet">
           Playing with real cards? Use the IRL score sheet instead →
         </a>
+        <a className="join__irl-link" href="/leaderboard">
+          🏆 See the leaderboard →
+        </a>
       </form>
     </div>
   )

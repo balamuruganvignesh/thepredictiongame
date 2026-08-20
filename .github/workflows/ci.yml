@@ -1,0 +1,22 @@
+# Runs on every PR and every push to main so a regression is caught before
+# fly-deploy.yml auto-deploys it. Only the fast, sub-second in-process rule
+# tests run here (see test/pure-logic.test.ts) -- the socket-driven bot
+# playtests documented in CLAUDE.md take minutes and stay a manual step.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

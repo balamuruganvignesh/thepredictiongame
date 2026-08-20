@@ -16,6 +16,7 @@ primary_region = 'ewr'
 [build]
 [env]
   PORT = '3001'
+  DATABASE_PATH = '/data/game.db'
 
 [http_service]
   internal_port = 3001
@@ -23,6 +24,20 @@ primary_region = 'ewr'
   auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
+
+# Durable SQLite store for cross-game history (players / game_results /
+# game_result_players -- see src/server/db/index.ts). Everything else this
+# app holds is in-process memory and is expected to vanish on redeploy; this
+# volume is the one exception, so table state disappearing on deploy is still
+# fine, but game history is not lost. REQUIRES a volume actually provisioned
+# before the first deploy after this change:
+#   fly volumes create data --app thepredictiongame --region ewr --size 1
+# A single 1GB volume is fine at this app's scale; a volume is pinned to one
+# machine's region, which is consistent with the single-machine constraint
+# above -- do not add a second machine or a second volume.
+[[mounts]]
+  source = 'data'
+  destination = '/data'
 
 [[vm]]
   size = 'shared-cpu-1x'
