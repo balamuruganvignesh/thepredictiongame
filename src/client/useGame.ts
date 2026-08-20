@@ -4,7 +4,8 @@
 
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import type { Card } from '@shared/cards'
-import { BlackjackConfig, GolfConfig } from '@shared/config'
+import { BlackjackConfig, GolfConfig, SpadesConfig } from '@shared/config'
+import type { SpadesBid } from '@shared/spadesRules'
 import type {
   AbilityEffect,
   BlackjackAction as BlackjackActionKind,
@@ -36,6 +37,9 @@ import type {
   RoleSync,
   ScoreUpdate,
   Snapshot,
+  SpadesRoundStart,
+  SpadesScoreUpdate,
+  SpadesState,
   Standing,
   TrickResolved,
   TrickUpdate,
@@ -147,6 +151,36 @@ const emptyBlackjack: BlackjackStore = {
   currentTurnId: null,
 }
 
+/**
+ * The Spades slice. Only meaningful while `gameType === 'spades'`. Trick
+ * play itself (currentTurnId/leadSuit/plays/trickNumber) reuses the SAME
+ * top-level Store fields Prediction and Hearts already share -- this only
+ * holds what's genuinely Spades-specific: bidding, teams, bags.
+ */
+export type SpadesStore = {
+  handNumber: number
+  targetScore: number
+  /** seatId -> team, fixed for the whole game. */
+  teams: Record<string, 0 | 1>
+  phase: 'bidding' | 'playing'
+  biddingTurnId: string | null
+  bids: Partial<Record<string, SpadesBid>>
+  spadesBroken: boolean
+  /** [team 0's bags, team 1's bags]. */
+  bags: [number, number]
+}
+
+const emptySpades: SpadesStore = {
+  handNumber: 0,
+  targetScore: SpadesConfig.defaultTargetScore,
+  teams: {},
+  phase: 'bidding',
+  biddingTurnId: null,
+  bids: {},
+  spadesBroken: false,
+  bags: [0, 0],
+}
+
 export type Store = {
   connected: boolean
   joinError: string | null
@@ -160,6 +194,7 @@ export type Store = {
   hearts: HeartsStore
   golf: GolfStore
   blackjack: BlackjackStore
+  spades: SpadesStore
   /** Hearts standings read the other way up: fewest penalty points wins. */
   lowestWins: boolean
   /** True only on the FINAL standings of a tournament -- combined points, not one game's score. */
@@ -258,6 +293,7 @@ const initialStore: Store = {
   hearts: emptyHearts,
   golf: emptyGolf,
   blackjack: emptyBlackjack,
+  spades: emptySpades,
   lowestWins: false,
   tournamentEnded: false,
   spectating: false,
@@ -330,6 +366,9 @@ type Action =
   | { type: 'blackjackRoundStart'; data: BlackjackRoundStart }
   | { type: 'blackjackState'; data: BlackjackState }
   | { type: 'blackjackScore'; data: BlackjackScoreUpdate }
+  | { type: 'spadesRoundStart'; data: SpadesRoundStart }
+  | { type: 'spadesState'; data: SpadesState }
+  | { type: 'spadesScore'; data: SpadesScoreUpdate }
   | { type: 'roleState'; data: RoleState }
   | { type: 'roleSync'; data: RoleSync }
   | { type: 'announce'; message: string }
@@ -399,6 +438,7 @@ function reducer(state: Store, action: Action): Store {
           mode: action.data.blackjackMode,
           totalRounds: action.data.blackjackRounds,
         },
+        spades: { ...emptySpades, targetScore: action.data.spadesTargetScore },
         names,
         totals,
         history: {},
@@ -756,6 +796,69 @@ function reducer(state: Store, action: Action): Store {
       }
     }
 
+    case 'spadesRoundStart': {
+      const { data } = action
+      const order =
+        data.handNumber === 1 || state.order.length === 0 ? [...data.turnOrder] : state.order
+      return {
+        ...state,
+        view: 'game',
+        gameType: 'spades',
+        standings: null,
+        roundNumber: data.handNumber,
+        cardsDealt: 13,
+        totalTricks: 13,
+        trumpSuit: 'Spades',
+        turnOrder: data.turnOrder,
+        order,
+        history: data.handNumber === 1 ? {} : state.history,
+        tricksWon: {},
+        currentTurnId: null,
+        leadSuit: null,
+        hand: [],
+        plays: [],
+        trickNumber: 0,
+        trickWinnerId: null,
+        phase: 'bidding',
+        spades: {
+          ...emptySpades,
+          handNumber: data.handNumber,
+          targetScore: data.targetScore,
+          teams: data.teams,
+        },
+      }
+    }
+
+    case 'spadesState':
+      return {
+        ...state,
+        spades: {
+          ...state.spades,
+          phase: action.data.phase,
+          biddingTurnId: action.data.biddingTurnId,
+          bids: action.data.bids,
+          spadesBroken: action.data.spadesBroken,
+          bags: action.data.bags,
+        },
+      }
+
+    case 'spadesScore': {
+      const { data } = action
+      const totals = { ...state.totals }
+      const roundScores: Record<string, number> = {}
+      for (const team of data.teams) {
+        for (const player of team.players) {
+          totals[player.id] = team.totalScore
+          roundScores[player.id] = team.roundScore
+        }
+      }
+      return {
+        ...state,
+        totals,
+        history: { ...state.history, [data.handNumber]: roundScores },
+      }
+    }
+
     case 'roleState': {
       // A fresh round intro replays the reveal banner + ability slot roll.
       const bump = action.data.roundIntro ? state.roleBannerKey + 1 : state.roleBannerKey
@@ -891,6 +994,18 @@ function reducer(state: Store, action: Action): Store {
               currentTurnId: data.blackjack.currentTurnId,
             }
           : emptyBlackjack,
+        spades: data.spades
+          ? {
+              handNumber: data.spades.handNumber,
+              targetScore: data.spades.targetScore,
+              teams: data.spades.teams,
+              phase: data.spades.phase,
+              biddingTurnId: data.spades.biddingTurnId,
+              bids: data.spades.bids,
+              spadesBroken: data.spades.spadesBroken,
+              bags: data.spades.bags,
+            }
+          : emptySpades,
         phase:
           data.phase === 'Playing' ? 'playing' : data.phase === 'Passing' ? 'passing' : 'bidding',
         bids: data.bids,
@@ -1012,6 +1127,9 @@ export function useGame() {
     socket.on('blackjackRoundStart', (data) => dispatch({ type: 'blackjackRoundStart', data }))
     socket.on('blackjackState', (data) => dispatch({ type: 'blackjackState', data }))
     socket.on('blackjackScoreUpdate', (data) => dispatch({ type: 'blackjackScore', data }))
+    socket.on('spadesRoundStart', (data) => dispatch({ type: 'spadesRoundStart', data }))
+    socket.on('spadesState', (data) => dispatch({ type: 'spadesState', data }))
+    socket.on('spadesScoreUpdate', (data) => dispatch({ type: 'spadesScore', data }))
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
@@ -1106,6 +1224,12 @@ export function useGame() {
       },
       setBlackjackRounds(rounds: number) {
         socket.emit('setBlackjackRounds', rounds)
+      },
+      setSpadesTargetScore(score: number) {
+        socket.emit('setSpadesTargetScore', score)
+      },
+      submitSpadesBid(bid: SpadesBid) {
+        socket.emit('submitSpadesBid', bid)
       },
       /**
        * Hearts: give three cards away. Closed optimistically -- the server

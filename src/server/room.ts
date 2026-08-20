@@ -3,7 +3,15 @@
 // because a single process hosts many tables at once.
 
 import type { Server as SocketServer } from 'socket.io'
-import { BlackjackConfig, Config, GolfConfig, HeartsConfig, TOTAL_ROUNDS, trumpForRound } from '@shared/config'
+import {
+  BlackjackConfig,
+  Config,
+  GolfConfig,
+  HeartsConfig,
+  SpadesConfig,
+  TOTAL_ROUNDS,
+  trumpForRound,
+} from '@shared/config'
 import type { Card } from '@shared/cards'
 import type {
   BlackjackMode,
@@ -20,12 +28,15 @@ import type {
   RosterEntry,
   ServerToClientEvents,
   Snapshot,
+  SpadesSnapshot,
   Standing,
   UseAbilityPayload,
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
 import { passDirection, passTargetIndex } from '@shared/heartsRules'
 import { GRID_SIZE } from '@shared/golfRules'
+import type { SpadesBid } from '@shared/spadesRules'
+import { teamOfSeatPosition } from '@shared/spadesRules'
 import type { Seat, Spectator } from './types'
 import { sleep } from './types'
 import type { EngineIO } from './engine/io'
@@ -45,10 +56,16 @@ import { scoreGolfHole } from './engine/golf/scoring'
 import { dealBlackjackRound } from './engine/blackjack/deck'
 import { BlackjackTurnManager } from './engine/blackjack/turns'
 import { scoreBlackjackRound } from './engine/blackjack/scoring'
+import { SpadesBiddingManager } from './engine/spades/bidding'
+import { SpadesTrickManager } from './engine/spades/tricks'
+import { scoreSpadesHandForSeats } from './engine/spades/scoring'
 import { postGameEndedToDiscord, postGameAbandonedToDiscord } from './discord'
 import { recordGameEnded, recordGameAbandoned } from './db/persistence'
 
 type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
+
+/** Every game type this table can be set to -- the one place that list lives. */
+const KNOWN_GAME_TYPES: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack', 'spades']
 
 export class Room {
   readonly seats: Seat[] = []
@@ -79,6 +96,7 @@ export class Room {
   private holeCount: number = GolfConfig.defaultHoleCount
   private blackjackMode: BlackjackMode = 'dealer'
   private blackjackRounds: number = BlackjackConfig.defaultRounds
+  private spadesTargetScore: number = SpadesConfig.defaultTargetScore
   /** Host-picked rotation of games; null means a normal single-game table. */
   private tournamentGames: GameType[] | null = null
   private tournamentIndex = 0
@@ -90,6 +108,8 @@ export class Room {
   private golfTurns: GolfTurnManager
   private golfDealerIndex = 0
   private blackjackTurns: BlackjackTurnManager
+  private spadesBidding: SpadesBiddingManager
+  private spadesTricks: SpadesTrickManager
 
   // Round state, kept so a reconnecting client can be handed a full snapshot.
   private roundNumber = 0
@@ -168,12 +188,20 @@ export class Room {
 
     // Blackjack. No RoleManager either.
     this.blackjackTurns = new BlackjackTurnManager(this.io)
+
+    // Spades. No RoleManager either -- chaos roles are a Prediction Game feature.
+    this.spadesBidding = new SpadesBiddingManager(this.io)
+    this.spadesTricks = new SpadesTrickManager(this.io)
   }
 
   // ---- Which game --------------------------------------------------------
 
   private get isHearts(): boolean {
     return this.gameType === 'hearts'
+  }
+
+  private get isSpades(): boolean {
+    return this.gameType === 'spades'
   }
 
   private get isGolf(): boolean {
@@ -188,6 +216,7 @@ export class Room {
     if (gameType === 'hearts') return { min: HeartsConfig.minPlayers, max: HeartsConfig.maxPlayers }
     if (gameType === 'golf') return { min: GolfConfig.minPlayers, max: GolfConfig.maxPlayers }
     if (gameType === 'blackjack') return { min: BlackjackConfig.minPlayers, max: BlackjackConfig.maxPlayers }
+    if (gameType === 'spades') return { min: SpadesConfig.minPlayers, max: SpadesConfig.maxPlayers }
     return { min: Config.minPlayers, max: Config.maxPlayers }
   }
 
@@ -309,6 +338,8 @@ export class Room {
       blackjackHand: [],
       blackjackDone: false,
       blackjackDoubled: false,
+      spadesBid: null,
+      spadesBags: 0,
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
@@ -356,6 +387,8 @@ export class Room {
       this.golfReveal.onSeatDisconnected(seat)
       this.golfTurns.onSeatDisconnected(seat)
       this.blackjackTurns.onSeatDisconnected(seat)
+      this.spadesBidding.onSeatDisconnected(seat)
+      this.spadesTricks.onSeatDisconnected(seat)
       // Their vote goes with them, and the bar drops with the table size.
       this.settleRestartVote()
     }
@@ -456,6 +489,8 @@ export class Room {
         blackjackHand: [],
         blackjackDone: false,
         blackjackDoubled: false,
+        spadesBid: null,
+        spadesBags: 0,
         totalScore: 0,
         lastRoundScore: null,
         disconnectedAt: null,
@@ -528,6 +563,7 @@ export class Room {
       holeCount: this.holeCount,
       blackjackMode: this.blackjackMode,
       blackjackRounds: this.blackjackRounds,
+      spadesTargetScore: this.spadesTargetScore,
       spectators: this.spectators.map((s) => s.name),
       tournamentGames: this.tournamentGames,
     })
@@ -557,7 +593,7 @@ export class Room {
    */
   openOn(gameType: GameType) {
     if (this.seats.length > 0 || this.gameState !== 'Lobby') return
-    if (!['prediction', 'hearts', 'golf', 'blackjack'].includes(gameType)) return
+    if (!KNOWN_GAME_TYPES.includes(gameType)) return
     this.gameType = gameType
   }
 
@@ -568,7 +604,7 @@ export class Room {
       this.io.send(seat, 'actionError', 'Only the host can change the game.')
       return
     }
-    if (!['prediction', 'hearts', 'golf', 'blackjack'].includes(gameType)) return
+    if (!KNOWN_GAME_TYPES.includes(gameType)) return
     if (this.gameType === gameType) return
     this.gameType = gameType
     // Chaos roles are a Prediction Game feature; every other table is always plain.
@@ -580,7 +616,9 @@ export class Room {
           ? 'Golf ⛳'
           : gameType === 'blackjack'
             ? 'Blackjack 🂡'
-            : 'The Prediction Game'
+            : gameType === 'spades'
+              ? 'Spades ♠️'
+              : 'The Prediction Game'
     this.systemChat(`The table switches to ${label}`)
     this.broadcastLobby()
   }
@@ -609,6 +647,18 @@ export class Room {
     this.broadcastLobby()
   }
 
+  /** The score that ends a Spades game. Host only, lobby only. */
+  setSpadesTargetScore(seat: Seat, score: number) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can change the target score.')
+      return
+    }
+    if (!(SpadesConfig.targetScoreOptions as readonly number[]).includes(score)) return
+    this.spadesTargetScore = score
+    this.broadcastLobby()
+  }
+
   /**
    * Host only, lobby only: which games to rotate through as one tournament.
    * Kept in the one canonical order every game list in this app uses,
@@ -622,9 +672,8 @@ export class Room {
       this.io.send(seat, 'actionError', 'Only the host can set up a tournament.')
       return
     }
-    const known: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack']
-    const requested = new Set(games.filter((g) => known.includes(g)))
-    const ordered = known.filter((g) => requested.has(g))
+    const requested = new Set(games.filter((g) => KNOWN_GAME_TYPES.includes(g)))
+    const ordered = KNOWN_GAME_TYPES.filter((g) => requested.has(g))
     this.tournamentGames = ordered.length >= 2 ? ordered : null
     this.broadcastLobby()
   }
@@ -692,8 +741,16 @@ export class Room {
 
   playCard(seat: Seat, card: Card) {
     this.lastActivity = Date.now()
-    if (this.isHearts) this.heartsTricks.handleCardPlay(seat, card)
+    if (this.isSpades) this.spadesTricks.handleCardPlay(seat, card)
+    else if (this.isHearts) this.heartsTricks.handleCardPlay(seat, card)
     else this.tricks.handleCardPlay(seat, card)
+  }
+
+  /** Spades: your bid for the current hand. */
+  submitSpadesBid(seat: Seat, bid: unknown) {
+    this.lastActivity = Date.now()
+    if (!this.isSpades) return
+    this.spadesBidding.handleBidSubmission(seat, bid)
   }
 
   /** Hearts: the three cards this seat is giving away. */
@@ -824,6 +881,8 @@ export class Room {
     this.golfReveal.cancel()
     this.golfTurns.cancel()
     this.blackjackTurns.cancel()
+    this.spadesBidding.cancel()
+    this.spadesTricks.cancel()
 
     postGameAbandonedToDiscord({
       code: this.code,
@@ -895,6 +954,11 @@ export class Room {
       return
     }
 
+    if (this.isSpades) {
+      this.sendSpadesState(viewer, seat)
+      return
+    }
+
     // A seated viewer always sees their OWN bid undisguised; a watcher is an
     // outsider and gets the fully disguised view.
     const bids = this.roles.isActive()
@@ -913,6 +977,7 @@ export class Room {
       hearts: null,
       golf: null,
       blackjack: null,
+      spades: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: this.trumpSuit,
@@ -965,6 +1030,7 @@ export class Room {
       hearts,
       golf: null,
       blackjack: null,
+      spades: null,
       roundNumber: this.roundNumber,
       cardsDealt: this.cardsDealt,
       trumpSuit: '',
@@ -1023,6 +1089,7 @@ export class Room {
       hearts: null,
       golf,
       blackjack: null,
+      spades: null,
       roundNumber: this.roundNumber,
       cardsDealt: 0,
       trumpSuit: '',
@@ -1067,6 +1134,7 @@ export class Room {
       hearts: null,
       golf: null,
       blackjack,
+      spades: null,
       roundNumber: this.roundNumber,
       cardsDealt: 0,
       trumpSuit: '',
@@ -1089,6 +1157,66 @@ export class Room {
       chat: this.chatLog,
       restart: this.restartVoteState(),
       spectating: seat == null,
+    }
+
+    if (seat) this.io.send(seat, 'snapshot', snapshot)
+    else this.sendToSocket(viewer.socketId, 'snapshot', snapshot)
+  }
+
+  /** seatId -> team, from the seats' fixed array position (see teamOfSeatPosition). */
+  private spadesTeams(): Record<string, 0 | 1> {
+    return Object.fromEntries(this.seats.map((seat, i) => [seat.id, teamOfSeatPosition(i)]))
+  }
+
+  /** The Spades branch of sendState: same shape as Hearts', since both are trick-based. */
+  private sendSpadesState(viewer: Seat | Spectator, seat: Seat | null) {
+    const bids: Partial<Record<string, SpadesBid>> = {}
+    for (const s of this.seats) if (s.spadesBid != null) bids[s.id] = s.spadesBid
+    const bags: [number, number] = [
+      this.seats.find((_, i) => teamOfSeatPosition(i) === 0)?.spadesBags ?? 0,
+      this.seats.find((_, i) => teamOfSeatPosition(i) === 1)?.spadesBags ?? 0,
+    ]
+
+    const spades: SpadesSnapshot = {
+      handNumber: this.roundNumber,
+      targetScore: this.spadesTargetScore,
+      teams: this.spadesTeams(),
+      phase: this.phase === 'Bidding' ? 'bidding' : 'playing',
+      biddingTurnId: this.phase === 'Bidding' ? this.spadesBidding.currentTurnId() : null,
+      bids,
+      spadesBroken: this.spadesTricks.isBroken(),
+      bags,
+      ...this.spadesTricks.snapshot(),
+    }
+
+    const snapshot: Snapshot = {
+      inGame: true,
+      roster: this.roster(),
+      mode: 'classic',
+      gameType: 'spades',
+      hearts: null,
+      golf: null,
+      blackjack: null,
+      spades,
+      roundNumber: this.roundNumber,
+      cardsDealt: this.cardsDealt,
+      trumpSuit: 'Spades',
+      turnOrder: this.turnOrderIds,
+      phase: this.phase,
+      bids: {},
+      bidSum: 0,
+      tricksWon: Object.fromEntries(this.seats.map((s) => [s.id, s.tricksWon])),
+      totals: Object.fromEntries(this.seats.map((s) => [s.id, s.totalScore])),
+      history: this.history,
+      hand: seat ? seat.hand : [],
+      roleState: null,
+      illusion: [],
+      rebid: null,
+      barred: null,
+      chat: this.chatLog,
+      restart: this.restartVoteState(),
+      spectating: seat == null,
+      ...this.spadesTricks.snapshot(),
     }
 
     if (seat) this.io.send(seat, 'snapshot', snapshot)
@@ -1266,6 +1394,88 @@ export class Room {
     }
   }
 
+  /**
+   * One Spades hand: deal, bid, play 13 tricks, score. Team assignment comes
+   * from `this.seats`' array position (teamOfSeatPosition) and is stable for
+   * the whole game -- exactly 4 seats, enforced by canStart() against
+   * SpadesConfig's 4-4 limits before the game could ever start.
+   */
+  private async playSpadesHand(handNumber: number, dealerIndex: number) {
+    for (const seat of this.seats) {
+      seat.hand = []
+      seat.tricksWon = 0
+      seat.spadesBid = null
+    }
+    this.spadesBidding.reset()
+    this.spadesTricks.reset()
+
+    const order = [...this.seats]
+    const { hands } = dealHands(order, 13)
+    for (const seat of order) seat.hand = hands.get(seat.id) as Card[]
+
+    this.roundNumber = handNumber
+    this.cardsDealt = 13
+    this.trumpSuit = 'Spades'
+    this.turnOrderIds = order.map((s) => s.id)
+    this.phase = 'Bidding'
+
+    this.io.broadcast('spadesRoundStart', {
+      handNumber,
+      turnOrder: this.turnOrderIds,
+      dealerId: order[dealerIndex].id,
+      teams: this.spadesTeams(),
+      targetScore: this.spadesTargetScore,
+    })
+    for (const seat of order) {
+      this.io.send(seat, 'dealHand', { hand: seat.hand, roundNumber: handNumber })
+    }
+
+    // Both partners always carry the same bag count, so either one's value
+    // is the team's -- this is what bidders see going into the hand.
+    const bagsIn: [number, number] = [
+      order.find((_, i) => teamOfSeatPosition(i) === 0)?.spadesBags ?? 0,
+      order.find((_, i) => teamOfSeatPosition(i) === 1)?.spadesBags ?? 0,
+    ]
+
+    await this.spadesBidding.runBiddingPhase(order, bagsIn)
+    if (this.aborted) return
+
+    this.phase = 'Playing'
+    this.io.broadcast('gameState', { phase: 'Playing', roundNumber: handNumber })
+
+    const leader = order[(dealerIndex + 1) % order.length]
+    const bids: Partial<Record<string, SpadesBid>> = {}
+    for (const seat of order) if (seat.spadesBid != null) bids[seat.id] = seat.spadesBid
+
+    await this.spadesTricks.runPlayPhase(order, leader, bids, bagsIn)
+    if (this.aborted) return
+
+    scoreSpadesHandForSeats(this.io, order, handNumber)
+    this.history[handNumber] = Object.fromEntries(
+      order.map((seat) => [seat.id, seat.lastRoundScore ?? 0]),
+    )
+
+    this.io.broadcast('roundEnded', { roundNumber: handNumber })
+    await sleep(SpadesConfig.handEndPause)
+  }
+
+  private async runSpadesGame() {
+    // Same "until somebody crosses the target" shape as Hearts. Both
+    // partners always carry the same totalScore, so checking any one seat is
+    // the same as checking its team.
+    let dealerIndex = 0
+    for (let handNumber = 1; handNumber <= SpadesConfig.maxRounds; handNumber++) {
+      if (this.isEmpty) {
+        this.aborted = true
+        return
+      }
+      dealerIndex = (dealerIndex + 1) % this.seats.length
+      await this.playSpadesHand(handNumber, dealerIndex)
+      if (this.aborted) return
+      if (this.seats.some((seat) => seat.totalScore >= this.spadesTargetScore)) return
+    }
+  }
+
   /** Sorted the way each game reads a leaderboard -- Hearts and Golf ascending, the Prediction Game descending. */
   private currentStandings(): Standing[] {
     const lowestWins = this.isHearts || this.isGolf
@@ -1289,6 +1499,7 @@ export class Room {
     if (this.isHearts) return 'Hearts'
     if (this.isGolf) return 'Golf'
     if (this.isBlackjack) return 'Blackjack'
+    if (this.isSpades) return 'Spades'
     return this.roles.getMode() === 'chaos' ? 'The Prediction Game (Chaos)' : 'The Prediction Game'
   }
 
@@ -1332,7 +1543,9 @@ export class Room {
       })
     }
 
-    if (this.isHearts) {
+    if (this.isSpades) {
+      await this.runSpadesGame()
+    } else if (this.isHearts) {
       await this.runHeartsGame()
     } else if (this.isGolf) {
       await this.runGolfGame()
@@ -1374,6 +1587,8 @@ export class Room {
     this.golfReveal.reset()
     this.golfTurns.reset()
     this.blackjackTurns.reset()
+    this.spadesBidding.reset()
+    this.spadesTricks.reset()
     this.gameState = 'Lobby'
     this.roundNumber = 0
     this.history = {}

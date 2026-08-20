@@ -198,6 +198,8 @@ io.on('connection', (socket) => {
   socket.on('setBlackjackMode', (mode) => withSeat((r, s) => r.setBlackjackMode(s, mode)))
   socket.on('setBlackjackRounds', (rounds) => withSeat((r, s) => r.setBlackjackRounds(s, Number(rounds))))
   socket.on('blackjackAction', (action) => withSeat((r, s) => r.blackjackAction(s, action)))
+  socket.on('setSpadesTargetScore', (score) => withSeat((r, s) => r.setSpadesTargetScore(s, Number(score))))
+  socket.on('submitSpadesBid', (bid) => withSeat((r, s) => r.submitSpadesBid(s, bid)))
   socket.on('submitBid', (bid) => withSeat((r, s) => r.submitBid(s, Number(bid))))
   socket.on('submitRebid', (bid) => withSeat((r, s) => r.submitRebid(s, Number(bid))))
   socket.on('declareDouble', () => withSeat((r, s) => r.declareDouble(s)))

@@ -8,6 +8,7 @@ import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { IrlScoresheet } from './components/IrlScoresheet'
 import { Leaderboard } from './components/Leaderboard'
+import { SpadesTable } from './components/SpadesTable'
 import { Table } from './components/Table'
 import { useGame } from './useGame'
 
@@ -46,6 +47,7 @@ export default function App() {
           onSetGameType={actions.setGameType}
           onSetTargetScore={actions.setTargetScore}
           onSetHoleCount={actions.setHoleCount}
+          onSetSpadesTargetScore={actions.setSpadesTargetScore}
           onSetTournamentGames={actions.setTournamentGames}
           onSetBlackjackMode={actions.setBlackjackMode}
           onSetBlackjackRounds={actions.setBlackjackRounds}
@@ -61,6 +63,8 @@ export default function App() {
           <GolfTable store={store} actions={actions} />
         ) : store.gameType === 'blackjack' ? (
           <BlackjackTable store={store} actions={actions} />
+        ) : store.gameType === 'spades' ? (
+          <SpadesTable store={store} actions={actions} />
         ) : (
           <Table store={store} actions={actions} />
         ))}

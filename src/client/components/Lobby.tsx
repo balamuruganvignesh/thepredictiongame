@@ -7,7 +7,7 @@
 // The table code and share link live here: players arrive by URL.
 
 import { useState } from 'react'
-import { BlackjackConfig, GolfConfig, HeartsConfig } from '@shared/config'
+import { BlackjackConfig, GolfConfig, HeartsConfig, SpadesConfig } from '@shared/config'
 import type { BlackjackMode, ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { RolesGallery } from './RolesGallery'
@@ -25,6 +25,7 @@ type Props = {
   onSetHoleCount: (holes: number) => void
   onSetBlackjackMode: (mode: BlackjackMode) => void
   onSetBlackjackRounds: (rounds: number) => void
+  onSetSpadesTargetScore: (score: number) => void
   onSetTournamentGames: (games: GameType[]) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
@@ -43,6 +44,7 @@ export function Lobby({
   onSetHoleCount,
   onSetBlackjackMode,
   onSetBlackjackRounds,
+  onSetSpadesTargetScore,
   onSetTournamentGames,
   onSendChat,
   onChatRead,
@@ -58,18 +60,20 @@ export function Lobby({
   const isHearts = lobby.gameType === 'hearts'
   const isGolf = lobby.gameType === 'golf'
   const isBlackjack = lobby.gameType === 'blackjack'
+  const isSpades = lobby.gameType === 'spades'
   const tooMany = lobby.roster.length > lobby.maxPlayers
   const compact = lobby.roster.length > 6
 
-  // Cycle prediction -> hearts -> golf -> blackjack -> prediction. A binary
-  // toggle doesn't scale past two games.
-  const GAME_CYCLE: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack']
+  // Cycle prediction -> hearts -> golf -> blackjack -> spades -> prediction.
+  // A binary toggle doesn't scale past two games.
+  const GAME_CYCLE: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack', 'spades']
   const nextGameType = GAME_CYCLE[(GAME_CYCLE.indexOf(lobby.gameType) + 1) % GAME_CYCLE.length]
   const GAME_LABEL: Record<GameType, string> = {
     prediction: 'PREDICTION',
     hearts: 'HEARTS ♥',
     golf: 'GOLF ⛳',
     blackjack: 'BLACKJACK 🂡',
+    spades: 'SPADES ♠️',
   }
 
   // Host-only optimistic state. A selection under 2 games is, by design, not
@@ -111,7 +115,15 @@ export function Lobby({
       <div className="lobby__left">
         <section className="note lobby__title-card">
           <h1 className="lobby__title">
-            {isHearts ? 'HEARTS' : isGolf ? 'GOLF' : isBlackjack ? 'BLACKJACK' : 'THE PREDICTION GAME'}
+            {isHearts
+              ? 'HEARTS'
+              : isGolf
+                ? 'GOLF'
+                : isBlackjack
+                  ? 'BLACKJACK'
+                  : isSpades
+                    ? 'SPADES'
+                    : 'THE PREDICTION GAME'}
           </h1>
           <p className="lobby__subtitle">
             {isHearts
@@ -120,7 +132,9 @@ export function Lobby({
                 ? 'lowest grid wins'
                 : isBlackjack
                   ? 'get closer to 21'
-                  : '5 up 5 down'}
+                  : isSpades
+                    ? 'bid it, make it, bag it'
+                    : '5 up 5 down'}
           </p>
 
           <button className="code-chip" onClick={share} title="Copy the invite link">
@@ -168,6 +182,18 @@ export function Lobby({
               <br />
               most points after {lobby.blackjackRounds} rounds wins.
             </p>
+          ) : isSpades ? (
+            <p>
+              4 players, 2 teams of 2 sitting across from each other.
+              <br />
+              bid how many tricks your team will take — or bid Nil for zero.
+              <br />
+              spades are always trump; you can't lead one until they're broken.
+              <br />
+              overtricks pile up as bags — every 10 costs your team 100.
+              <br />
+              highest score when a team hits {lobby.spadesTargetScore} wins.
+            </p>
           ) : (
             <p>
               bid how many hands you’ll win each round.
@@ -183,13 +209,21 @@ export function Lobby({
 
         <div className="lobby__small-cards">
           <button
-            className={`note lobby__mode${isHearts ? ' is-hearts' : ''}${isGolf ? ' is-golf' : ''}${isBlackjack ? ' is-blackjack' : ''}`}
+            className={`note lobby__mode${isHearts ? ' is-hearts' : ''}${isGolf ? ' is-golf' : ''}${isBlackjack ? ' is-blackjack' : ''}${isSpades ? ' is-spades' : ''}`}
             onClick={() => isHost && onSetGameType(nextGameType)}
             disabled={!isHost}
           >
             <span className="lobby__mode-kicker">game</span>
             <span className="lobby__mode-value">
-              {isHearts ? 'HEARTS ♥' : isGolf ? 'GOLF ⛳' : isBlackjack ? 'BLACKJACK 🂡' : 'PREDICTION'}
+              {isHearts
+                ? 'HEARTS ♥'
+                : isGolf
+                  ? 'GOLF ⛳'
+                  : isBlackjack
+                    ? 'BLACKJACK 🂡'
+                    : isSpades
+                      ? 'SPADES ♠️'
+                      : 'PREDICTION'}
             </span>
             <span className="lobby__mode-hint">
               {isHost ? 'tap to switch' : 'host picks the game'}
@@ -268,6 +302,24 @@ export function Lobby({
                 </span>
               </button>
             </>
+          ) : isSpades ? (
+            <button
+              className="note lobby__mode"
+              onClick={() => {
+                if (!isHost) return
+                const options = SpadesConfig.targetScoreOptions as readonly number[]
+                const next =
+                  options[(options.indexOf(lobby.spadesTargetScore) + 1) % options.length]
+                onSetSpadesTargetScore(next)
+              }}
+              disabled={!isHost}
+            >
+              <span className="lobby__mode-kicker">play to</span>
+              <span className="lobby__mode-value">{lobby.spadesTargetScore}</span>
+              <span className="lobby__mode-hint">
+                {isHost ? 'tap to change' : 'highest score wins'}
+              </span>
+            </button>
           ) : (
             <button
               className={`note lobby__mode${isChaos ? ' is-chaos' : ''}`}
@@ -282,7 +334,7 @@ export function Lobby({
             </button>
           )}
 
-          {!isHearts && !isGolf && !isBlackjack && (
+          {!isHearts && !isGolf && !isBlackjack && !isSpades && (
             <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>
               <span className="lobby__roles-title">🎭 THE ROLES</span>
               <span className="lobby__mode-hint">tap to browse chaos roles</span>

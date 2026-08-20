@@ -1,10 +1,11 @@
 // The wire protocol: every server<->client message the game sends.
 //
 // Client -> Server: join, toggleReady, startGame, setMode, setGameType,
-//                   setTargetScore, setHoleCount, submitBid, submitRebid, declareDouble,
-//                   playCard, passCards, useAbility, requestState, voteRestart,
-//                   golfRevealInitial, golfDraw, golfResolve, setBlackjackMode,
-//                   setBlackjackRounds, blackjackAction
+//                   setTargetScore, setHoleCount, setTournamentGames, submitBid,
+//                   submitRebid, declareDouble, playCard, passCards, useAbility,
+//                   requestState, voteRestart, golfRevealInitial, golfDraw,
+//                   golfResolve, setBlackjackMode, setBlackjackRounds,
+//                   blackjackAction, setSpadesTargetScore, submitSpadesBid
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
@@ -12,21 +13,23 @@
 //                   rebidPrompt, snapshot, heartsRoundStart, passPrompt,
 //                   passResult, heartsState, heartsScoreUpdate, restartVote,
 //                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate,
-//                   blackjackRoundStart, blackjackState, blackjackScoreUpdate
+//                   blackjackRoundStart, blackjackState, blackjackScoreUpdate,
+//                   spadesRoundStart, spadesState, spadesScoreUpdate
 //
-// Four games share this protocol. Everything about the table -- joining, the
+// Five games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
 // bidding events belong to the Prediction Game, the hearts* / pass* events to
-// Hearts, the golf* events to Golf, and the blackjack* events to Blackjack --
-// no game ever emits another's.
+// Hearts, the golf* events to Golf, the blackjack* events to Blackjack, and
+// the spades* events to Spades -- no game ever emits another's.
 
 import type { Card, Suit } from './cards'
 import type { PassDirection } from './heartsRules'
+import type { SpadesBid } from './spadesRules'
 
 export type PlayerId = string
 export type GameMode = 'classic' | 'chaos'
 /** Which game this table is playing. Chaos is a Prediction Game mode only. */
-export type GameType = 'prediction' | 'hearts' | 'golf' | 'blackjack'
+export type GameType = 'prediction' | 'hearts' | 'golf' | 'blackjack' | 'spades'
 /** Blackjack only: a shared dealer hand, or players ranked against each other with no dealer. */
 export type BlackjackMode = 'dealer' | 'players'
 export type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
@@ -59,6 +62,8 @@ export type LobbyUpdate = {
   blackjackMode: BlackjackMode
   /** Blackjack only: how many rounds the game runs. Ignored by the other games. */
   blackjackRounds: number
+  /** Spades only: the score that ends the game. Ignored by the other games. */
+  spadesTargetScore: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
   /**
@@ -463,6 +468,77 @@ export type BlackjackSnapshot = {
   currentTurnId: PlayerId | null
 }
 
+// ---- Spades -------------------------------------------------------------------
+//
+// Deliberately its own set of events, like Hearts/Golf/Blackjack -- except
+// trick play itself reuses the fully generic `playCard`/`trickUpdate`/
+// `trickResolved` the Prediction Game and Hearts already share (follow-suit,
+// one card per turn, a resolved winner) rather than reinventing them a third
+// time. Only what's genuinely Spades-specific -- bidding (with Nil), team
+// scoring, bags -- gets its own events.
+
+export type SpadesRoundStart = {
+  handNumber: number
+  turnOrder: PlayerId[]
+  dealerId: PlayerId
+  /** Fixed for the whole game, re-sent every hand only for a clean reconnect. */
+  teams: Record<PlayerId, 0 | 1>
+  targetScore: number
+}
+
+/**
+ * Live state for the whole hand, bidding AND playing -- trick-by-trick detail
+ * during play comes from the shared `trickUpdate` event instead, the same
+ * split Golf's `golfState` uses between its own two sub-phases.
+ */
+export type SpadesState = {
+  phase: 'bidding' | 'playing'
+  /** Whoever's turn it is to bid; null once all 4 have (trickUpdate takes over). */
+  biddingTurnId: PlayerId | null
+  bids: Partial<Record<PlayerId, SpadesBid>>
+  spadesBroken: boolean
+  /** [team 0's bags, team 1's bags], each 0-9 -- a 10th resets to 0 and costs 100. */
+  bags: [number, number]
+}
+
+export type SpadesHandPlayerLine = {
+  id: PlayerId
+  bid: SpadesBid
+  tricksWon: number
+  nilResult: 'made' | 'failed' | null
+}
+
+export type SpadesHandTeamLine = {
+  team: 0 | 1
+  bid: number
+  tricks: number
+  madeBid: boolean
+  overtricks: number
+  bagPenalty: number
+  /** What this hand added to the team's total (handScore + bagPenalty). */
+  roundScore: number
+  totalScore: number
+  players: SpadesHandPlayerLine[]
+}
+
+export type SpadesScoreUpdate = { handNumber: number; teams: SpadesHandTeamLine[] }
+
+/** The Spades half of a reconnect snapshot; null while playing another game. */
+export type SpadesSnapshot = {
+  handNumber: number
+  targetScore: number
+  teams: Record<PlayerId, 0 | 1>
+  phase: 'bidding' | 'playing'
+  biddingTurnId: PlayerId | null
+  bids: Partial<Record<PlayerId, SpadesBid>>
+  spadesBroken: boolean
+  bags: [number, number]
+  currentTurnId: PlayerId | null
+  leadSuit: string | null
+  plays: PlayEntry[]
+  trickNumber: number
+}
+
 // ---- Reconnect --------------------------------------------------------------
 
 /**
@@ -480,6 +556,8 @@ export type Snapshot = {
   golf: GolfSnapshot | null
   /** Everything Blackjack-specific; null when the table is playing another game. */
   blackjack: BlackjackSnapshot | null
+  /** Everything Spades-specific; null when the table is playing another game. */
+  spades: SpadesSnapshot | null
   roundNumber: number
   cardsDealt: number
   trumpSuit: string
@@ -559,6 +637,9 @@ export interface ServerToClientEvents {
   blackjackRoundStart: (data: BlackjackRoundStart) => void
   blackjackState: (data: BlackjackState) => void
   blackjackScoreUpdate: (data: BlackjackScoreUpdate) => void
+  spadesRoundStart: (data: SpadesRoundStart) => void
+  spadesState: (data: SpadesState) => void
+  spadesScoreUpdate: (data: SpadesScoreUpdate) => void
   restartVote: (data: RestartVote) => void
   /** Spectator-only: the hand of whichever seat they're currently watching. */
   watchedHand: (data: WatchedHand) => void
@@ -610,6 +691,10 @@ export interface ClientToServerEvents {
   setBlackjackRounds: (rounds: number) => void
   /** Blackjack: hit, stand, or double on your turn. */
   blackjackAction: (action: BlackjackAction) => void
+  /** Host only, lobby only: the score that ends a Spades game. */
+  setSpadesTargetScore: (score: number) => void
+  /** Spades: your bid for the hand -- 0-13, or 'nil'. */
+  submitSpadesBid: (bid: SpadesBid) => void
   requestState: () => void
   chat: (text: string) => void
   /**

@@ -4,13 +4,15 @@
 tricks they'll win each round, then play them out. Hit the prediction, score
 big; miss, and the score drops.
 
-**Four games live here.** The landing screen picks which game a NEW table
+**Five games live here.** The landing screen picks which game a NEW table
 opens on (carried on the `join` payload, applied by `Room.openOn` — only valid
 before anyone is seated), and a lobby card lets the host switch it afterwards
-between The Prediction Game, **Hearts**, **Golf**, and **Blackjack** — see the
-Hearts, Golf, and Blackjack sections below. They share the table (roster,
-codes, chat, spectators, reconnect) and nothing else; the round loop forks
-once, in `Room.runGameLoop`.
+between The Prediction Game, **Hearts**, **Golf**, **Blackjack**, and
+**Spades** — see the Hearts, Golf, Blackjack, and Spades sections below. They
+share the table (roster, codes, chat, spectators, reconnect) and nothing
+else; the round loop forks once, in `Room.runGameLoop`. A host can also
+rotate several of them together as one scored **tournament** — see the
+Tournament mode section.
 
 Node + Socket.IO server, React + Vite client, one `src/shared/` folder imported
 by both. See README.md for the player-facing rules.
@@ -61,6 +63,10 @@ by both. See README.md for the player-facing rules.
     hand values (including multi-ace demotion and soft/hard totals), bust and
     natural-blackjack detection, the dealer's fixed hit/stand boundary, and
     every branch of the vs-Dealer and vs-Players point tables.
+  - `npx tsx scripts/spades-test.ts` — every Spades rule that is pure: the
+    broken-suit legality (and its "lifts when it can't be obeyed" edge
+    case), made/set bid scoring, made/failed/double Nil, and the bag
+    penalty crossing its threshold (including crossing it twice in one hand).
 - **Hearts end-to-end: `npx tsx scripts/hearts-playtest.ts <n> <target>`** (~1–3
   min). TypeScript rather than `.mjs` on purpose — the bots pick cards with the
   same shared `isLegalHeartsPlay` the browser uses, so **any rejection means the
@@ -73,6 +79,15 @@ by both. See README.md for the player-facing rules.
   (~1–2 min). Same TypeScript-on-purpose reasoning and zero-rejections pass
   condition; run it in BOTH sub-modes, since they settle rounds through two
   different point-table paths.
+- **Spades end-to-end: `npx tsx scripts/spades-playtest.ts`** (~2–5 min).
+  Always 4 players — Spades is fixed at exactly 4, unlike every other game.
+  Same TypeScript-on-purpose reasoning; the bots play toward their team's
+  bid (high until it's made, low after) rather than always the lowest legal
+  card, since a strategy-free bot swings wildly on bags and takes far
+  longer to reach even the lowest target score. Target score is forced to
+  200 (the lowest option) to keep this from running a full-length game.
+  `scripts/spades-joinbots.mjs CODE <n>` fills an existing table with bots
+  the same way `joinbots.mjs` does, for playing or screenshotting solo.
 - **Tournament mode end-to-end: `npx tsx scripts/tournament-playtest.ts <n>`**
   (~1 min). The one thing no single-game playtest can cover: a table
   switching `gameType` mid-session with no lobby step in between. Combines
@@ -400,6 +415,82 @@ a target" — most points when the last round ends wins (`lowestWins` stays
 - **No Split for v1** (a stated non-goal) — it would turn one seat into
   multiple hands mid-round and meaningfully complicate turn order, the public
   hand display, and scoring all at once. Hit/Stand/Double only.
+
+## Spades
+
+The fifth game (`SpadesConfig`, `src/shared/spadesRules.ts`). The one game
+here with TEAMS — chosen specifically because it satisfies two roadmap items
+in one build: a 5th game, and "team play," since Spades is natively a 2v2
+partnership game. No RoleManager — chaos roles are a Prediction Game feature.
+
+- **Exactly 4 players, fixed** (`SpadesConfig.minPlayers === maxPlayers ===
+  4`) — unlike every other game's range, Spades needs an even, symmetric
+  table, and any non-4-handed variant (3-handed cutthroat, 6-handed) changes
+  the team structure enough to be a different game.
+- **Teams come from seat ARRAY POSITION, not a pick** —
+  `teamOfSeatPosition(i) = i % 2`: seats 0 and 2 are team 0, seats 1 and 3
+  are team 1 (partners sit across the table, the standard convention). No
+  UI for choosing partners; this is deliberate, matching how every other
+  seat-order-derived thing in this app (turn order, dealer rotation) already
+  works off array position with no separate concept.
+- **Both partners always carry the identical `totalScore` and `spadesBags`.**
+  `Room.currentStandings()` is fundamentally per-SEAT, and duplicating the
+  team's numbers onto both members — rather than inventing a parallel
+  "team" concept in Room — is what lets team scoring show up correctly in
+  the leaderboard, persistence (`db/stats.ts`), and tournament rank-points
+  math with ZERO special-casing anywhere outside `engine/spades/scoring.ts`.
+- **Bidding is 0-13 or Nil** (`SpadesBid = number | 'nil'`), one seat at a
+  time, no chaos, no Double, no forbidden-sum rule — `SpadesBiddingManager`
+  is a deliberately much simpler cousin of the Prediction Game's
+  `BiddingManager`. A team's numeric bid is the sum of both partners' bids;
+  Nil contributes 0 to that sum and is scored entirely separately.
+- **Spades are always trump, and can't be LED until broken** — the same
+  "restriction lifts when it can't be obeyed" shape Hearts' own broken-suit
+  rule already uses, just for a different suit and a different reason
+  (Hearts: don't lead your penalty suit; Spades: don't lead your trump
+  suit). `isLegalSpadesPlay` mirrors `isLegalHeartsPlay`'s structure but
+  is NOT shared code — the exact rules differ enough (no "first trick"
+  restriction, no forced opening lead) that a shared abstraction would cost
+  more than the ~15 duplicated lines saves. Trick resolution reuses
+  `resolveTrickWinnerIndex` with `trumpSuit: 'Spades'` — a REAL trump,
+  unlike Hearts' `'NoTrump'`.
+- **Trick play reuses the fully generic `playCard`/`trickUpdate`/
+  `trickResolved` events** the Prediction Game and Hearts already share,
+  rather than inventing spades-prefixed versions a third time. Only what's
+  genuinely Spades-specific — bidding, teams, bags — gets its own
+  `spades*` events. `SpadesState` deliberately covers BOTH the bidding and
+  playing phases in one broadcast type (the same split `GolfState` uses
+  between ITS two sub-phases), since trick-by-trick detail during play
+  already has a home in the shared events.
+- **Scoring is one pure function per hand, `scoreSpadesHand`, that never
+  touches the running bag count.** Bags are sequential state across hands
+  within a game (`applyBagPenalty(bagsBefore, overtricksThisHand)`,
+  written as a `while` loop since one big hand's overtricks can cross the
+  threshold — 10, costing 100 — more than once), so folding them into the
+  same pure function as the hand's own bid math would make it not-actually-pure.
+  `engine/spades/scoring.ts` composes the two and is the ONLY place that
+  writes to a `Seat`.
+- **The nil bonus/penalty formula never special-cases which partner bid it**
+  or whether both did: `teamTricks >= teamBid` decides whether the BID
+  itself was made (using the team's real combined trick count, nil
+  bidder's tricks included), completely independently of
+  `tricksWon === 0 ? +100 : -100` per nil bidder. This is what makes
+  double-Nil, a nil bidder who accidentally takes tricks, and a lone nil
+  all fall out of the same formula with no branching — see
+  `scripts/spades-test.ts` for the worked examples.
+- **`scripts/spades-playtest.ts`'s bots play toward their team's bid**
+  (high while the team hasn't made it yet, low once it has) rather than
+  always the lowest legal card — a purely-legal-but-strategy-free bot tends
+  to swing wildly on bags and takes far longer to reach even the lowest
+  target score (200). Deliberately NOT shared logic with the server's own
+  auto-play (`findAutoPlayCard`-equivalent in `SpadesTrickManager`, which
+  stays simple on purpose — a disconnected seat isn't trying to win).
+- **`scripts/spades-joinbots.mjs`** mirrors `joinbots.mjs`'s purpose (fill
+  an existing table so you can play/screenshot solo) for Spades specifically
+  — plain `node`, not `tsx`, with legality re-implemented inline rather than
+  importing the shared TS rules, the same acceptable-risk tradeoff
+  `joinbots.mjs` already makes for a manual convenience tool that isn't a
+  CI gate.
 
 ## Tournament mode
 

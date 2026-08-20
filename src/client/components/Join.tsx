@@ -3,7 +3,7 @@
 // joining by code puts you in whatever game that table is already set to.
 
 import { useEffect, useState } from 'react'
-import { BlackjackConfig, Config, GolfConfig, HeartsConfig } from '@shared/config'
+import { BlackjackConfig, Config, GolfConfig, HeartsConfig, SpadesConfig } from '@shared/config'
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
@@ -23,6 +23,7 @@ export function Join({ connected, error, onJoin }: Props) {
   const isHearts = game === 'hearts'
   const isGolf = game === 'golf'
   const isBlackjack = game === 'blackjack'
+  const isSpades = game === 'spades'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
 
@@ -83,7 +84,9 @@ export function Join({ connected, error, onJoin }: Props) {
                 ? 'GOLF'
                 : isBlackjack
                   ? 'BLACKJACK'
-                  : 'THE PREDICTION GAME'
+                  : isSpades
+                    ? 'SPADES'
+                    : 'THE PREDICTION GAME'
             : 'JOIN A TABLE'}
         </h1>
         <p className="join__subtitle">
@@ -94,14 +97,16 @@ export function Join({ connected, error, onJoin }: Props) {
                 ? 'lowest grid wins'
                 : isBlackjack
                   ? 'get closer to 21'
-                  : '5 up 5 down'
-            : 'four games, one table'}
+                  : isSpades
+                    ? 'bid it, make it, bag it'
+                    : '5 up 5 down'
+            : 'five games, one table'}
         </p>
         <p className="join__blurb">
           {!creating ? (
             <>
               You’ll land in whichever game that table is playing — The Prediction Game, Hearts,
-              Golf, or Blackjack. The host picks.
+              Golf, Blackjack, or Spades. The host picks.
             </>
           ) : isHearts ? (
             <>
@@ -121,6 +126,13 @@ export function Join({ connected, error, onJoin }: Props) {
               or the host can flip it to everyone racing each other instead. Most points after{' '}
               {BlackjackConfig.defaultRounds} rounds wins. {BlackjackConfig.minPlayers}–
               {BlackjackConfig.maxPlayers} players.
+            </>
+          ) : isSpades ? (
+            <>
+              4 players, 2 teams of 2 sitting across from each other. Bid your tricks — or bid Nil
+              for zero — and spades are always trump. Overtricks pile up as bags: every 10 costs
+              your team 100. Highest score when a team hits {SpadesConfig.defaultTargetScore} wins.{' '}
+              exactly {SpadesConfig.minPlayers} players.
             </>
           ) : (
             <>
@@ -167,6 +179,15 @@ export function Join({ connected, error, onJoin }: Props) {
             onClick={() => setGame('blackjack')}
           >
             blackjack 🂡
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isSpades}
+            className={`segmented__option${isSpades ? ' is-active' : ''}`}
+            onClick={() => setGame('spades')}
+          >
+            spades ♠️
           </button>
         </div>
         )}

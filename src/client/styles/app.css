@@ -498,6 +498,15 @@
   color: var(--positive);
 }
 
+/* Spades: blue, distinct from chaos purple, hearts red, and blackjack green. */
+.lobby__mode.is-spades {
+  border-color: var(--primary);
+}
+
+.lobby__mode.is-spades .lobby__mode-value {
+  color: var(--primary);
+}
+
 .lobby__mode-hint {
   color: var(--text-faint);
   font-size: 0.72rem;
@@ -805,6 +814,16 @@ button.seat:hover {
 
 .chip--turn {
   border: 2px solid var(--accent);
+}
+
+/* Spades: team color lives on the name, so it's still legible under a turn
+   ring (which is a border, not a text color) or a good/bad score color. */
+.chip--team0 .chip__name {
+  color: var(--primary);
+}
+
+.chip--team1 .chip__name {
+  color: var(--private-ink);
 }
 
 .chip__name {

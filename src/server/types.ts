@@ -29,6 +29,10 @@ export type Seat = {
   blackjackDone: boolean
   /** Blackjack: doubled down this round, so the round's point swing is x2. */
   blackjackDoubled: boolean
+  /** Spades: this seat's bid for the current hand -- 0-13, 'nil', or null before bidding. */
+  spadesBid: number | 'nil' | null
+  /** Spades: this seat's TEAM's running bag count (0-9), mirrored on both partners. */
+  spadesBags: number
   totalScore: number
   lastRoundScore: number | null
   /** ms timestamp of the disconnect, for the lobby's reconnect grace period. */

@@ -116,6 +116,32 @@ export const BlackjackConfig = {
 
 export type BlackjackRoundCount = (typeof BlackjackConfig.roundOptions)[number]
 
+/**
+ * Spades. Exactly 4 players, fixed -- partnerships need an even, symmetric
+ * table, and every non-4-handed variant (3-handed cutthroat, 6-handed)
+ * changes the team structure enough to be a different game. Partners sit
+ * across from each other: seats 0&2 are one team, 1&3 the other (see
+ * teamOfSeatPosition in spadesRules.ts).
+ */
+export const SpadesConfig = {
+  minPlayers: 4,
+  maxPlayers: 4,
+
+  // Until a team crosses this, highest score wins. Host-selectable, same
+  // pattern as Hearts' target score.
+  targetScoreOptions: [200, 300, 500],
+  defaultTargetScore: 500,
+
+  // Safety net only, matching Hearts' maxRounds.
+  maxRounds: 50,
+
+  // Pacing, matching Hearts' feel (13-card hands run long already).
+  trickResolvePause: 1.5,
+  handEndPause: 5,
+} as const
+
+export type SpadesTargetScore = (typeof SpadesConfig.targetScoreOptions)[number]
+
 export const TOTAL_ROUNDS = Config.cardSequence.length
 
 export function trumpForRound(roundNumber: number): string {
