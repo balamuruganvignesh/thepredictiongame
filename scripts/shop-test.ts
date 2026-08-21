@@ -18,6 +18,7 @@ process.env.DATABASE_PATH = path.join(dir, 'test.db')
 const { recordGameEnded, recordGameAbandoned } = await import('../src/server/db/persistence')
 const { buyItem, equipItem, getBalance, getEquipped, getOwned } = await import('../src/server/db/shop')
 const { PLACEMENT_COINS } = await import('../src/shared/shop')
+const { GOOGLE_AVATAR } = await import('../src/shared/avatars')
 type Standing = import('../src/shared/protocol').Standing
 
 let failures = 0
@@ -132,6 +133,19 @@ check('an item of the wrong kind is refused', !equipItem(P, 'cardback', 'theme-f
 check('an unknown item id is refused', !equipItem(P, 'theme', 'nope').ok)
 check('null un-equips back to the default look', equipItem(P, 'theme', null).ok && getEquipped(P).theme === null)
 check('the other slot is untouched by a theme change', getEquipped(P).cardback === null)
+
+// The avatar slot: free presets need no purchase, premium ones do, and the
+// GOOGLE_AVATAR sentinel is accepted for anyone to ASK for (resolving it to an
+// actual picture is the server's job at join, since only it knows who is
+// signed in).
+check('a free preset avatar equips', equipItem(P, 'avatar', 'fox').ok)
+check('the avatar reads back', getEquipped(P).avatar === 'fox')
+check('equipping an avatar left the theme slot alone', getEquipped(P).theme === null)
+check('an UNOWNED premium avatar is refused', !equipItem(P, 'avatar', 'avatar-dragon').ok)
+check('the google sentinel is accepted', equipItem(P, 'avatar', GOOGLE_AVATAR).ok)
+check('an unknown avatar id is refused', !equipItem(P, 'avatar', 'not-an-avatar').ok)
+check('a theme cannot be equipped as an avatar', !equipItem(P, 'avatar', 'theme-felt').ok)
+check('null un-equips the avatar', equipItem(P, 'avatar', null).ok && getEquipped(P).avatar === null)
 
 fs.rmSync(dir, { recursive: true, force: true })
 

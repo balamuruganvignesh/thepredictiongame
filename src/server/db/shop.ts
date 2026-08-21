@@ -143,7 +143,7 @@ export function equipItem(
   const current = getEquipped(playerId)
   const next: Equipped = { ...current, [kind]: itemId }
   try {
-    upsertEquipped.run({ playerId, theme: next.theme, cardback: next.cardback })
+    upsertEquipped.run({ playerId, theme: next.theme, cardback: next.cardback, avatar: next.avatar })
   } catch (error) {
     log.error('shop.equip.failed', { error: String(error) })
     return { ok: false, error: 'Could not save that.' }
