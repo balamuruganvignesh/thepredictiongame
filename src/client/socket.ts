@@ -22,4 +22,13 @@ export const storedPlayerId = () => localStorage.getItem(PLAYER_ID_KEY)
 export const rememberPlayerId = (id: string) => localStorage.setItem(PLAYER_ID_KEY, id)
 
 export const storedName = () => localStorage.getItem(NAME_KEY) ?? ''
+
+/**
+ * The avatar an anonymous player picked. A signed-in player's avatar lives on
+ * their account instead and the server ignores what's sent here -- same rule
+ * as playerId, and for the same reason.
+ */
+const AVATAR_KEY = 'prediction-game:avatar'
+export const storedAvatar = () => localStorage.getItem(AVATAR_KEY)
+export const rememberAvatar = (id: string) => localStorage.setItem(AVATAR_KEY, id)
 export const rememberName = (name: string) => localStorage.setItem(NAME_KEY, name)

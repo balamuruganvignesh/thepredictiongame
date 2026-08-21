@@ -119,6 +119,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         totalTricks={store.totalTricks}
         trumpSuit={store.trumpSuit}
         players={chips}
+        profiles={store.profiles}
       />
 
       <EffectLayer

@@ -328,6 +328,7 @@ export class Room {
     playerId: string | null,
     socketId: string,
     ownedItems: string[] = [],
+    profile: { avatar: string | null; avatarUrl: string | null } = { avatar: null, avatarUrl: null },
   ): { seat: Seat } | { spectator: Spectator } | { error: string } {
     this.lastActivity = Date.now()
 
@@ -339,6 +340,8 @@ export class Room {
       // Refreshed on every re-attach, so a purchase made between sessions
       // takes effect without leaving the table.
       existing.ownedItems = ownedItems
+      existing.avatar = profile.avatar
+      existing.avatarUrl = profile.avatarUrl
       if (name.trim()) existing.name = name.trim().slice(0, 20)
       return { seat: existing }
     }
@@ -349,6 +352,8 @@ export class Room {
     if (watching) {
       watching.socketId = socketId
       watching.ownedItems = ownedItems
+      watching.avatar = profile.avatar
+      watching.avatarUrl = profile.avatarUrl
       if (name.trim()) watching.name = name.trim().slice(0, 20)
       return { spectator: watching }
     }
@@ -361,6 +366,8 @@ export class Room {
         socketId,
         name: name.trim().slice(0, 20) || `Spectator ${this.spectators.length + 1}`,
         ownedItems,
+        avatar: profile.avatar,
+        avatarUrl: profile.avatarUrl,
       }
       this.spectators.push(spectator)
       this.spectatorById.set(spectator.id, spectator)
@@ -394,6 +401,8 @@ export class Room {
       lastRoundScore: null,
       disconnectedAt: null,
       ownedItems,
+      avatar: profile.avatar,
+      avatarUrl: profile.avatarUrl,
     }
     this.seats.push(seat)
     this.seatById.set(seat.id, seat)
@@ -528,6 +537,8 @@ export class Room {
         socketId: spectator.socketId,
         name: spectator.name,
         ownedItems: spectator.ownedItems,
+        avatar: spectator.avatar,
+        avatarUrl: spectator.avatarUrl,
         seatIndex: this.seats.length + 1,
         ready: false,
         connected: true,
@@ -572,6 +583,10 @@ export class Room {
       ready: seat.ready,
       connected: seat.connected,
       isHost: seat.id === hostId,
+      // Undefined rather than null when unset: RosterEntry's fields are
+      // optional, and this object goes out on every lobbyUpdate.
+      ...(seat.avatar ? { avatar: seat.avatar } : {}),
+      ...(seat.avatarUrl ? { avatarUrl: seat.avatarUrl } : {}),
     }))
   }
 

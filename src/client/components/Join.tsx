@@ -11,6 +11,7 @@ import { storedName } from '../socket'
 import { installAvailable, onInstallAvailabilityChange, promptInstall } from '../pwa'
 import { useDeckStyle } from '../deckStyle'
 import { loginHref, useAuth } from '../auth'
+import { AvatarPicker } from './AvatarPicker'
 
 type Props = {
   connected: boolean
@@ -260,17 +261,23 @@ export function Join({ connected, error, onJoin }: Props) {
         </div>
         )}
 
-        <label className="field">
-          <span className="field__label">your name</span>
-          <input
-            className="field__input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={20}
-            placeholder="who's playing?"
-            autoFocus
-          />
-        </label>
+        {/* Logo and name together: they're one idea -- how you appear at the
+            table -- and picking a logo after typing your name is what makes
+            the initial fallback read as a starting point rather than a bug. */}
+        <div className="join__identity">
+          <AvatarPicker name={name} />
+          <label className="field join__identity-field">
+            <span className="field__label">your name</span>
+            <input
+              className="field__input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={20}
+              placeholder="who's playing?"
+              autoFocus
+            />
+          </label>
+        </div>
 
         <div className="segmented" role="tablist" aria-label="Table">
           <button

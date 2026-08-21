@@ -3289,3 +3289,157 @@ button.seat:hover {
   line-height: 1.2;
   color: var(--text-faint);
 }
+
+/* ---- Player avatars ---------------------------------------------------------
+ * Sized off a single --avatar-size so the three variants stay in step, and
+ * flex: none so a long player name can never squash the logo into an oval.
+ */
+
+.avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  border: 1px solid var(--stroke);
+  background: var(--sunken);
+  font-size: calc(var(--avatar-size) * 0.62);
+  line-height: 1;
+  overflow: hidden;
+  user-select: none;
+}
+
+.avatar--sm {
+  --avatar-size: 18px;
+}
+
+.avatar--md {
+  --avatar-size: 26px;
+}
+
+.avatar--lg {
+  --avatar-size: 44px;
+}
+
+.avatar--photo {
+  object-fit: cover;
+}
+
+/* The initial fallback carries its colour inline (derived from the player id
+   so it's stable), so only the type treatment lives here. */
+.avatar--initial {
+  font-family: var(--font-heading);
+  font-size: calc(var(--avatar-size) * 0.46);
+  font-weight: 600;
+  color: #fff;
+  border-color: rgb(255 255 255 / 25%);
+}
+
+/* The Golf and Blackjack panel headers become flex rows so the avatar sits
+   inline with the name rather than pushing it onto its own line. */
+.golf-panel__name,
+.blackjack-panel__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* .chip is a COLUMN (name over score), so the avatar needs its own row inside
+   it or it would stack above the name and make every chip taller. */
+.chip__id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* ---- Avatar picker (landing screen) ---------------------------------------- */
+
+.join__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.join__identity-field {
+  /* min-width: 0 so a flex child with an input inside can actually shrink --
+     without it the input's default intrinsic width forces the row wider than
+     the card and the avatar gets pushed out. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.avatar-picker {
+  position: relative;
+  /* Nudged down so the logo lines up with the input, not with its label. */
+  padding-top: 22px;
+}
+
+.avatar-picker__trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.avatar-picker__hint {
+  font-size: 0.6rem;
+  color: var(--text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.avatar-picker__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  gap: 6px;
+  padding: 10px;
+  /* The grid is wider than the 44px trigger it hangs off, so it would spill
+     past the card's left edge on a narrow screen without this. */
+  min-width: max-content;
+}
+
+.avatar-picker__option {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.avatar-picker__option:hover,
+.avatar-picker__option:focus-visible {
+  border-color: var(--stroke);
+}
+
+.avatar-picker__option.is-active {
+  border-color: var(--accent);
+}
+
+.avatar-picker__more {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.6rem;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* Lobby seat rows carry the avatar inline with the name. */
+.seat__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}

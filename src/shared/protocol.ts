@@ -44,6 +44,14 @@ export type RosterEntry = {
   ready: boolean
   connected: boolean
   isHost: boolean
+  /**
+   * Profile logo. `avatar` is a preset id from shared/avatars.ts; `avatarUrl`
+   * is a Google account picture, already resolved server-side (the client
+   * never sees another player's account, only the URL they chose to show).
+   * Both absent means the initial-and-colour fallback.
+   */
+  avatar?: string
+  avatarUrl?: string
 }
 
 export type LobbyUpdate = {
@@ -716,6 +724,12 @@ export interface ClientToServerEvents {
     roomCode: string | null
     name: string
     playerId: string | null
+    /**
+     * The avatar an ANONYMOUS player picked, from their localStorage. A
+     * signed-in player's avatar comes from their account instead and this is
+     * ignored -- same rule as playerId, for the same reason.
+     */
+    avatar?: string
     /**
      * Which game a NEW table opens on. Ignored when joining an existing table:
      * the game is a property of the table, and the host changes it in the lobby.

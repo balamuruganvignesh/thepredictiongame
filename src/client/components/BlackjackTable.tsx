@@ -15,6 +15,7 @@ import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { BlackjackScoresheet } from './BlackjackScoresheet'
 import { CardBack, PlayingCard } from './PlayingCard'
+import { Avatar } from './Avatar'
 import { SettingsMenu } from './SettingsMenu'
 import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import { dealIn, flipIn } from '../animation'
@@ -165,6 +166,13 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
                   }`}
                 >
                   <span className="blackjack-panel__name">
+                    <Avatar
+                      playerId={player.id}
+                      name={player.name}
+                      avatar={store.profiles[player.id]?.avatar}
+                      avatarUrl={store.profiles[player.id]?.avatarUrl}
+                      size="sm"
+                    />
                     {player.name}
                     {player.id === myId && ' (you)'}
                   </span>

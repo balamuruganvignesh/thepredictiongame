@@ -4,6 +4,7 @@
 // Spades is the PARTNERSHIP's number, not any one seat's.
 
 import type { SpadesBid } from '@shared/spadesRules'
+import { Avatar } from './Avatar'
 
 type Props = {
   handNumber: number
@@ -20,6 +21,8 @@ type Props = {
     tricksWon: number
     isTurn: boolean
   }[]
+  /** Per-player profile logos, keyed by player id. See useGame's `profiles`. */
+  profiles: Record<string, { avatar?: string; avatarUrl?: string }>
 }
 
 export function SpadesTopBar({
@@ -30,6 +33,7 @@ export function SpadesTopBar({
   targetScore,
   bags,
   players,
+  profiles,
 }: Props) {
   return (
     <div className={`topbar${players.length >= 7 ? ' topbar--big' : ''}`}>
@@ -59,7 +63,16 @@ export function SpadesTopBar({
             player.bid == null ? '—' : player.bid === 'nil' ? 'Nil' : player.bid
           }`}
         >
-          <span className="chip__name">{player.name}</span>
+          <span className="chip__id">
+            <Avatar
+              playerId={player.id}
+              name={player.name}
+              avatar={profiles[player.id]?.avatar}
+              avatarUrl={profiles[player.id]?.avatarUrl}
+              size="sm"
+            />
+            <span className="chip__name">{player.name}</span>
+          </span>
           <span className="chip__score">
             <span key={player.tricksWon} className="score-pop">
               {player.tricksWon}/{player.bid == null ? '?' : player.bid === 'nil' ? 'Nil' : player.bid}

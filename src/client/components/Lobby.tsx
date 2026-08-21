@@ -11,6 +11,7 @@ import { BlackjackConfig, GolfConfig, HeartsConfig, SpadesConfig } from '@shared
 import type { BlackjackMode, ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { RolesGallery } from './RolesGallery'
+import { Avatar } from './Avatar'
 
 type Props = {
   lobby: LobbyUpdate
@@ -416,6 +417,13 @@ export function Lobby({
                     : {})}
                 >
                   <span className="seat__name">
+                    <Avatar
+                      playerId={entry.id}
+                      name={entry.name}
+                      avatar={entry.avatar}
+                      avatarUrl={entry.avatarUrl}
+                      size="md"
+                    />
                     {entry.name}
                     {isMe && <span className="seat__you"> (you)</span>}
                   </span>

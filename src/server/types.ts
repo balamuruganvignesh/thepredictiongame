@@ -44,6 +44,10 @@ export type Seat = {
    * which hosts every table.
    */
   ownedItems: string[]
+  /** Preset id from shared/avatars.ts, resolved at join. */
+  avatar: string | null
+  /** A Google account picture, resolved server-side at join. */
+  avatarUrl: string | null
 }
 
 /**
@@ -58,6 +62,8 @@ export type Spectator = {
   name: string
   /** Carried across when seatSpectators() turns them into a real chair. */
   ownedItems: string[]
+  avatar: string | null
+  avatarUrl: string | null
 }
 
 export const sleep = (seconds: number) =>

@@ -3,6 +3,8 @@
 // chip shows the penalty points they've taken THIS round over their running
 // total. Low is good here, so a clean chip is the green one.
 
+import { Avatar } from './Avatar'
+
 type Props = {
   roundNumber: number
   trickNumber: number
@@ -10,6 +12,8 @@ type Props = {
   heartsBroken: boolean
   targetScore: number
   players: { id: string; name: string; penalty: number; total: number; isTurn: boolean }[]
+  /** Per-player profile logos, keyed by player id. See useGame's `profiles`. */
+  profiles: Record<string, { avatar?: string; avatarUrl?: string }>
 }
 
 export function HeartsTopBar({
@@ -19,6 +23,7 @@ export function HeartsTopBar({
   heartsBroken,
   targetScore,
   players,
+  profiles,
 }: Props) {
   return (
     <div className={`topbar${players.length >= 7 ? ' topbar--big' : ''}`}>
@@ -45,7 +50,16 @@ export function HeartsTopBar({
           className={`chip${player.isTurn ? ' chip--turn' : ''}`}
           title={`${player.name}: ${player.penalty} this round, ${player.total} total`}
         >
-          <span className="chip__name">{player.name}</span>
+          <span className="chip__id">
+            <Avatar
+              playerId={player.id}
+              name={player.name}
+              avatar={profiles[player.id]?.avatar}
+              avatarUrl={profiles[player.id]?.avatarUrl}
+              size="sm"
+            />
+            <span className="chip__name">{player.name}</span>
+          </span>
           <span className={`chip__score${player.penalty === 0 ? ' is-good' : ' is-bad'}`}>
             <span key={`${player.penalty}-${player.total}`} className="score-pop">
               +{player.penalty} / {player.total}

@@ -114,3 +114,23 @@ db.exec(`
     cardback   TEXT
   );
 `)
+
+// ---- Additive column migrations ---------------------------------------------
+//
+// CREATE TABLE IF NOT EXISTS above only helps a table that does not exist yet.
+// Once a table has shipped -- and equipped_items has, it is live on the Fly
+// volume -- a new column needs a real ALTER. SQLite has no
+// ADD COLUMN IF NOT EXISTS, so check PRAGMA table_info first; running the
+// ALTER blind would throw "duplicate column name" on every boot after the
+// first.
+//
+// Deliberately not a migration framework: these are additive, nullable
+// columns with no backfill and no ordering between them, which is the only
+// kind of schema change this app has ever needed.
+function addColumnIfMissing(table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  if (columns.some((c) => c.name === column)) return
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+
+addColumnIfMissing('equipped_items', 'avatar', 'TEXT')

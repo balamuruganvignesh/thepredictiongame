@@ -29,6 +29,7 @@ import {
 import { buyItem, equipItem, getBalance, getEquipped, getOwned } from './db/shop'
 import { authUrl, exchangeCode, googleConfigured } from './auth/google'
 import { SHOP_ITEMS, type MeAccount } from '@shared/shop'
+import { AVATARS, GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { redis, redisSub } from './redis'
 import { registerRoom, refreshRoom, removeRoom } from './roomDirectory'
 
@@ -137,7 +138,7 @@ io.on('connection', (socket) => {
     fn(currentRoom, seat, spectator)
   }
 
-  socket.on('join', ({ roomCode, name, playerId, gameType }) => {
+  socket.on('join', ({ roomCode, name, playerId, gameType, avatar }) => {
     if (room) return // already seated on this socket
 
     let target: Room
@@ -174,12 +175,21 @@ io.on('connection', (socket) => {
     // synchronous SQLite read on a hot path in the process that hosts every
     // table. A brand-new anonymous id owns nothing, so this is only ever a
     // real query for a returning or signed-in player.
-    const result = target.join(
-      String(name ?? ''),
-      claimedId,
-      socket.id,
-      claimedId ? getOwned(claimedId) : [],
-    )
+    const owned = claimedId ? getOwned(claimedId) : []
+
+    // A signed-in player's avatar comes from their account (so it follows
+    // them across devices); an anonymous one sends their own from
+    // localStorage. Either way it is validated against what they actually
+    // own before it can reach anyone else's screen -- the same rule the
+    // premium emote check follows.
+    const requested = account ? (getEquipped(account.playerId).avatar ?? null) : (avatar ?? null)
+    const chosen = requested && isSelectableAvatar(requested, owned) ? requested : null
+    const profile =
+      chosen === GOOGLE_AVATAR
+        ? { avatar: null, avatarUrl: account?.picture ?? null }
+        : { avatar: chosen, avatarUrl: null }
+
+    const result = target.join(String(name ?? ''), claimedId, socket.id, owned, profile)
     if ('error' in result) {
       socket.emit('joinError', result.error)
       return
@@ -421,6 +431,7 @@ app.get('/api/shop', (req, res) => {
   const account = sessionAccount(req)
   res.json({
     items: SHOP_ITEMS,
+    avatars: AVATARS,
     account: account ? meFor(account) : null,
   })
 })
@@ -454,7 +465,7 @@ app.post('/api/shop/equip', express.json(), (req, res) => {
   }
 
   const kind = req.body?.kind
-  if (kind !== 'theme' && kind !== 'cardback') {
+  if (kind !== 'theme' && kind !== 'cardback' && kind !== 'avatar') {
     res.status(400).json({ ok: false, error: 'Unknown slot.' })
     return
   }

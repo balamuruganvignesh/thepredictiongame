@@ -70,6 +70,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
         totalTricks={store.totalTricks}
         heartsBroken={hearts.heartsBroken}
         targetScore={hearts.targetScore}
+        profiles={store.profiles}
         players={players.map((player) => ({
           ...player,
           penalty: hearts.penalties[player.id] ?? 0,
