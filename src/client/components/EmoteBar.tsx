@@ -10,16 +10,22 @@
 // react to what's happening, so the table has to stay visible while you pick.
 
 import { useState } from 'react'
-import { EMOTES } from '@shared/emotes'
+import { availableEmotes } from '@shared/emotes'
+import { useAuth } from '../auth'
 
 export function EmoteBar({ onEmote }: { onEmote: (id: string) => void }) {
   const [open, setOpen] = useState(false)
+  // Bought reactions only show up for the people who bought them. The server
+  // re-checks this in Room.emote -- hiding the button here just avoids
+  // offering one that would be silently dropped.
+  const { account } = useAuth()
+  const emotes = availableEmotes(account?.owned ?? [])
 
   return (
     <div className="emotes">
       {open && (
         <div className="note emotes__pop" role="group" aria-label="Reactions">
-          {EMOTES.map((emote) => (
+          {emotes.map((emote) => (
             <button
               key={emote.id}
               type="button"

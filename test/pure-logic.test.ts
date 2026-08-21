@@ -22,6 +22,7 @@ const FAST_SCRIPTS = [
   'golf-test.ts',
   'blackjack-test.ts',
   'spades-test.ts',
+  'shop-test.ts',
 ]
 
 describe('pure-logic scripts', () => {

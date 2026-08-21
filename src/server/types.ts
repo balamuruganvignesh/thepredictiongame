@@ -37,6 +37,13 @@ export type Seat = {
   lastRoundScore: number | null
   /** ms timestamp of the disconnect, for the lobby's reconnect grace period. */
   disconnectedAt: number | null
+  /**
+   * Shop items this player owns, resolved ONCE at join and carried here.
+   * Room must not hit SQLite per reaction -- an emote is a hot path and a
+   * synchronous read on every one of them would block the whole process,
+   * which hosts every table.
+   */
+  ownedItems: string[]
 }
 
 /**
@@ -49,6 +56,8 @@ export type Spectator = {
   id: string
   socketId: string
   name: string
+  /** Carried across when seatSpectators() turns them into a real chair. */
+  ownedItems: string[]
 }
 
 export const sleep = (seconds: number) =>

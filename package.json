@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "tsx watch src/server/index.ts",
+    "predev:server": "node -e \"const f=require('fs');f.existsSync('.env')||f.writeFileSync('.env','')\"",
+    "dev:server": "tsx watch --env-file=.env src/server/index.ts",
     "dev:client": "vite",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",

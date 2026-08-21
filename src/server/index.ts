@@ -2,6 +2,7 @@
 // carries the protocol in src/shared/protocol.ts. Every table is a Socket.IO
 // room keyed by its 4-letter code, so one process hosts many games at once.
 
+import crypto from 'node:crypto'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +16,19 @@ import type { Seat, Spectator } from './types'
 import { log } from './logger'
 import { captureError } from './errorTracking'
 import { getLeaderboard, getPlayerStats } from './db/stats'
+import {
+  accountForSession,
+  createSession,
+  destroySession,
+  parseCookies,
+  reapExpiredSessions,
+  upsertAccount,
+  SESSION_MAX_AGE_SECONDS,
+  type Account,
+} from './db/accounts'
+import { buyItem, equipItem, getBalance, getEquipped, getOwned } from './db/shop'
+import { authUrl, exchangeCode, googleConfigured } from './auth/google'
+import { SHOP_ITEMS, type MeAccount } from '@shared/shop'
 import { redis, redisSub } from './redis'
 import { registerRoom, refreshRoom, removeRoom } from './roomDirectory'
 
@@ -84,6 +98,9 @@ setInterval(() => {
       refreshRoom(code)
     }
   }
+  // One heartbeat is enough for a process that hosts every table -- an
+  // expired-session sweep does not deserve an interval of its own.
+  reapExpiredSessions()
 }, 10 * 60 * 1000)
 
 // ---- Socket wiring -----------------------------------------------------------
@@ -94,6 +111,13 @@ io.on('connection', (socket) => {
   // silently ignores them -- watching is read-only by construction.
   let room: Room | null = null
   let seatId: string | null = null
+
+  // Resolved once, at connect, from the session cookie that rode along with
+  // the handshake. Signed in or not is fixed for the life of the socket --
+  // logging in reloads the page, which reconnects.
+  const account: Account | null = accountForSession(
+    parseCookies(socket.handshake.headers.cookie).pg_session,
+  )
 
   /** Every gameplay handler needs the same "are you actually seated?" check. */
   const withSeat = (fn: (room: Room, seat: Seat) => void) => {
@@ -136,10 +160,26 @@ io.on('connection', (socket) => {
       log.info('room.created', { code: target.code })
     }
 
-    const known = playerId
-      ? target.getSeat(String(playerId)) != null || target.getSpectator(String(playerId)) != null
+    // A signed-in socket's identity comes from its session, never from the
+    // payload: the client-supplied playerId is just a string on the wire and
+    // trusting it would let anyone claim a stranger's history, wallet and
+    // seat. Anonymous players keep sending their own localStorage id exactly
+    // as before, which is what keeps that path unchanged.
+    const claimedId = account ? account.playerId : playerId ? String(playerId) : null
+
+    const known = claimedId
+      ? target.getSeat(claimedId) != null || target.getSpectator(claimedId) != null
       : false
-    const result = target.join(String(name ?? ''), playerId ? String(playerId) : null, socket.id)
+    // Resolved once here rather than on every reaction: Room must not do a
+    // synchronous SQLite read on a hot path in the process that hosts every
+    // table. A brand-new anonymous id owns nothing, so this is only ever a
+    // real query for a returning or signed-in player.
+    const result = target.join(
+      String(name ?? ''),
+      claimedId,
+      socket.id,
+      claimedId ? getOwned(claimedId) : [],
+    )
     if ('error' in result) {
       socket.emit('joinError', result.error)
       return
@@ -265,6 +305,167 @@ app.get('/api/leaderboard', (req, res) => {
 
 app.get('/api/players/:id/stats', (req, res) => {
   res.json(getPlayerStats(req.params.id))
+})
+
+// ---- Accounts, wallet and shop ---------------------------------------------------
+
+// The whole auth surface is off unless Google is configured -- with the env
+// vars unset these routes are never registered at all, the same "the route
+// does not exist by default" posture /admin/status takes below. That is what
+// lets a fork, a fresh clone or a local dev box run with no config and behave
+// exactly as it did before any of this existed.
+//
+// Anonymous play is never gated. Signing in buys you one identity across
+// devices and the ability to spend coins; it is never a precondition for
+// sitting down at a table.
+
+/** Reads the caller's account from the session cookie, or null. */
+const sessionAccount = (req: express.Request): Account | null =>
+  accountForSession(parseCookies(req.headers.cookie).pg_session)
+
+const sessionCookie = (token: string) =>
+  [
+    `pg_session=${token}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+    `Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+    // Secure must be conditional: over plain http on localhost the browser
+    // drops a Secure cookie silently and dev login fails with no error.
+    ...(process.env.NODE_ENV === 'production' ? ['Secure'] : []),
+  ].join('; ')
+
+/** What /api/me and the shop routes both return for a player. */
+function meFor(account: Account): MeAccount {
+  return {
+    playerId: account.playerId,
+    name: account.name,
+    picture: account.picture,
+    coins: getBalance(account.playerId),
+    owned: getOwned(account.playerId),
+    equipped: getEquipped(account.playerId),
+  }
+}
+
+if (googleConfigured) {
+  app.get('/auth/google', (req, res) => {
+    // The anonymous playerId rides along so the callback can adopt it as the
+    // account's canonical id and carry every past game over. It is not a
+    // secret -- it is already broadcast to every table this player joins.
+    const anon = typeof req.query.anon === 'string' ? req.query.anon : ''
+    const state = crypto.randomBytes(16).toString('base64url')
+
+    res.setHeader('Set-Cookie', [
+      `pg_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`,
+      `pg_oauth_anon=${encodeURIComponent(anon)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600`,
+    ])
+    res.redirect(authUrl(state))
+  })
+
+  app.get('/auth/google/callback', (req, res) => {
+    void (async () => {
+      const cookies = parseCookies(req.headers.cookie)
+      const code = typeof req.query.code === 'string' ? req.query.code : null
+      const state = typeof req.query.state === 'string' ? req.query.state : null
+
+      // CSRF: the state we minted must come back on both the redirect AND the
+      // cookie. Without this, a third party could walk a logged-in browser
+      // through a login to an account they control.
+      if (!code || !state || state !== cookies.pg_oauth_state) {
+        res.redirect('/?login=failed')
+        return
+      }
+
+      const profile = await exchangeCode(code)
+      if (!profile) {
+        res.redirect('/?login=failed')
+        return
+      }
+
+      const account = upsertAccount(profile, cookies.pg_oauth_anon || null)
+      const token = createSession(account.id)
+
+      res.setHeader('Set-Cookie', [
+        sessionCookie(token),
+        'pg_oauth_state=; Path=/; Max-Age=0',
+        'pg_oauth_anon=; Path=/; Max-Age=0',
+      ])
+      // Back to the landing screen: the client reads /api/me on boot, sees a
+      // canonical playerId that differs from its stored one, and adopts it.
+      res.redirect('/?login=ok')
+    })()
+  })
+
+  app.post('/auth/logout', (req, res) => {
+    const token = parseCookies(req.headers.cookie).pg_session
+    if (token) destroySession(token)
+    res.setHeader('Set-Cookie', 'pg_session=; HttpOnly; Path=/; Max-Age=0')
+    res.json({ ok: true })
+  })
+}
+
+// Always registered, even with Google unconfigured: the client asks on every
+// boot and a 404 would be indistinguishable from a network failure.
+app.get('/api/me', (req, res) => {
+  const account = sessionAccount(req)
+  res.json({
+    loginAvailable: googleConfigured,
+    account: account ? meFor(account) : null,
+  })
+})
+
+// Catalogue plus your own wallet in ONE request, so the shop page renders
+// from a single fetch. The catalogue half is public: a signed-out visitor can
+// window-shop and see what placing well is worth.
+app.get('/api/shop', (req, res) => {
+  const account = sessionAccount(req)
+  res.json({
+    items: SHOP_ITEMS,
+    account: account ? meFor(account) : null,
+  })
+})
+
+// Buying is the one thing anonymous players cannot do -- there is nowhere
+// durable to put a purchase made by a browser that may clear its storage
+// tomorrow. Coins still ACCRUE anonymously and come along on first sign-in.
+app.post('/api/shop/buy', express.json(), (req, res) => {
+  const account = sessionAccount(req)
+  if (!account) {
+    res.status(401).json({ ok: false, error: 'Sign in to spend coins.' })
+    return
+  }
+
+  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : ''
+  const result = buyItem(account.playerId, itemId)
+  if (!result.ok) {
+    res.status(400).json(result)
+    return
+  }
+  res.json({ ok: true, account: meFor(account) })
+})
+
+// Ownership is re-checked server-side. The shop page hiding a button is a
+// courtesy; a hand-rolled POST is not.
+app.post('/api/shop/equip', express.json(), (req, res) => {
+  const account = sessionAccount(req)
+  if (!account) {
+    res.status(401).json({ ok: false, error: 'Sign in first.' })
+    return
+  }
+
+  const kind = req.body?.kind
+  if (kind !== 'theme' && kind !== 'cardback') {
+    res.status(400).json({ ok: false, error: 'Unknown slot.' })
+    return
+  }
+
+  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : null
+  const result = equipItem(account.playerId, kind, itemId)
+  if (!result.ok) {
+    res.status(400).json(result)
+    return
+  }
+  res.json({ ok: true, account: meFor(account) })
 })
 
 // ---- Public table browser --------------------------------------------------------

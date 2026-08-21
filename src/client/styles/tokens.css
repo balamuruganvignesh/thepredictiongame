@@ -29,6 +29,17 @@
   --double-ink: #a076e2; /* the Double button */
   --private-ink: #e0caff; /* results only you can see */
 
+  /* Two surfaces that are neither panel nor accent, and that every theme has
+     to be able to move: --sunken is the inset well behind an input or a
+     segmented control, --inert is a button with nothing to do. They were
+     hardcoded until themes existed, which meant a light theme kept a black
+     text field. --ink-on-accent is the text colour that sits ON --accent,
+     and has to flip with it -- dark ink reads on a gold accent and vanishes
+     on a deep one. */
+  --sunken: #16161c;
+  --inert: #343642;
+  --ink-on-accent: #281e06;
+
   /* Playing cards stay true-to-life: white face, red/black pips. */
   --card-face: #fafaf6;
   --card-red: #c82026;
@@ -76,6 +87,115 @@
    of stretching one to fit the other's ratio. */
 :root[data-deck='classic'] {
   --card-aspect: 1.5282;
+}
+
+/* ---- Purchasable themes -------------------------------------------------
+ * One block per shop item id in shared/shop.ts, overriding only the palette
+ * tokens -- geometry, type and motion stay shared so a theme can never break
+ * layout. Nothing else in the app knows a theme exists; theme.tsx just sets
+ * data-theme on <html>, exactly as data-deck already works above.
+ *
+ * Rule for adding one: the card face tokens stay true-to-life (a red suit
+ * must stay red), and --text against --panel must stay comfortably readable,
+ * because the muted veil on an illegal card darkens the face and you must
+ * still be able to read your own hand. That is an accessibility requirement,
+ * not a preference.
+ */
+
+:root[data-theme='theme-felt'] {
+  --bg-top: #10281f;
+  --bg-bottom: #061410;
+  --glow: #1c4c37;
+  --panel: #143529;
+  --panel-header: #1b4534;
+  --stroke: #3e7a5e;
+  --text: #f0f5f1;
+  --text-muted: #9ab8a7;
+  --text-faint: #6c8d7b;
+  --accent: #e8c169;
+  --positive: #74dd93;
+  --danger: #e2685f;
+  --primary: #2f7d59;
+  --double-ink: #c79bec;
+  --private-ink: #d8f0e0;
+  --card-back: #14503a;
+  --card-back-inner: #1d7052;
+  --sunken: #0c2019;
+  --inert: #24483a;
+  --ink-on-accent: #17281f;
+}
+
+:root[data-theme='theme-parchment'] {
+  --bg-top: #e8dcc0;
+  --bg-bottom: #cfbe9a;
+  --glow: #f3ead3;
+  --panel: #f6efdc;
+  --panel-header: #e6d9b8;
+  --stroke: #b09a6d;
+  --text: #2c2519;
+  --text-muted: #6b5c42;
+  --text-faint: #8b7a5c;
+  --accent: #b5761d;
+  --positive: #35774a;
+  --danger: #b03a2e;
+  --primary: #7a5c30;
+  --double-ink: #6b4a97;
+  --private-ink: #4a3a6b;
+  --card-back: #8a6a3a;
+  --card-back-inner: #a98850;
+  --sunken: #e3d6b4;
+  --inert: #d2c4a0;
+  --ink-on-accent: #fdf6e6;
+
+  /* The only theme with a light backdrop -- tell the browser, or native form
+     controls and scrollbars stay dark against it. */
+  color-scheme: light;
+}
+
+:root[data-theme='theme-neon'] {
+  --bg-top: #14041c;
+  --bg-bottom: #05010a;
+  --glow: #3c0b52;
+  --panel: #1d0a2c;
+  --panel-header: #2b0f40;
+  --stroke: #7a2ea8;
+  --text: #f8ecff;
+  --text-muted: #b58ccc;
+  --text-faint: #82609b;
+  --accent: #ff3fa4;
+  --positive: #48f0c0;
+  --danger: #ff5b5b;
+  --primary: #8b3ff0;
+  --double-ink: #46e0ff;
+  --private-ink: #ffc2ea;
+  --card-back: #4a0f6e;
+  --card-back-inner: #7a1fae;
+  --sunken: #10041a;
+  --inert: #3a1552;
+  --ink-on-accent: #2a0016;
+}
+
+:root[data-theme='theme-ember'] {
+  --bg-top: #241410;
+  --bg-bottom: #0d0605;
+  --glow: #52251a;
+  --panel: #2c1913;
+  --panel-header: #3a221a;
+  --stroke: #7d4632;
+  --text: #f8eee8;
+  --text-muted: #c2a191;
+  --text-faint: #96786a;
+  --accent: #e8642c;
+  --positive: #8ad06a;
+  --danger: #e04848;
+  --primary: #a34a26;
+  --double-ink: #d38ae8;
+  --private-ink: #ffd8bd;
+  --card-back: #6b2c14;
+  --card-back-inner: #97462a;
+  --sunken: #190d09;
+  --inert: #452922;
+  --ink-on-accent: #2a0f04;
 }
 
 *,
