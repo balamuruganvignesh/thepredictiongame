@@ -10,12 +10,21 @@
 import { useEffect, useState } from 'react'
 import { PLACEMENT_COINS, type MeAccount, type ShopItem, type ShopKind } from '@shared/shop'
 import { emoteById } from '@shared/emotes'
+import { avatarById } from '@shared/avatars'
+import { powerupById } from '@shared/powerups'
 import { loginHref, useAuth } from '../auth'
 import { useCosmetics } from '../theme'
 
 const SECTIONS: { kind: ShopKind; title: string; blurb: string }[] = [
+  {
+    kind: 'powerup',
+    title: 'Powerups',
+    blurb:
+      'The only items that affect play. Bought in charges and spent during a round — and only at a table whose host has switched powerups on. The Prediction Game for now.',
+  },
   { kind: 'theme', title: 'Themes', blurb: 'Repaint the whole table. Yours only — a palette is personal.' },
   { kind: 'cardback', title: 'Card backs', blurb: 'Recolours every face-down card on your table. Works with either deck.' },
+  { kind: 'avatar', title: 'Avatars', blurb: 'Extra profile logos. The twelve free ones stay free.' },
   { kind: 'emote', title: 'Emotes', blurb: 'Extra reactions in the React menu. The original eight stay free.' },
 ]
 
@@ -23,13 +32,24 @@ export function Shop() {
   const { account, loginAvailable, refresh } = useAuth()
   const { slots, equip } = useCosmetics()
   const [items, setItems] = useState<ShopItem[] | null>(null)
+  const [charges, setCharges] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/shop')
-      .then((r) => r.json() as Promise<{ items: ShopItem[]; account: MeAccount | null }>)
-      .then((body) => setItems(body.items))
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            items: ShopItem[]
+            charges?: Record<string, number>
+            account: MeAccount | null
+          }>,
+      )
+      .then((body) => {
+        setItems(body.items)
+        setCharges(body.charges ?? {})
+      })
       .catch(() => setError("Couldn't reach the shop."))
   }, [])
 
@@ -47,7 +67,11 @@ export function Shop() {
       })
       const body = (await response.json()) as { ok: boolean; error?: string }
       if (!body.ok) setError(body.error ?? 'That purchase did not go through.')
-      else await refresh()
+      else {
+        await refresh()
+        const fresh = await fetch('/api/shop').then((r) => r.json())
+        setCharges(fresh.charges ?? {})
+      }
     } catch {
       setError("Couldn't reach the shop.")
     } finally {
@@ -113,13 +137,37 @@ export function Shop() {
                         style={item.swatch ? { background: item.swatch } : undefined}
                         aria-hidden="true"
                       >
-                        {item.kind === 'emote' ? (emoteById(item.id)?.glyph ?? '✨') : ''}
+                        {item.kind === 'emote'
+                          ? (emoteById(item.id)?.glyph ?? '✨')
+                          : item.kind === 'avatar'
+                            ? (avatarById(item.id)?.glyph ?? '✨')
+                            : item.kind === 'powerup'
+                              ? (powerupById(item.id)?.glyph ?? '⚡')
+                              : ''}
                       </span>
                       <div className="shop__item-body">
-                        <h3>{item.name}</h3>
+                        <h3>
+                          {item.name}
+                          {item.consumable && (charges[item.id] ?? 0) > 0 && (
+                            <span className="shop__charges"> ×{charges[item.id]}</span>
+                          )}
+                        </h3>
                         <p>{item.blurb}</p>
                       </div>
-                      {isOwned ? (
+                      {isOwned && item.consumable ? (
+                        // A consumable is never "Owned" -- it's a stack you
+                        // can always add to, so the button keeps its price
+                        // and just reports what you're holding.
+                        <button
+                          type="button"
+                          className="button button--accent"
+                          disabled={!account || busy === item.id || coins < item.price}
+                          onClick={() => void buy(item)}
+                          title={`You hold ${charges[item.id] ?? 0}`}
+                        >
+                          🪙 {item.price}
+                        </button>
+                      ) : isOwned ? (
                         slot ? (
                           <button
                             type="button"

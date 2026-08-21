@@ -67,6 +67,7 @@ export default function App() {
           onSetSpadesTargetScore={actions.setSpadesTargetScore}
           onSetTournamentGames={actions.setTournamentGames}
           onSetPublic={actions.setPublic}
+          onSetPowerups={actions.setPowerups}
           onSetBlackjackMode={actions.setBlackjackMode}
           onSetBlackjackRounds={actions.setBlackjackRounds}
           onSendChat={actions.sendChat}

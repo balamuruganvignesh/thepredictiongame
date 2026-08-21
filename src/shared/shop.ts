@@ -22,10 +22,15 @@ export const PLACEMENT_COINS = [50, 30, 15] as const
  */
 export const MIN_PLAYERS_FOR_COINS = 3
 
-export type ShopKind = 'theme' | 'cardback' | 'emote' | 'avatar'
+export type ShopKind = 'theme' | 'cardback' | 'emote' | 'avatar' | 'powerup'
 
 export type ShopItem = {
   id: string
+  /**
+   * Consumable items are bought in charges and spent in play, so they can be
+   * bought again once used. Everything else is owned once, forever.
+   */
+  consumable?: true
   kind: ShopKind
   name: string
   blurb: string
@@ -114,6 +119,36 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     blurb: 'Colourless and severe.',
     price: 180,
     swatch: '#6a6a72',
+  },
+
+  // ---- Powerups -----------------------------------------------------------
+  // The only items here that affect play. Gated twice -- the host has to turn
+  // powerups on for the table, and each use spends a bought charge. See
+  // shared/powerups.ts for what each one does and why they're charges rather
+  // than permanent unlocks.
+  {
+    id: 'powerup-peek',
+    kind: 'powerup',
+    name: 'Peek',
+    blurb: "One charge. See three cards from another player's hand.",
+    price: 60,
+    consumable: true,
+  },
+  {
+    id: 'powerup-trump-sense',
+    kind: 'powerup',
+    name: 'Trump Sense',
+    blurb: 'One charge. Count everyone else\'s trumps.',
+    price: 90,
+    consumable: true,
+  },
+  {
+    id: 'powerup-safety-net',
+    kind: 'powerup',
+    name: 'Safety Net',
+    blurb: 'One charge. Turn a missed bid into a zero instead of a loss.',
+    price: 140,
+    consumable: true,
   },
 
   // ---- Avatars ------------------------------------------------------------

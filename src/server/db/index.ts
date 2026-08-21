@@ -134,3 +134,9 @@ function addColumnIfMissing(table: string, column: string, definition: string) {
 }
 
 addColumnIfMissing('equipped_items', 'avatar', 'TEXT')
+
+// Consumable items (powerups) are held in CHARGES, so one row can stand for
+// several. owned_items' PRIMARY KEY (player_id, item_id) is what makes a
+// quantity column the right shape here rather than one row per charge --
+// and it keeps every non-consumable at its existing implicit quantity of 1.
+addColumnIfMissing('owned_items', 'quantity', 'INTEGER NOT NULL DEFAULT 1')

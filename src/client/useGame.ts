@@ -213,6 +213,11 @@ export type Store = {
    * player: the roster is already the one place the table learns who is here.
    */
   profiles: Record<string, { avatar?: string; avatarUrl?: string }>
+  /**
+   * Powerup charges you hold, and whether this table has them switched on.
+   * Private -- these only ever arrive via `send`, never a broadcast.
+   */
+  powerups: { charges: Record<string, number>; enabled: boolean }
   /** THE display order for every player list, locked in at round 1. */
   order: string[]
   turnOrder: string[]
@@ -322,6 +327,7 @@ const initialStore: Store = {
   watchedSeat: null,
   names: {},
   profiles: {},
+  powerups: { charges: {}, enabled: false },
   order: [],
   turnOrder: [],
   roundNumber: 0,
@@ -361,6 +367,7 @@ const initialStore: Store = {
 }
 
 type Action =
+  | { type: 'powerupCharges'; data: { charges: Record<string, number>; enabled: boolean } }
   | { type: 'connected'; value: boolean }
   | { type: 'joined'; playerId: string; roomCode: string; name: string; spectating: boolean }
   | { type: 'joinError'; message: string }
@@ -969,6 +976,9 @@ function reducer(state: Store, action: Action): Store {
     case 'chatRead':
       return { ...state, unreadChat: 0 }
 
+    case 'powerupCharges':
+      return { ...state, powerups: action.data }
+
     case 'toast':
       return { ...state, toast: action.message }
 
@@ -1191,6 +1201,11 @@ export function useGame() {
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
     socket.on('replayData', (data) => dispatch({ type: 'replay', data }))
+    socket.on('powerupCharges', (data) => dispatch({ type: 'powerupCharges', data }))
+    // Both of these are private one-liners about a purchase, so they go to the
+    // toast/feed rather than chat -- chat is for what PLAYERS say.
+    socket.on('powerupResult', (data) => dispatch({ type: 'toast', message: data.text }))
+    socket.on('powerupDenied', (data) => dispatch({ type: 'toast', message: data.text }))
     socket.on('emoteBurst', (data) => dispatch({ type: 'emote', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
@@ -1285,6 +1300,12 @@ export function useGame() {
         socket.emit('setTournamentGames', games)
       },
       /** Host only, lobby only: list this table in the public browser. */
+      setPowerups(enabled: boolean) {
+        socket.emit('setPowerups', enabled)
+      },
+      usePowerup(powerupId: string, targetId?: string) {
+        socket.emit('usePowerup', { powerupId, targetId })
+      },
       setPublic(isPublic: boolean) {
         socket.emit('setPublic', isPublic)
       },

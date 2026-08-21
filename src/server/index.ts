@@ -26,7 +26,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type Account,
 } from './db/accounts'
-import { buyItem, equipItem, getBalance, getEquipped, getOwned } from './db/shop'
+import { buyItem, equipItem, getBalance, getCharges, getEquipped, getOwned } from './db/shop'
 import { authUrl, exchangeCode, googleConfigured } from './auth/google'
 import { SHOP_ITEMS, type MeAccount } from '@shared/shop'
 import { AVATARS, GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
@@ -232,6 +232,10 @@ io.on('connection', (socket) => {
     target.broadcastLobby()
     // Mid-game rejoin: replay the whole table state onto their empty client.
     if (target.gameState !== 'Lobby') target.sendState(result.seat)
+
+    // Charges are private, so they ride `send` on join rather than the
+    // roster -- nobody else needs to know what you're holding.
+    target.sendPowerupCharges(result.seat)
   })
 
   socket.on('toggleReady', (ready) => withSeat((r, s) => r.setReady(s, ready === true)))
@@ -278,6 +282,18 @@ io.on('connection', (socket) => {
       if (!seat && spectator) r.watchSeat(spectator, targetSeatId ? String(targetSeatId) : null)
     }),
   )
+  socket.on('setPowerups', (enabled) => withSeat((r, seat) => r.setPowerups(seat, Boolean(enabled))))
+
+  socket.on('usePowerup', (data) =>
+    withSeat((r, seat) =>
+      r.usePowerup(
+        seat,
+        String(data?.powerupId ?? ''),
+        data?.targetId ? String(data.targetId) : undefined,
+      ),
+    ),
+  )
+
   socket.on('chat', (text) =>
     withViewer((r, seat, spectator) => {
       if (seat) r.chat(seat, String(text ?? ''))
@@ -432,6 +448,7 @@ app.get('/api/shop', (req, res) => {
   res.json({
     items: SHOP_ITEMS,
     avatars: AVATARS,
+    charges: account ? getCharges(account.playerId) : {},
     account: account ? meFor(account) : null,
   })
 })

@@ -64,6 +64,8 @@ export type LobbyUpdate = {
   mode: GameMode
   /** Which game the host has the table set to. */
   gameType: GameType
+  /** Whether the host has switched purchasable powerups on for this table. */
+  powerups: boolean
   /** Hearts only: the score that ends the game. Ignored by the other games. */
   targetScore: number
   /** Golf only: how many holes the game runs. Ignored by the other games. */
@@ -162,6 +164,29 @@ export type RoundResult = {
 }
 
 export type ScoreUpdate = { roundNumber: number; results: RoundResult[] }
+
+// ---- Powerups ----
+//
+// Private by construction: both of these go out via `send`, never `broadcast`,
+// so a powerup's result can't leak to the table (or into the chat log, which
+// only mirrors roleAnnounce). Buying an advantage that everyone can see would
+// not be much of an advantage.
+
+export type PowerupResult = {
+  powerupId: string
+  text: string
+}
+
+export type PowerupDenied = {
+  text: string
+}
+
+/** Charges the player currently holds, keyed by powerup id. */
+export type PowerupCharges = {
+  charges: Record<string, number>
+  /** Whether the host has powerups switched on for this table. */
+  enabled: boolean
+}
 
 export type Standing = {
   id: PlayerId
@@ -675,6 +700,12 @@ export type Joined = {
 // ---- Event maps -------------------------------------------------------------
 
 export interface ServerToClientEvents {
+  /** Private: the outcome of a powerup you just spent, or one that hit you. */
+  powerupResult: (data: PowerupResult) => void
+  /** Private: why a powerup did nothing. No charge was spent. */
+  powerupDenied: (data: PowerupDenied) => void
+  /** Private: your remaining charges, refreshed after every spend. */
+  powerupCharges: (data: PowerupCharges) => void
   joined: (data: Joined) => void
   joinError: (message: string) => void
   lobbyUpdate: (data: LobbyUpdate) => void
@@ -720,6 +751,10 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
+  /** Spend a powerup charge. Host must have powerups on; server re-checks. */
+  usePowerup: (data: { powerupId: string; targetId?: string }) => void
+  /** Host-only, lobby-only: switch powerups on for this table. */
+  setPowerups: (enabled: boolean) => void
   join: (data: {
     roomCode: string | null
     name: string

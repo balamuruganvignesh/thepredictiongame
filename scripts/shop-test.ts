@@ -16,7 +16,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-shop-test-'))
 process.env.DATABASE_PATH = path.join(dir, 'test.db')
 
 const { recordGameEnded, recordGameAbandoned } = await import('../src/server/db/persistence')
-const { buyItem, equipItem, getBalance, getEquipped, getOwned } = await import('../src/server/db/shop')
+const { buyItem, equipItem, getBalance, getCharges, getEquipped, getOwned, spendPowerupCharge } =
+  await import('../src/server/db/shop')
 const { PLACEMENT_COINS } = await import('../src/shared/shop')
 const { GOOGLE_AVATAR } = await import('../src/shared/avatars')
 type Standing = import('../src/shared/protocol').Standing
@@ -146,6 +147,46 @@ check('the google sentinel is accepted', equipItem(P, 'avatar', GOOGLE_AVATAR).o
 check('an unknown avatar id is refused', !equipItem(P, 'avatar', 'not-an-avatar').ok)
 check('a theme cannot be equipped as an avatar', !equipItem(P, 'avatar', 'theme-felt').ok)
 check('null un-equips the avatar', equipItem(P, 'avatar', null).ok && getEquipped(P).avatar === null)
+
+console.log('\npowerup charges')
+
+// Consumables are the one item you can buy repeatedly: they're spent in play,
+// so owning one is no reason to refuse another.
+const C = 'charger'
+// Funded generously on purpose: an "insufficient funds" refusal further down
+// would make the re-buy checks pass for the wrong reason.
+for (const code of ['JJJ1', 'JJJ2', 'JJJ3', 'JJJ4', 'JJJ5', 'JJJ6', 'JJJ7', 'JJJ8', 'JJJ9', 'JJ10']) {
+  recordGameEnded({
+    roomCode: code,
+    gameType: 'prediction',
+    gameName: 'The Prediction Game',
+    standings: [s(C, 500), s('n1', 400), s('n2', 300)],
+  })
+}
+check('placing funds the charger', getBalance(C) === FIRST * 10)
+
+check('a powerup can be bought', buyItem(C, 'powerup-peek').ok)
+check('one charge is held', getCharges(C)['powerup-peek'] === 1)
+check('the SAME powerup can be bought again', buyItem(C, 'powerup-peek').ok)
+check('charges stack', getCharges(C)['powerup-peek'] === 2)
+
+check('spending returns true while charges remain', spendPowerupCharge(C, 'powerup-peek'))
+check('the charge count drops', getCharges(C)['powerup-peek'] === 1)
+check('spending again works', spendPowerupCharge(C, 'powerup-peek'))
+check('an exhausted powerup reports no charges', !getCharges(C)['powerup-peek'])
+// The row survives at quantity 0 so the next purchase increments rather than
+// inserting -- but a zero-charge item must not count as owned, or it would
+// keep unlocking things.
+check('spending past zero is refused', !spendPowerupCharge(C, 'powerup-peek'))
+check('a zero-charge item is not owned', !getOwned(C).includes('powerup-peek'))
+check('never-bought powerups cannot be spent', !spendPowerupCharge(C, 'powerup-safety-net'))
+check('re-buying after exhaustion works', buyItem(C, 'powerup-peek').ok)
+check('and restores a charge', getCharges(C)['powerup-peek'] === 1)
+
+// A non-consumable keeps its old behaviour.
+const firstThemeBuy = buyItem(C, 'theme-felt')
+check('a non-consumable buys once', firstThemeBuy.ok)
+check('a theme still refuses a second purchase', !buyItem(C, 'theme-felt').ok)
 
 fs.rmSync(dir, { recursive: true, force: true })
 

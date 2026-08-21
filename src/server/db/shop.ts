@@ -28,9 +28,15 @@ const syncAccountCoins = db.prepare(`
   ) WHERE player_id = @playerId
 `)
 
-const selectOwned = db.prepare(`SELECT item_id FROM owned_items WHERE player_id = ?`)
+const selectOwned = db.prepare(`SELECT item_id, quantity FROM owned_items WHERE player_id = ?`)
 const insertOwned = db.prepare(`
-  INSERT INTO owned_items (player_id, item_id, bought_at) VALUES (@playerId, @itemId, @now)
+  INSERT INTO owned_items (player_id, item_id, bought_at, quantity)
+  VALUES (@playerId, @itemId, @now, 1)
+  ON CONFLICT(player_id, item_id) DO UPDATE SET quantity = quantity + 1
+`)
+const spendCharge = db.prepare(`
+  UPDATE owned_items SET quantity = quantity - 1
+  WHERE player_id = @playerId AND item_id = @itemId AND quantity > 0
 `)
 
 const selectEquipped = db.prepare(`
@@ -51,8 +57,35 @@ export function getBalance(playerId: string): number {
   return (selectBalance.get(playerId) as { balance: number }).balance
 }
 
+type OwnedRow = { item_id: string; quantity: number }
+
+/**
+ * Item ids the player owns at least one of. A consumable with zero charges
+ * left is NOT owned -- it keeps its row so the next purchase increments
+ * rather than inserting, but it must not unlock anything.
+ */
 export function getOwned(playerId: string): string[] {
-  return (selectOwned.all(playerId) as { item_id: string }[]).map((row) => row.item_id)
+  return (selectOwned.all(playerId) as OwnedRow[])
+    .filter((row) => row.quantity > 0)
+    .map((row) => row.item_id)
+}
+
+/** Charges per consumable item id, for the powerup tray. */
+export function getCharges(playerId: string): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const row of selectOwned.all(playerId) as OwnedRow[]) {
+    if (row.quantity > 0) out[row.item_id] = row.quantity
+  }
+  return out
+}
+
+/**
+ * Spends one charge. Returns false if there wasn't one -- the caller must
+ * treat that as "the powerup did not happen", since this is the only thing
+ * standing between a hand-driven socket and infinite powerups.
+ */
+export function spendPowerupCharge(playerId: string, itemId: string): boolean {
+  return spendCharge.run({ playerId, itemId }).changes > 0
 }
 
 export function getEquipped(playerId: string): Equipped {
@@ -88,7 +121,9 @@ export const buyItem = db.transaction((playerId: string, itemId: string): BuyRes
   const item = shopItemById(itemId)
   if (!item) return { ok: false, error: 'No such item.' }
 
-  if (getOwned(playerId).includes(itemId)) {
+  // A consumable is bought in charges, so owning one is no reason to refuse
+  // another -- that's the whole point of it being spent in play.
+  if (!item.consumable && getOwned(playerId).includes(itemId)) {
     return { ok: false, error: 'You already own that.' }
   }
 

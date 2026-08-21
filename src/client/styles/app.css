@@ -3443,3 +3443,89 @@ button.seat:hover {
   gap: 8px;
   min-width: 0;
 }
+
+/* ---- Powerup tray ------------------------------------------------------------
+ * Mirrors .emotes: a dock button with a popover above it and no backdrop,
+ * because you spend a powerup BECAUSE of what's on the table and the table has
+ * to stay readable while you decide.
+ */
+
+.powerups {
+  position: relative;
+}
+
+.powerups__pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  width: min(300px, calc(100vw - 32px));
+}
+
+.powerups__pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-button);
+  background: var(--sunken);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.powerups__pick:hover,
+.powerups__pick:focus-visible {
+  border-color: var(--accent);
+}
+
+.powerups__glyph {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.powerups__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.powerups__name {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+}
+
+.powerups__desc {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.powerups__aim-title {
+  margin: 0 0 2px;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.powerups__cancel {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.shop__charges {
+  color: var(--accent);
+  font-size: 0.85em;
+}
