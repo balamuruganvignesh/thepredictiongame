@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
+import { cardKey } from '@shared/cards'
 import type { GolfResolveAction } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { GameAnnouncer } from './GameAnnouncer'
@@ -16,6 +17,8 @@ import { GolfScoresheet } from './GolfScoresheet'
 import { CardBack, DeckStack, PlayingCard } from './PlayingCard'
 import { SettingsMenu } from './SettingsMenu'
 import { useScoresheetShortcut } from '../useScoresheetShortcut'
+import { flipIn } from '../animation'
+import { useEnterAnimation } from '../useEnterAnimation'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -46,6 +49,16 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
 
   const myId = store.meId
   const emptyGrid: (Card | null)[] = new Array(6).fill(null)
+
+  // Every face-up card in every grid on the table, so a flip animates once
+  // when the card is turned over and never again on a later re-render.
+  const onGridEnter = useEnterAnimation(
+    players.flatMap((player) =>
+      (golf.grids[player.id] ?? emptyGrid).flatMap((card, i) =>
+        card ? [`${player.id}-${i}-${cardKey(card)}`] : [],
+      ),
+    ),
+  )
   const myGrid = (myId ? golf.grids[myId] : undefined) ?? emptyGrid
   const myRevealedCount = myGrid.filter((c) => c != null).length
   const needsInitialReveal = !store.spectating && store.phase === 'passing' && myRevealedCount < 2
@@ -174,7 +187,21 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
                   </span>
                   <div className="golf-grid">
                     {grid.map((card, i) => (
-                      <div key={i}>{card ? <PlayingCard card={card} /> : <CardBack />}</div>
+                      <div key={i} className="card-flight">
+                        {card ? (
+                          // Every face-up card in Golf got there by being
+                          // turned over -- there is no other way for one to
+                          // appear -- so an entrance here is always a flip.
+                          <span
+                            className="card-flight"
+                            ref={onGridEnter(`${player.id}-${i}-${cardKey(card)}`, flipIn)}
+                          >
+                            <PlayingCard card={card} />
+                          </span>
+                        ) : (
+                          <CardBack />
+                        )}
+                      </div>
                     ))}
                   </div>
                   <span className="golf-panel__score">{store.totals[player.id] ?? 0} pts</span>

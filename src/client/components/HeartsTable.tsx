@@ -89,6 +89,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
             trickNumber={store.trickNumber}
             totalTricks={store.totalTricks}
             winnerId={store.trickWinnerId}
+            meId={store.meId}
           />
         ) : (
           store.phase == null &&

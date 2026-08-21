@@ -11,6 +11,8 @@
 
 import type { Card } from '@shared/cards'
 import { cardKey, isLegalPlay } from '@shared/cards'
+import { dealIn, rememberOrigin } from '../animation'
+import { useEnterAnimation } from '../useEnterAnimation'
 import { useRovingFocus } from '../useRovingFocus'
 import { PlayingCard, cardLabel } from './PlayingCard'
 
@@ -58,6 +60,8 @@ export function Hand({
 }: Props) {
   const allowed = isPlayable ?? ((card: Card, cards: Card[]) => isLegalPlay(card, cards, leadSuit))
   const { containerRef, onKeyDown, itemProps } = useRovingFocus(hand.length, '.card-button')
+  const keys = hand.map(cardKey)
+  const onEnter = useEnterAnimation(keys)
 
   return (
     <div
@@ -92,8 +96,16 @@ export function Hand({
                     ? 'card-button--playable'
                     : 'card-button--muted')
             }
-            style={{ animationDelay: `${i * 55}ms` }}
-            onClick={() => legal && onPlay(card)}
+            ref={onEnter(key, (el) => dealIn(el, i))}
+            onClick={(event) => {
+              if (!legal) return
+              // Where this card is RIGHT NOW, so the trick area can fly it in
+              // from here. Captured at the click because the hand drops the
+              // card before the trick ever renders it -- by then there is
+              // nothing left to measure.
+              rememberOrigin(key, event.currentTarget)
+              onPlay(card)
+            }}
             {...itemProps(i)}
             // aria-disabled, NOT disabled: a disabled button is removed from
             // the focus order, which would drop unplayable cards out of the

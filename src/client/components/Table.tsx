@@ -137,6 +137,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
             trickNumber={store.trickNumber}
             totalTricks={store.totalTricks}
             winnerId={store.trickWinnerId}
+            meId={store.meId}
           />
         ) : (
           store.phase == null &&

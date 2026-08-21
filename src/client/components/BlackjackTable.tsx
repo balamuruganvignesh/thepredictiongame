@@ -5,7 +5,8 @@
 // dealt and stay face up: the only hidden card in the whole game is the
 // dealer's hole card, rendered as a card back until the dealer plays.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { cardKey } from '@shared/cards'
 import type { BlackjackHandPublic } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { GameAnnouncer } from './GameAnnouncer'
@@ -14,6 +15,8 @@ import { BlackjackScoresheet } from './BlackjackScoresheet'
 import { CardBack, PlayingCard } from './PlayingCard'
 import { SettingsMenu } from './SettingsMenu'
 import { useScoresheetShortcut } from '../useScoresheetShortcut'
+import { dealIn, flipIn } from '../animation'
+import { useEnterAnimation } from '../useEnterAnimation'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -39,6 +42,25 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
   const bj = store.blackjack
   const order = store.order.length > 0 ? store.order : store.turnOrder
   const players = order.map((id) => ({ id, name: store.names[id] ?? 'Player' }))
+
+  // Which dealer slots have been showing a card BACK. Blackjack's one hidden
+  // card is the hole card, and "was a back a moment ago" is the only thing
+  // that separates a card being turned over from a card being dealt -- both
+  // are just a new card appearing in the array. Slot index alone won't do it:
+  // the hole card's position is a convention, not a guarantee.
+  const wasFaceDown = useRef(new Set<number>())
+  ;(bj.dealerHand ?? []).forEach((card, i) => {
+    if (card == null) wasFaceDown.current.add(i)
+  })
+
+  const onDealerEnter = useEnterAnimation(
+    (bj.dealerHand ?? []).flatMap((card, i) => (card ? [`dealer-${i}-${cardKey(card)}`] : [])),
+  )
+  const onHandEnter = useEnterAnimation(
+    players.flatMap((player) =>
+      (bj.hands[player.id]?.cards ?? []).map((card, i) => `${player.id}-${i}-${cardKey(card)}`),
+    ),
+  )
 
   const myId = store.meId
   const isMyTurn = bj.currentTurnId != null && bj.currentTurnId === myId
@@ -100,7 +122,19 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
               <span className="blackjack-dealer__name">DEALER</span>
               <div className="blackjack-hand">
                 {(bj.dealerHand ?? []).map((card, i) =>
-                  card ? <PlayingCard key={i} card={card} /> : <CardBack key={i} />,
+                  card ? (
+                    <span
+                      key={i}
+                      className="card-flight"
+                      ref={onDealerEnter(`dealer-${i}-${cardKey(card)}`, (el) =>
+                        wasFaceDown.current.has(i) ? flipIn(el) : dealIn(el, i),
+                      )}
+                    >
+                      <PlayingCard card={card} />
+                    </span>
+                  ) : (
+                    <CardBack key={i} />
+                  ),
                 )}
               </div>
               <span className="blackjack-dealer__total">
@@ -127,7 +161,15 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
                   </span>
                   <div className="blackjack-hand">
                     {(hand?.cards ?? []).map((card, i) => (
-                      <PlayingCard key={i} card={card} />
+                      <span
+                        key={i}
+                        className="card-flight"
+                        ref={onHandEnter(`${player.id}-${i}-${cardKey(card)}`, (el) =>
+                          dealIn(el, i),
+                        )}
+                      >
+                        <PlayingCard card={card} />
+                      </span>
                     ))}
                   </div>
                   <span className="blackjack-panel__total">

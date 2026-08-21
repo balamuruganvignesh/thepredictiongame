@@ -80,20 +80,12 @@
   transition:
     transform var(--t-quick) ease-out,
     filter var(--t-quick) ease-out;
-  /* A card only ever mounts fresh when it's actually new to the hand -- a
-     round's deal, a rewound card returning, an ability swapping one in --
-     never on a re-render, since React keeps the same DOM node for a card
-     that's just sitting there. So a plain mount animation IS the deal
-     animation, no "is this a deal" bookkeeping needed. The stagger comes from
-     each button's own animation-delay (index * 55ms, set inline). */
-  animation: deal-in 340ms var(--ease-pop) both;
-}
-
-@keyframes deal-in {
-  from {
-    opacity: 0;
-    transform: translateY(-46px) rotate(-10deg) scale(0.85);
-  }
+  /* The deal itself is NOT here any more. It used to be a CSS mount animation
+     with an inline per-card animation-delay; it's now `dealIn` in
+     ../animation.ts, driven from a ref callback, so the deal, the flight into
+     the trick and the Golf/Blackjack flips all share one motion vocabulary
+     and one reduced-motion gate. The hover/press transition above stays CSS:
+     nothing about it needs measuring. */
 }
 
 /* Playable cards get a warm ring and lift under the cursor. */
@@ -227,16 +219,13 @@
   }
 }
 
-/* Cards land on the table rather than teleporting there. */
-@keyframes card-pop {
-  from {
-    transform: scale(0.7);
-    opacity: 0;
-  }
-}
-
-.card-pop {
-  animation: card-pop 280ms var(--ease-pop);
+/* The wrapper a JS-driven card animation is applied to (see ../animation.ts).
+   Shrink-wrapped to the card on purpose: `flyFrom` measures this element to
+   work out the scale it has to fly in from, and a wrapper that stretched to
+   its flex parent's width would compute that ratio off the wrong box. */
+.card-flight {
+  display: inline-block;
+  line-height: 0;
 }
 
 /* ---- Four-colour suit badge (accessibility) ---------------------------------
