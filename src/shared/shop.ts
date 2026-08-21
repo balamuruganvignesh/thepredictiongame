@@ -73,16 +73,21 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   },
 
   // ---- Card backs ---------------------------------------------------------
-  // Recolours of the active deck's own back sprite, applied as a CSS filter
-  // keyed off data-cardback (see client/styles/cards.css). Deliberately not
-  // new sprite art: a filter recolours whichever deck you're using, so a
-  // player who bought a red back keeps it after switching pixel <-> classic,
-  // and there is no second set of files to keep in sync with a third deck.
+  // Recolours of the active deck's own back sprite, applied as a tint keyed
+  // off data-cardback (see client/styles/cards.css).
+  //
+  // A PERSONAL display preference, exactly like deckStyle's pixel/classic
+  // choice, and the copy must not claim otherwise. Face-down cards in this
+  // app are Golf grids, the Golf stock and Blackjack's hole card -- the
+  // trick-taking games never render an opponent's hand as backs at all. Since
+  // which deck ART renders is already personal, a back colour sourced from
+  // someone else would paint their colour onto your deck's sprites, which
+  // reads as a bug rather than a cosmetic.
   {
     id: 'cardback-crimson',
     kind: 'cardback',
     name: 'Crimson Back',
-    blurb: 'Deep red, for people who like being looked at.',
+    blurb: 'Deep red. Every face-down card on your table.',
     price: 100,
     swatch: '#a52033',
   },
@@ -90,7 +95,7 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     id: 'cardback-forest',
     kind: 'cardback',
     name: 'Forest Back',
-    blurb: 'Quiet green. Nothing to see here.',
+    blurb: 'Quiet green, for a calmer table.',
     price: 100,
     swatch: '#1f6b3f',
   },

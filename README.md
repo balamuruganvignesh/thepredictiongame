@@ -155,9 +155,10 @@ Finish in the **top three** of any game and you earn coins — 50 for first, 30 
 second, 15 for third. Ties share the better placing. Abandoned games (a restart
 vote) pay nothing, and neither do two-player tables.
 
-Coins buy cosmetics in the **shop**: table themes, card backs and extra
-reactions. Nothing in there affects play — no powerups, no advantage, nothing
-to buy with real money. You earn coins even while playing anonymously, and they
+Coins buy cosmetics in the **shop**: table themes and card backs (both change
+how the game looks for you) and extra reactions (which everyone sees). Nothing
+in there affects play — no powerups, no advantage, nothing to buy with real
+money. You earn coins even while playing anonymously, and they
 come with you the first time you sign in.
 
 ## Credits

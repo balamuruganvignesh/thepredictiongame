@@ -15,7 +15,7 @@ import { useCosmetics } from '../theme'
 
 const SECTIONS: { kind: ShopKind; title: string; blurb: string }[] = [
   { kind: 'theme', title: 'Themes', blurb: 'Repaint the whole table. Yours only — a palette is personal.' },
-  { kind: 'cardback', title: 'Card backs', blurb: 'What everyone else sees across the table from you.' },
+  { kind: 'cardback', title: 'Card backs', blurb: 'Recolours every face-down card on your table. Works with either deck.' },
   { kind: 'emote', title: 'Emotes', blurb: 'Extra reactions in the React menu. The original eight stay free.' },
 ]
 
