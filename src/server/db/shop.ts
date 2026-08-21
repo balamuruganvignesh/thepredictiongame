@@ -8,6 +8,7 @@
 // nowhere durable to put a purchase made by a browser that might clear its
 // storage tomorrow -- that check lives in the route, not here.
 
+import { GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { shopItemById, type Equipped } from '@shared/shop'
 import { db } from './index'
 import { log } from '../logger'
@@ -27,16 +28,24 @@ const syncAccountCoins = db.prepare(`
   ) WHERE player_id = @playerId
 `)
 
-const selectOwned = db.prepare(`SELECT item_id FROM owned_items WHERE player_id = ?`)
+const selectOwned = db.prepare(`SELECT item_id, quantity FROM owned_items WHERE player_id = ?`)
 const insertOwned = db.prepare(`
-  INSERT INTO owned_items (player_id, item_id, bought_at) VALUES (@playerId, @itemId, @now)
+  INSERT INTO owned_items (player_id, item_id, bought_at, quantity)
+  VALUES (@playerId, @itemId, @now, 1)
+  ON CONFLICT(player_id, item_id) DO UPDATE SET quantity = quantity + 1
+`)
+const spendCharge = db.prepare(`
+  UPDATE owned_items SET quantity = quantity - 1
+  WHERE player_id = @playerId AND item_id = @itemId AND quantity > 0
 `)
 
-const selectEquipped = db.prepare(`SELECT theme, cardback FROM equipped_items WHERE player_id = ?`)
+const selectEquipped = db.prepare(`
+  SELECT theme, cardback, avatar FROM equipped_items WHERE player_id = ?
+`)
 const upsertEquipped = db.prepare(`
-  INSERT INTO equipped_items (player_id, theme, cardback)
-  VALUES (@playerId, @theme, @cardback)
-  ON CONFLICT(player_id) DO UPDATE SET theme = @theme, cardback = @cardback
+  INSERT INTO equipped_items (player_id, theme, cardback, avatar)
+  VALUES (@playerId, @theme, @cardback, @avatar)
+  ON CONFLICT(player_id) DO UPDATE SET theme = @theme, cardback = @cardback, avatar = @avatar
 `)
 
 /**
@@ -48,13 +57,42 @@ export function getBalance(playerId: string): number {
   return (selectBalance.get(playerId) as { balance: number }).balance
 }
 
+type OwnedRow = { item_id: string; quantity: number }
+
+/**
+ * Item ids the player owns at least one of. A consumable with zero charges
+ * left is NOT owned -- it keeps its row so the next purchase increments
+ * rather than inserting, but it must not unlock anything.
+ */
 export function getOwned(playerId: string): string[] {
-  return (selectOwned.all(playerId) as { item_id: string }[]).map((row) => row.item_id)
+  return (selectOwned.all(playerId) as OwnedRow[])
+    .filter((row) => row.quantity > 0)
+    .map((row) => row.item_id)
+}
+
+/** Charges per consumable item id, for the powerup tray. */
+export function getCharges(playerId: string): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const row of selectOwned.all(playerId) as OwnedRow[]) {
+    if (row.quantity > 0) out[row.item_id] = row.quantity
+  }
+  return out
+}
+
+/**
+ * Spends one charge. Returns false if there wasn't one -- the caller must
+ * treat that as "the powerup did not happen", since this is the only thing
+ * standing between a hand-driven socket and infinite powerups.
+ */
+export function spendPowerupCharge(playerId: string, itemId: string): boolean {
+  return spendCharge.run({ playerId, itemId }).changes > 0
 }
 
 export function getEquipped(playerId: string): Equipped {
-  const row = selectEquipped.get(playerId) as { theme: string | null; cardback: string | null } | undefined
-  return { theme: row?.theme ?? null, cardback: row?.cardback ?? null }
+  const row = selectEquipped.get(playerId) as
+    | { theme: string | null; cardback: string | null; avatar: string | null }
+    | undefined
+  return { theme: row?.theme ?? null, cardback: row?.cardback ?? null, avatar: row?.avatar ?? null }
 }
 
 /**
@@ -83,7 +121,9 @@ export const buyItem = db.transaction((playerId: string, itemId: string): BuyRes
   const item = shopItemById(itemId)
   if (!item) return { ok: false, error: 'No such item.' }
 
-  if (getOwned(playerId).includes(itemId)) {
+  // A consumable is bought in charges, so owning one is no reason to refuse
+  // another -- that's the whole point of it being spent in play.
+  if (!item.consumable && getOwned(playerId).includes(itemId)) {
     return { ok: false, error: 'You already own that.' }
   }
 
@@ -115,17 +155,30 @@ export type EquipResult = { ok: true; equipped: Equipped } | { ok: false; error:
  * `itemId` of null un-equips, which is how a player gets back to the default
  * look without owning anything.
  */
-export function equipItem(playerId: string, kind: 'theme' | 'cardback', itemId: string | null): EquipResult {
+export function equipItem(
+  playerId: string,
+  kind: 'theme' | 'cardback' | 'avatar',
+  itemId: string | null,
+): EquipResult {
   if (itemId !== null) {
-    const item = shopItemById(itemId)
-    if (!item || item.kind !== kind) return { ok: false, error: 'No such item.' }
-    if (!getOwned(playerId).includes(itemId)) return { ok: false, error: "You don't own that." }
+    if (kind === 'avatar') {
+      // Avatars are the one slot whose free options aren't shop items at all
+      // (the presets in shared/avatars.ts), plus the GOOGLE_AVATAR sentinel,
+      // so ownership is checked against that list rather than the catalogue.
+      if (!isSelectableAvatar(itemId, getOwned(playerId))) {
+        return { ok: false, error: itemId === GOOGLE_AVATAR ? 'Sign in first.' : "You don't own that." }
+      }
+    } else {
+      const item = shopItemById(itemId)
+      if (!item || item.kind !== kind) return { ok: false, error: 'No such item.' }
+      if (!getOwned(playerId).includes(itemId)) return { ok: false, error: "You don't own that." }
+    }
   }
 
   const current = getEquipped(playerId)
   const next: Equipped = { ...current, [kind]: itemId }
   try {
-    upsertEquipped.run({ playerId, theme: next.theme, cardback: next.cardback })
+    upsertEquipped.run({ playerId, theme: next.theme, cardback: next.cardback, avatar: next.avatar })
   } catch (error) {
     log.error('shop.equip.failed', { error: String(error) })
     return { ok: false, error: 'Could not save that.' }

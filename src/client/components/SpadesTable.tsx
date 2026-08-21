@@ -75,6 +75,7 @@ export function SpadesTable({ store, actions }: { store: Store; actions: GameAct
         spadesBroken={spades.spadesBroken}
         targetScore={spades.targetScore}
         bags={spades.bags}
+        profiles={store.profiles}
         players={players.map((player) => ({
           ...player,
           bid: spades.bids[player.id] ?? null,

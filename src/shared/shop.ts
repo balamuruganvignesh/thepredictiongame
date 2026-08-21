@@ -22,10 +22,15 @@ export const PLACEMENT_COINS = [50, 30, 15] as const
  */
 export const MIN_PLAYERS_FOR_COINS = 3
 
-export type ShopKind = 'theme' | 'cardback' | 'emote'
+export type ShopKind = 'theme' | 'cardback' | 'emote' | 'avatar' | 'powerup'
 
 export type ShopItem = {
   id: string
+  /**
+   * Consumable items are bought in charges and spent in play, so they can be
+   * bought again once used. Everything else is owned once, forever.
+   */
+  consumable?: true
   kind: ShopKind
   name: string
   blurb: string
@@ -116,6 +121,69 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     swatch: '#6a6a72',
   },
 
+  // ---- Powerups -----------------------------------------------------------
+  // The only items here that affect play. Gated twice -- the host has to turn
+  // powerups on for the table, and each use spends a bought charge. See
+  // shared/powerups.ts for what each one does and why they're charges rather
+  // than permanent unlocks.
+  {
+    id: 'powerup-peek',
+    kind: 'powerup',
+    name: 'Peek',
+    blurb: "One charge. See three cards from another player's hand.",
+    price: 60,
+    consumable: true,
+  },
+  {
+    id: 'powerup-trump-sense',
+    kind: 'powerup',
+    name: 'Trump Sense',
+    blurb: 'One charge. Count everyone else\'s trumps.',
+    price: 90,
+    consumable: true,
+  },
+  {
+    id: 'powerup-safety-net',
+    kind: 'powerup',
+    name: 'Safety Net',
+    blurb: 'One charge. Turn a missed bid into a zero instead of a loss.',
+    price: 140,
+    consumable: true,
+  },
+
+  // ---- Avatars ------------------------------------------------------------
+  // Extra profile logos on top of the free presets in shared/avatars.ts. The
+  // free set stays generous on purpose: a player with no coins still gets a
+  // real identity at the table rather than a paywalled blank.
+  {
+    id: 'avatar-dragon',
+    kind: 'avatar',
+    name: 'Dragon',
+    blurb: 'For the player everyone bids around.',
+    price: 120,
+  },
+  {
+    id: 'avatar-crown',
+    kind: 'avatar',
+    name: 'Monarch',
+    blurb: 'Wear the win.',
+    price: 200,
+  },
+  {
+    id: 'avatar-jester',
+    kind: 'avatar',
+    name: 'Jester',
+    blurb: 'Nobody knows what you are doing. Including you.',
+    price: 120,
+  },
+  {
+    id: 'avatar-phoenix',
+    kind: 'avatar',
+    name: 'Phoenix',
+    blurb: 'Down 80 points, still bidding five.',
+    price: 200,
+  },
+
   // ---- Emotes -------------------------------------------------------------
   // These extend the fixed set in emotes.ts. The base eight stay free forever
   // -- reacting to a trick is core to the table, not a premium feature.
@@ -164,6 +232,8 @@ export function shopItemsOfKind(kind: ShopKind): ShopItem[] {
 export type Equipped = {
   theme: string | null
   cardback: string | null
+  /** A preset id from shared/avatars.ts, or the GOOGLE_AVATAR sentinel. */
+  avatar: string | null
 }
 
 export type MeAccount = {

@@ -210,6 +210,19 @@ body,
   height: 100%;
 }
 
+/* The standalone document pages (/scoresheet, /leaderboard, /shop) opt out of
+   the fixed-viewport lock below. The game table wants a clipped 100%-height
+   document -- it positions its own panels against the viewport -- but a long
+   scrolling page inside that lock is simply unreachable past the fold, with
+   no scrollbar to hint that anything was cut off. App.tsx sets data-page. */
+:root[data-page='document'],
+:root[data-page='document'] body,
+:root[data-page='document'] #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);

@@ -8,6 +8,7 @@ import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
 import { EffectLayer } from './EffectLayer'
 import { EmoteBar } from './EmoteBar'
+import { PowerupBar } from './PowerupBar'
 import { EmoteLayer } from './EmoteLayer'
 import { GameAnnouncer } from './GameAnnouncer'
 import { ReplayViewer } from './ReplayViewer'
@@ -119,6 +120,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
         totalTricks={store.totalTricks}
         trumpSuit={store.trumpSuit}
         players={chips}
+        profiles={store.profiles}
       />
 
       <EffectLayer
@@ -240,6 +242,14 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
             setReplayOpen(true)
           }}
         />
+        {!store.spectating && store.powerups.enabled && (
+          <PowerupBar
+            charges={store.powerups.charges}
+            players={store.order.map((id) => ({ id, name: store.names[id] ?? id }))}
+            meId={store.meId}
+            onUse={actions.usePowerup}
+          />
+        )}
         {!store.spectating && <EmoteBar onEmote={actions.sendEmote} />}
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT

@@ -286,12 +286,42 @@
 }
 
 .segmented__option {
-  flex: 1;
-  padding: 9px 8px;
+  /* min-width: 0 is load-bearing, not tidying. Flex items default to
+     min-width: auto, which refuses to shrink an item below its own text --
+     so `flex: 1` alone gave "prediction" and "blackjack" more room than
+     "golf" and the options were visibly unequal. Zeroing the floor is what
+     actually makes every label share the row evenly. */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 5px;
   border-radius: 9px;
   color: var(--text-muted);
   font-family: var(--font-heading);
   font-size: 0.92rem;
+}
+
+/* The game picker stacks its label over its suit glyph so every option has
+   the SAME two-line structure. Left as one inline run ("hearts ♥"), the
+   labels wrapped at different points once the cells were equalised -- some
+   one line, some two -- so the row's baselines disagreed and the cells
+   looked mismatched even though they were exactly the same width. */
+.segmented__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Sized so the longest label ("prediction") fits one line in the narrowest
+     cell of the five-option game picker -- measured, not guessed: 0.82rem
+     overflowed by a pixel and ellipsised. The ellipsis rule above stays as a
+     backstop for a longer game name added later. */
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.segmented__glyph {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .segmented__option.is-active {
@@ -3198,4 +3228,304 @@ button.seat:hover {
 
 .join__signout:hover {
   color: var(--text);
+}
+
+/* ---- Landing-screen nav (score sheet / leaderboard / shop) ------------------
+ * Three equal cards rather than a stack of sentence-length links. Equal
+ * columns because the three destinations are equally weighted -- prose links
+ * of different lengths read as a ranking nobody intended, and were easy to
+ * skip past entirely.
+ */
+
+.join__nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.join__nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  /* min-width: 0 for the same reason .segmented__option needs it: without a
+     zero floor the longest label ("Leaderboard") would widen its column and
+     the three would stop being equal. */
+  min-width: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-button);
+  background: var(--sunken);
+  color: var(--text);
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background var(--t-quick) ease-out,
+    border-color var(--t-quick) ease-out;
+}
+
+.join__nav-item:hover,
+.join__nav-item:focus-visible {
+  background: var(--panel-header);
+  border-color: var(--accent);
+}
+
+.join__nav-glyph {
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.join__nav-label {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.join__nav-sub {
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: var(--text-faint);
+}
+
+/* ---- Player avatars ---------------------------------------------------------
+ * Sized off a single --avatar-size so the three variants stay in step, and
+ * flex: none so a long player name can never squash the logo into an oval.
+ */
+
+.avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  border: 1px solid var(--stroke);
+  background: var(--sunken);
+  font-size: calc(var(--avatar-size) * 0.62);
+  line-height: 1;
+  overflow: hidden;
+  user-select: none;
+}
+
+.avatar--sm {
+  --avatar-size: 18px;
+}
+
+.avatar--md {
+  --avatar-size: 26px;
+}
+
+.avatar--lg {
+  --avatar-size: 44px;
+}
+
+.avatar--photo {
+  object-fit: cover;
+}
+
+/* The initial fallback carries its colour inline (derived from the player id
+   so it's stable), so only the type treatment lives here. */
+.avatar--initial {
+  font-family: var(--font-heading);
+  font-size: calc(var(--avatar-size) * 0.46);
+  font-weight: 600;
+  color: #fff;
+  border-color: rgb(255 255 255 / 25%);
+}
+
+/* The Golf and Blackjack panel headers become flex rows so the avatar sits
+   inline with the name rather than pushing it onto its own line. */
+.golf-panel__name,
+.blackjack-panel__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* .chip is a COLUMN (name over score), so the avatar needs its own row inside
+   it or it would stack above the name and make every chip taller. */
+.chip__id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* ---- Avatar picker (landing screen) ---------------------------------------- */
+
+.join__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.join__identity-field {
+  /* min-width: 0 so a flex child with an input inside can actually shrink --
+     without it the input's default intrinsic width forces the row wider than
+     the card and the avatar gets pushed out. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.avatar-picker {
+  position: relative;
+  /* Nudged down so the logo lines up with the input, not with its label. */
+  padding-top: 22px;
+}
+
+.avatar-picker__trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.avatar-picker__hint {
+  font-size: 0.6rem;
+  color: var(--text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.avatar-picker__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  gap: 6px;
+  padding: 10px;
+  /* The grid is wider than the 44px trigger it hangs off, so it would spill
+     past the card's left edge on a narrow screen without this. */
+  min-width: max-content;
+}
+
+.avatar-picker__option {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.avatar-picker__option:hover,
+.avatar-picker__option:focus-visible {
+  border-color: var(--stroke);
+}
+
+.avatar-picker__option.is-active {
+  border-color: var(--accent);
+}
+
+.avatar-picker__more {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.6rem;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* Lobby seat rows carry the avatar inline with the name. */
+.seat__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ---- Powerup tray ------------------------------------------------------------
+ * Mirrors .emotes: a dock button with a popover above it and no backdrop,
+ * because you spend a powerup BECAUSE of what's on the table and the table has
+ * to stay readable while you decide.
+ */
+
+.powerups {
+  position: relative;
+}
+
+.powerups__pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  width: min(300px, calc(100vw - 32px));
+}
+
+.powerups__pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-button);
+  background: var(--sunken);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.powerups__pick:hover,
+.powerups__pick:focus-visible {
+  border-color: var(--accent);
+}
+
+.powerups__glyph {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.powerups__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.powerups__name {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+}
+
+.powerups__desc {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.powerups__aim-title {
+  margin: 0 0 2px;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.powerups__cancel {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.shop__charges {
+  color: var(--accent);
+  font-size: 0.85em;
 }

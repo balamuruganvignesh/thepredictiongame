@@ -11,6 +11,7 @@ import { BlackjackConfig, GolfConfig, HeartsConfig, SpadesConfig } from '@shared
 import type { BlackjackMode, ChatMessage, GameType, LobbyUpdate } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
 import { RolesGallery } from './RolesGallery'
+import { Avatar } from './Avatar'
 
 type Props = {
   lobby: LobbyUpdate
@@ -28,6 +29,7 @@ type Props = {
   onSetSpadesTargetScore: (score: number) => void
   onSetTournamentGames: (games: GameType[]) => void
   onSetPublic: (isPublic: boolean) => void
+  onSetPowerups: (enabled: boolean) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -48,6 +50,7 @@ export function Lobby({
   onSetSpadesTargetScore,
   onSetTournamentGames,
   onSetPublic,
+  onSetPowerups,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -357,6 +360,32 @@ export function Lobby({
             </span>
           </button>
 
+          {/* Prediction Game only, because that's where powerups are
+              implemented -- offering the toggle on a Hearts table would
+              promise something the round loop can't deliver. Shown to
+              everyone, not just the host, for the same reason the visibility
+              card is: powerups change what can happen to you during a round,
+              so you should see it before you ready up. */}
+          {!isHearts && !isGolf && !isBlackjack && !isSpades && (
+            <button
+              className={`note lobby__mode${lobby.powerups ? ' is-public' : ''}`}
+              onClick={() => isHost && onSetPowerups(!lobby.powerups)}
+              disabled={!isHost}
+            >
+              <span className="lobby__mode-kicker">powerups</span>
+              <span className="lobby__mode-value">{lobby.powerups ? 'ON ⚡' : 'OFF'}</span>
+              <span className="lobby__mode-hint">
+                {isHost
+                  ? lobby.powerups
+                    ? 'bought charges can be spent in a round'
+                    : 'tap to allow bought powerups'
+                  : lobby.powerups
+                    ? 'players can spend bought charges'
+                    : 'no powerups at this table'}
+              </span>
+            </button>
+          )}
+
           {!isHearts && !isGolf && !isBlackjack && !isSpades && (
             <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>
               <span className="lobby__roles-title">🎭 THE ROLES</span>
@@ -416,6 +445,13 @@ export function Lobby({
                     : {})}
                 >
                   <span className="seat__name">
+                    <Avatar
+                      playerId={entry.id}
+                      name={entry.name}
+                      avatar={entry.avatar}
+                      avatarUrl={entry.avatarUrl}
+                      size="md"
+                    />
                     {entry.name}
                     {isMe && <span className="seat__you"> (you)</span>}
                   </span>

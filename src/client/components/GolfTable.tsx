@@ -17,6 +17,7 @@ import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { GolfScoresheet } from './GolfScoresheet'
 import { CardBack, DeckStack, PlayingCard } from './PlayingCard'
+import { Avatar } from './Avatar'
 import { SettingsMenu } from './SettingsMenu'
 import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import { flipIn } from '../animation'
@@ -191,6 +192,13 @@ export function GolfTable({ store, actions }: { store: Store; actions: GameActio
                   className={`note golf-panel${player.id === golf.currentTurnId ? ' golf-panel--turn' : ''}`}
                 >
                   <span className="golf-panel__name">
+                    <Avatar
+                      playerId={player.id}
+                      name={player.name}
+                      avatar={store.profiles[player.id]?.avatar}
+                      avatarUrl={store.profiles[player.id]?.avatarUrl}
+                      size="sm"
+                    />
                     {player.name}
                     {player.id === myId && ' (you)'}
                   </span>
