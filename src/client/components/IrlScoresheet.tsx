@@ -7,10 +7,11 @@
 // Lives at the fixed route /scoresheet (see App.tsx) and persists to
 // localStorage so a refresh or a backgrounded phone doesn't lose the game.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Config, TOTAL_ROUNDS } from '@shared/config'
 import { calculateScore } from '@shared/scoring'
 import { trumpGlyph } from '../useGame'
+import { IrlPodium, type PodiumPlace } from './IrlPodium'
 
 type RoundEntry = {
   bid: number | null
@@ -28,6 +29,10 @@ type SheetState = {
   // instead of following the app's fixed Spades/Diamonds/Clubs/Hearts/NoTrump
   // rotation.
   trumps: string[]
+  // Both privacy toggles are optional so a sheet saved before they existed
+  // still loads (loadState only rejects on the shapes it actually needs).
+  hideBids?: boolean
+  hideTotals?: boolean
 }
 
 const STORAGE_KEY = 'irl-scoresheet-v1'
@@ -85,8 +90,8 @@ const suitClass = (suit: string) =>
 // on wheel hands the scroll back to the page.
 const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur()
 
-function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+function download(filename: string, contents: string, type: string) {
+  const blob = new Blob([contents], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -95,8 +100,23 @@ function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(url)
 }
 
+/** Quotes a CSV field only when it has to be -- names are free text. */
+function csvCell(value: string | number | null): string {
+  const text = value == null ? '' : String(value)
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function downloadJson(filename: string, data: unknown) {
+  download(filename, JSON.stringify(data, null, 2), 'application/json')
+}
+
 export function IrlScoresheet() {
   const [state, setState] = useState<SheetState>(loadState)
+  const [podiumOpen, setPodiumOpen] = useState(false)
+  // The podium opens itself the moment the last cell is filled in, but only
+  // once: without this latch, closing it would immediately reopen it on the
+  // next keystroke anywhere in the sheet.
+  const shownPodiumFor = useRef(false)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -110,6 +130,55 @@ export function IrlScoresheet() {
       const score = calculateScore(entry.bid, entry.tricksWon, entry.doubled)
       totals.set(playerId, (totals.get(playerId) ?? 0) + score)
     }
+  }
+
+  // Every player has both numbers in for every round -- the game is over and
+  // the totals are final.
+  const complete = state.rounds.every((round) =>
+    state.players.every((player) => {
+      const entry = round[player.id]
+      return entry?.bid != null && entry?.tricksWon != null
+    }),
+  )
+
+  useEffect(() => {
+    if (!complete) {
+      shownPodiumFor.current = false
+      return
+    }
+    if (shownPodiumFor.current) return
+    shownPodiumFor.current = true
+    setPodiumOpen(true)
+  }, [complete])
+
+  /**
+   * Standings with competition ranking: tied players share a rank and the
+   * next one is skipped, the same convention the coin payout uses for a tied
+   * placement (see db/persistence.ts).
+   */
+  function standings() {
+    const sorted = state.players
+      .map((player) => ({ name: player.name, total: totals.get(player.id) ?? 0 }))
+      .sort((a, b) => b.total - a.total)
+    let rank = 0
+    let previous: number | null = null
+    return sorted.map((entry, i) => {
+      if (previous == null || entry.total !== previous) rank = i + 1
+      previous = entry.total
+      return { ...entry, rank }
+    })
+  }
+
+  function podiumPlaces(): { places: PodiumPlace[]; rest: ReturnType<typeof standings> } {
+    const all = standings()
+    const places: PodiumPlace[] = []
+    for (const entry of all) {
+      if (entry.rank > 3) break
+      const existing = places.find((place) => place.rank === entry.rank)
+      if (existing) existing.names.push(entry.name)
+      else places.push({ rank: entry.rank, total: entry.total, names: [entry.name] })
+    }
+    return { places: places.slice(0, 3), rest: all.filter((entry) => entry.rank > 3) }
   }
 
   function updateEntry(roundIndex: number, playerId: string, patch: Partial<RoundEntry>) {
@@ -159,12 +228,69 @@ export function IrlScoresheet() {
     }))
   }
 
+  /**
+   * One click to double the whole table for a round -- the IRL house habit of
+   * "everyone doubles the first hand". Flips to un-doubling once every player
+   * is already marked, so the same button undoes a misclick.
+   */
+  function toggleRoundDouble(roundIndex: number) {
+    setState((prev) => {
+      const rounds = prev.rounds.slice()
+      const round = { ...rounds[roundIndex] }
+      const allDoubled = prev.players.every((player) => round[player.id]?.doubled)
+      for (const player of prev.players) {
+        const current: RoundEntry = round[player.id] ?? { bid: null, tricksWon: null, doubled: false }
+        round[player.id] = { ...current, doubled: !allDoubled }
+      }
+      rounds[roundIndex] = round
+      return { ...prev, rounds }
+    })
+  }
+
   function rerollTrump(roundIndex: number) {
     setState((prev) => {
       const trumps = prev.trumps.slice()
       trumps[roundIndex] = Config.trumpRotation[Math.floor(Math.random() * Config.trumpRotation.length)]
       return { ...prev, trumps }
     })
+  }
+
+  function exportCsv() {
+    const header = ['Round', 'Cards', 'Trump']
+    for (const player of state.players) {
+      header.push(`${player.name} bid`, `${player.name} won`, `${player.name} 2x`, `${player.name} score`)
+    }
+
+    const lines = [header.map(csvCell).join(',')]
+
+    for (let i = 0; i < TOTAL_ROUNDS; i++) {
+      const entries = state.rounds[i]
+      const row: (string | number | null)[] = [i + 1, Config.cardSequence[i], state.trumps[i]]
+      for (const player of state.players) {
+        const entry = entries[player.id] ?? { bid: null, tricksWon: null, doubled: false }
+        row.push(
+          entry.bid,
+          entry.tricksWon,
+          entry.doubled ? 'yes' : '',
+          entry.bid != null && entry.tricksWon != null
+            ? calculateScore(entry.bid, entry.tricksWon, entry.doubled)
+            : null,
+        )
+      }
+      lines.push(row.map(csvCell).join(','))
+    }
+
+    const totalRow: (string | number | null)[] = ['Total', '', '']
+    for (const player of state.players) totalRow.push('', '', '', totals.get(player.id) ?? 0)
+    lines.push(totalRow.map(csvCell).join(','))
+
+    download(
+      `judgement-scores-${new Date().toISOString().slice(0, 10)}.csv`,
+      // A leading BOM is what makes Excel read the file as UTF-8 rather than
+      // the local codepage; Sheets and Numbers ignore it.
+      `\ufeff${lines.join('\r\n')}\r\n`,
+      'text/csv;charset=utf-8',
+    )
   }
 
   function exportScores() {
@@ -236,8 +362,33 @@ export function IrlScoresheet() {
           <button className="button button--ghost" onClick={resetGame}>
             New game
           </button>
+          <button className="button button--ghost" onClick={exportCsv}>
+            Export CSV
+          </button>
           <button className="button button--ghost" onClick={exportScores}>
             Export JSON
+          </button>
+          <button
+            className={`button button--ghost ${state.hideBids ? 'is-on' : ''}`}
+            aria-pressed={Boolean(state.hideBids)}
+            onClick={() => setState((prev) => ({ ...prev, hideBids: !prev.hideBids }))}
+          >
+            {state.hideBids ? 'Bids hidden' : 'Hide bids'}
+          </button>
+          <button
+            className={`button button--ghost ${state.hideTotals ? 'is-on' : ''}`}
+            aria-pressed={Boolean(state.hideTotals)}
+            onClick={() => setState((prev) => ({ ...prev, hideTotals: !prev.hideTotals }))}
+          >
+            {state.hideTotals ? 'Scores hidden' : 'Hide scores'}
+          </button>
+          <button
+            className="button button--ghost"
+            onClick={() => setPodiumOpen(true)}
+            disabled={!complete}
+            title={complete ? 'Show the podium' : 'Fill in every round first'}
+          >
+            🏆 Podium
           </button>
         </div>
       </div>
@@ -274,6 +425,7 @@ export function IrlScoresheet() {
                   tricksIn++
                 }
               }
+              const allDoubled = state.players.every((player) => entries[player.id]?.doubled)
               const allBidsIn = bidsIn === state.players.length
               const bidsIllegal = allBidsIn && bidSum === cards
               const allTricksIn = tricksIn === state.players.length
@@ -291,6 +443,15 @@ export function IrlScoresheet() {
                       {trumpGlyph(suit)}
                     </button>
                     <span className="scoresheet__cards">{cards} cards</span>
+                    <button
+                      type="button"
+                      className={`irl-double-all ${allDoubled ? 'is-on' : ''}`}
+                      onClick={() => toggleRoundDouble(i)}
+                      aria-pressed={allDoubled}
+                      title={allDoubled ? 'Un-double the whole table' : 'Double the whole table'}
+                    >
+                      {allDoubled ? 'un-2x all' : '2x all'}
+                    </button>
                     {allBidsIn && (
                       <span className={`irl-check ${bidsIllegal ? 'is-bad' : 'is-good'}`}>
                         bids Σ{bidSum}
@@ -305,6 +466,11 @@ export function IrlScoresheet() {
                   </td>
                   {state.players.map((player) => {
                     const entry = entries[player.id] ?? { bid: null, tricksWon: null, doubled: false }
+                    // Concealed only until the round's bids are all in -- after
+                    // that everyone has committed and there's nothing left to
+                    // hide. The focused input un-masks itself (see app.css) so
+                    // whoever is typing can still check what they entered.
+                    const maskBids = Boolean(state.hideBids) && !allBidsIn
                     const hasScore = entry.bid != null && entry.tricksWon != null
                     const score = hasScore
                       ? calculateScore(entry.bid!, entry.tricksWon!, entry.doubled)
@@ -313,7 +479,7 @@ export function IrlScoresheet() {
                     return (
                       <td key={player.id} className="irl-cell">
                         <div className="irl-cell-inputs">
-                          <label className="irl-field">
+                          <label className={`irl-field ${maskBids ? 'is-masked' : ''}`}>
                             <span>Bid</span>
                             <input
                               type="number"
@@ -353,7 +519,11 @@ export function IrlScoresheet() {
                           </label>
                         </div>
                         {score != null && (
-                          <div className={`irl-score ${score > 0 ? 'is-good' : score < 0 ? 'is-bad' : ''}`}>
+                          <div
+                            className={`irl-score ${score > 0 ? 'is-good' : score < 0 ? 'is-bad' : ''} ${
+                              state.hideTotals ? 'is-masked' : ''
+                            }`}
+                          >
                             {score > 0 ? '+' : ''}
                             {score}
                           </div>
@@ -369,12 +539,18 @@ export function IrlScoresheet() {
             <tr>
               <td className="irl-round-col">Total</td>
               {state.players.map((player) => (
-                <td key={player.id}>{totals.get(player.id) ?? 0}</td>
+                <td key={player.id} className={state.hideTotals ? 'is-masked' : ''}>
+                  {totals.get(player.id) ?? 0}
+                </td>
               ))}
             </tr>
           </tfoot>
         </table>
       </div>
+
+      {podiumOpen && complete && (
+        <IrlPodium {...podiumPlaces()} onClose={() => setPodiumOpen(false)} />
+      )}
     </div>
   )
 }

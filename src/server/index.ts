@@ -482,7 +482,7 @@ app.post('/api/shop/equip', express.json(), (req, res) => {
   }
 
   const kind = req.body?.kind
-  if (kind !== 'theme' && kind !== 'cardback' && kind !== 'avatar') {
+  if (kind !== 'theme' && kind !== 'cardback' && kind !== 'avatar' && kind !== 'deck') {
     res.status(400).json({ ok: false, error: 'Unknown slot.' })
     return
   }

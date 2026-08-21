@@ -22,7 +22,7 @@ export const PLACEMENT_COINS = [50, 30, 15] as const
  */
 export const MIN_PLAYERS_FOR_COINS = 3
 
-export type ShopKind = 'theme' | 'cardback' | 'emote' | 'avatar' | 'powerup'
+export type ShopKind = 'theme' | 'cardback' | 'deck' | 'emote' | 'avatar' | 'powerup'
 
 export type ShopItem = {
   id: string
@@ -77,12 +77,45 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     swatch: '#e8642c',
   },
 
+  // ---- Decks --------------------------------------------------------------
+  // Which card ART renders. Ids match the premium entries in shared/decks.ts;
+  // the CLASSIC deck is not here on purpose -- it's the free default, so
+  // nobody ever plays on a paywalled blank.
+  //
+  // Personal, like the card backs below and for the same reason: which deck
+  // you look at has never been table state, and painting someone else's
+  // sprites onto your screen would read as a bug rather than a cosmetic.
+  {
+    id: 'deck-pixel',
+    kind: 'deck',
+    name: 'Pixel Deck',
+    blurb: "Kenney's pixel-art cards, upscaled crisp.",
+    price: 120,
+    swatch: '#3d6fb5',
+  },
+  {
+    id: 'deck-negative',
+    kind: 'deck',
+    name: 'Negative Deck',
+    blurb: 'The classic deck inverted — white ink on black, red suits still red.',
+    price: 180,
+    swatch: '#141419',
+  },
+  {
+    id: 'deck-vintage',
+    kind: 'deck',
+    name: 'Vintage Deck',
+    blurb: 'The classic deck, aged. Tea-stained and slightly tired.',
+    price: 180,
+    swatch: '#b08a55',
+  },
+
   // ---- Card backs ---------------------------------------------------------
   // Recolours of the active deck's own back sprite, applied as a tint keyed
   // off data-cardback (see client/styles/cards.css).
   //
-  // A PERSONAL display preference, exactly like deckStyle's pixel/classic
-  // choice, and the copy must not claim otherwise. Face-down cards in this
+  // A PERSONAL display preference, exactly like the deck skin above, and the
+  // copy must not claim otherwise. Face-down cards in this
   // app are Golf grids, the Golf stock and Blackjack's hole card -- the
   // trick-taking games never render an opponent's hand as backs at all. Since
   // which deck ART renders is already personal, a back colour sourced from
@@ -232,6 +265,8 @@ export function shopItemsOfKind(kind: ShopKind): ShopItem[] {
 export type Equipped = {
   theme: string | null
   cardback: string | null
+  /** A premium id from shared/decks.ts; null is the free classic deck. */
+  deck: string | null
   /** A preset id from shared/avatars.ts, or the GOOGLE_AVATAR sentinel. */
   avatar: string | null
 }

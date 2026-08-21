@@ -134,6 +134,8 @@ function addColumnIfMissing(table: string, column: string, definition: string) {
 }
 
 addColumnIfMissing('equipped_items', 'avatar', 'TEXT')
+// Which card art renders. NULL is the free classic deck (shared/decks.ts).
+addColumnIfMissing('equipped_items', 'deck', 'TEXT')
 
 // Consumable items (powerups) are held in CHARGES, so one row can stand for
 // several. owned_items' PRIMARY KEY (player_id, item_id) is what makes a

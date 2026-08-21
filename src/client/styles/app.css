@@ -341,6 +341,17 @@
   font-size: 0.78rem;
 }
 
+/* A deck you haven't bought yet. Dimmed rather than hidden -- a padlock that
+   leads to the shop is the point of a paywalled cosmetic -- and still fully
+   focusable, since aria-disabled (not disabled) is what the picker sets. */
+.segmented__option.is-locked {
+  opacity: 0.55;
+}
+
+.segmented__option.is-locked:hover {
+  opacity: 0.8;
+}
+
 .join__go {
   width: 100%;
 }
@@ -2639,6 +2650,157 @@ button.seat:hover {
   font-size: 0.95rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.irl-double-all {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: var(--panel-header);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.irl-double-all:hover {
+  color: var(--text);
+}
+
+.irl-double-all.is-on {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--ink-on-accent);
+}
+
+.button.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Concealment, not encryption: the digit is still in the DOM and still in
+   localStorage -- this hides a number from the people sitting around the
+   screen, which is the only threat an in-person score sheet has. Blurring the
+   glyph rather than swapping in dots keeps the column widths from jumping
+   when a round's bids all land and it reveals. */
+.irl-field.is-masked input,
+.is-masked {
+  color: transparent;
+  text-shadow: 0 0 7px var(--text-muted);
+}
+
+/* Whoever is typing has to be able to check what they typed; everyone else is
+   reading it from across the table, not from the caret. */
+.irl-field.is-masked input:focus {
+  color: var(--text);
+  text-shadow: none;
+}
+
+/* ---- IRL podium ---------------------------------------------------------- */
+
+.irl-podium {
+  width: min(560px, 100%);
+  padding: 20px;
+  text-align: center;
+}
+
+.irl-podium__title {
+  margin: 0 0 18px;
+  font-family: var(--font-title);
+  font-size: 1.8rem;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.irl-podium__stage {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 10px;
+  height: 220px;
+}
+
+.irl-podium__slot {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+
+.irl-podium__names {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.irl-podium__total {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+
+.irl-podium__block {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-button) var(--radius-button) 0 0;
+  background: var(--panel-header);
+  border: 1px solid var(--stroke);
+  border-bottom: none;
+  /* The rise animates transform from the base up. */
+  transform-origin: bottom center;
+}
+
+.irl-podium__block.is-rank-1 {
+  background: color-mix(in srgb, var(--accent) 35%, var(--panel-header));
+  border-color: var(--accent);
+}
+
+.irl-podium__medal {
+  font-size: 1.6rem;
+}
+
+.irl-podium__rest {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.irl-podium__rest li {
+  display: flex;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.irl-podium__rest-rank {
+  width: 2ch;
+  text-align: right;
+  color: var(--text-faint);
+}
+
+.irl-podium__rest-name {
+  flex: 1;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.irl-podium__rest-total {
+  font-variant-numeric: tabular-nums;
+}
+
+.irl-podium__close {
+  margin-top: 18px;
 }
 
 .irl-score.is-good {

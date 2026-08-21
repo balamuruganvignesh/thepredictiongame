@@ -12,8 +12,29 @@ import { PLACEMENT_COINS, type MeAccount, type ShopItem, type ShopKind } from '@
 import { emoteById } from '@shared/emotes'
 import { avatarById } from '@shared/avatars'
 import { powerupById } from '@shared/powerups'
+import { DEFAULT_DECK } from '@shared/decks'
 import { loginHref, useAuth } from '../auth'
+import { useDeckStyle } from '../deckStyle'
 import { useCosmetics } from '../theme'
+
+/**
+ * What sits on an item's colour chip. Themes and card backs supply a real
+ * swatch colour instead, so they get nothing here.
+ */
+function swatchGlyph(item: ShopItem): string {
+  switch (item.kind) {
+    case 'emote':
+      return emoteById(item.id)?.glyph ?? '✨'
+    case 'avatar':
+      return avatarById(item.id)?.glyph ?? '✨'
+    case 'powerup':
+      return powerupById(item.id)?.glyph ?? '⚡'
+    case 'deck':
+      return '🎴'
+    default:
+      return ''
+  }
+}
 
 const SECTIONS: { kind: ShopKind; title: string; blurb: string }[] = [
   {
@@ -23,6 +44,12 @@ const SECTIONS: { kind: ShopKind; title: string; blurb: string }[] = [
       'The only items that affect play. Bought in charges and spent during a round — and only at a table whose host has switched powerups on. The Prediction Game for now.',
   },
   { kind: 'theme', title: 'Themes', blurb: 'Repaint the whole table. Yours only — a palette is personal.' },
+  {
+    kind: 'deck',
+    title: 'Decks',
+    blurb:
+      'Which card art you play on. The classic deck is free and stays the default — these sit alongside it.',
+  },
   { kind: 'cardback', title: 'Card backs', blurb: 'Recolours every face-down card on your table. Works with either deck.' },
   { kind: 'avatar', title: 'Avatars', blurb: 'Extra profile logos. The twelve free ones stay free.' },
   { kind: 'emote', title: 'Emotes', blurb: 'Extra reactions in the React menu. The original eight stay free.' },
@@ -31,6 +58,10 @@ const SECTIONS: { kind: ShopKind; title: string; blurb: string }[] = [
 export function Shop() {
   const { account, loginAvailable, refresh } = useAuth()
   const { slots, equip } = useCosmetics()
+  // The deck is an equippable slot like the other two, but it lives in its
+  // own context because its free option is a VALUE ('classic') rather than
+  // the absence of one -- see deckStyle.tsx.
+  const { deck: equippedDeck, setDeck } = useDeckStyle()
   const [items, setItems] = useState<ShopItem[] | null>(null)
   const [charges, setCharges] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -128,8 +159,17 @@ export function Shop() {
                   const isOwned = owned.includes(item.id)
                   // Themes and card backs are equippable slots; an emote is
                   // simply owned, and shows up in the React menu by itself.
-                  const slot = section.kind === 'theme' || section.kind === 'cardback' ? section.kind : null
-                  const equipped = slot != null && slots[slot] === item.id
+                  const slot =
+                    section.kind === 'theme' || section.kind === 'cardback' || section.kind === 'deck'
+                      ? section.kind
+                      : null
+                  const equippedHere =
+                    slot === 'deck' ? equippedDeck : slot ? slots[slot] : null
+                  const equipped = slot != null && equippedHere === item.id
+                  const toggleEquip = () => {
+                    if (slot === 'deck') setDeck(equipped ? DEFAULT_DECK : item.id)
+                    else if (slot) equip(slot, equipped ? '' : item.id)
+                  }
                   return (
                     <li className="shop__item" key={item.id}>
                       <span
@@ -137,13 +177,7 @@ export function Shop() {
                         style={item.swatch ? { background: item.swatch } : undefined}
                         aria-hidden="true"
                       >
-                        {item.kind === 'emote'
-                          ? (emoteById(item.id)?.glyph ?? '✨')
-                          : item.kind === 'avatar'
-                            ? (avatarById(item.id)?.glyph ?? '✨')
-                            : item.kind === 'powerup'
-                              ? (powerupById(item.id)?.glyph ?? '⚡')
-                              : ''}
+                        {swatchGlyph(item)}
                       </span>
                       <div className="shop__item-body">
                         <h3>
@@ -172,7 +206,7 @@ export function Shop() {
                           <button
                             type="button"
                             className={`button ${equipped ? 'button--ghost' : 'button--accent'}`}
-                            onClick={() => equip(slot, equipped ? '' : item.id)}
+                            onClick={toggleEquip}
                           >
                             {equipped ? 'Unequip' : 'Equip'}
                           </button>

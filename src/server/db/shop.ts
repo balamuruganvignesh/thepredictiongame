@@ -40,12 +40,13 @@ const spendCharge = db.prepare(`
 `)
 
 const selectEquipped = db.prepare(`
-  SELECT theme, cardback, avatar FROM equipped_items WHERE player_id = ?
+  SELECT theme, cardback, avatar, deck FROM equipped_items WHERE player_id = ?
 `)
 const upsertEquipped = db.prepare(`
-  INSERT INTO equipped_items (player_id, theme, cardback, avatar)
-  VALUES (@playerId, @theme, @cardback, @avatar)
-  ON CONFLICT(player_id) DO UPDATE SET theme = @theme, cardback = @cardback, avatar = @avatar
+  INSERT INTO equipped_items (player_id, theme, cardback, avatar, deck)
+  VALUES (@playerId, @theme, @cardback, @avatar, @deck)
+  ON CONFLICT(player_id) DO UPDATE SET
+    theme = @theme, cardback = @cardback, avatar = @avatar, deck = @deck
 `)
 
 /**
@@ -90,9 +91,14 @@ export function spendPowerupCharge(playerId: string, itemId: string): boolean {
 
 export function getEquipped(playerId: string): Equipped {
   const row = selectEquipped.get(playerId) as
-    | { theme: string | null; cardback: string | null; avatar: string | null }
+    | { theme: string | null; cardback: string | null; avatar: string | null; deck: string | null }
     | undefined
-  return { theme: row?.theme ?? null, cardback: row?.cardback ?? null, avatar: row?.avatar ?? null }
+  return {
+    theme: row?.theme ?? null,
+    cardback: row?.cardback ?? null,
+    avatar: row?.avatar ?? null,
+    deck: row?.deck ?? null,
+  }
 }
 
 /**
@@ -157,7 +163,7 @@ export type EquipResult = { ok: true; equipped: Equipped } | { ok: false; error:
  */
 export function equipItem(
   playerId: string,
-  kind: 'theme' | 'cardback' | 'avatar',
+  kind: 'theme' | 'cardback' | 'avatar' | 'deck',
   itemId: string | null,
 ): EquipResult {
   if (itemId !== null) {
@@ -178,7 +184,13 @@ export function equipItem(
   const current = getEquipped(playerId)
   const next: Equipped = { ...current, [kind]: itemId }
   try {
-    upsertEquipped.run({ playerId, theme: next.theme, cardback: next.cardback, avatar: next.avatar })
+    upsertEquipped.run({
+      playerId,
+      theme: next.theme,
+      cardback: next.cardback,
+      avatar: next.avatar,
+      deck: next.deck,
+    })
   } catch (error) {
     log.error('shop.equip.failed', { error: String(error) })
     return { ok: false, error: 'Could not save that.' }

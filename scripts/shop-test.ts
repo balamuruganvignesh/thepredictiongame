@@ -148,6 +148,26 @@ check('an unknown avatar id is refused', !equipItem(P, 'avatar', 'not-an-avatar'
 check('a theme cannot be equipped as an avatar', !equipItem(P, 'avatar', 'theme-felt').ok)
 check('null un-equips the avatar', equipItem(P, 'avatar', null).ok && getEquipped(P).avatar === null)
 
+// The deck slot. The free classic deck is deliberately NOT a shop item, so
+// "back to classic" is an un-equip (null) rather than an id -- the same shape
+// the theme slot's default look uses. Everything else is bought.
+check('an UNOWNED deck is refused', !equipItem(P, 'deck', 'deck-negative').ok)
+check('a cardback cannot be equipped as a deck', !equipItem(P, 'deck', 'cardback-crimson').ok)
+check("'classic' is not an item, so it cannot be equipped by id", !equipItem(P, 'deck', 'classic').ok)
+// Top the wallet back up: the theme purchase above spent most of it.
+for (const code of ['JJJJ', 'KKKK', 'LLLL'] as const) {
+  recordGameEnded({
+    roomCode: code,
+    gameType: 'spades',
+    gameName: 'Spades',
+    standings: [s(P, 500), s('n1', 400), s('n2', 300)],
+  })
+}
+check('a bought deck equips', buyItem(P, 'deck-pixel').ok && equipItem(P, 'deck', 'deck-pixel').ok)
+check('the deck reads back', getEquipped(P).deck === 'deck-pixel')
+check('equipping a deck left the avatar slot alone', getEquipped(P).avatar === null)
+check('null un-equips back to the free classic deck', equipItem(P, 'deck', null).ok && getEquipped(P).deck === null)
+
 console.log('\npowerup charges')
 
 // Consumables are the one item you can buy repeatedly: they're spent in play,

@@ -1,9 +1,13 @@
 /*
- * Playing cards. Two deck styles, picked at runtime via the data-deck
- * attribute on <html> (see ../deckStyle.tsx):
- *  - pixel (default): Kenney's CC0 pixel-art deck, cropped so each sprite is
- *    exactly the card (42x60 source, see src/client/public/cards/).
- *  - classic: a photographed deck (src/client/public/cards-classic/).
+ * Playing cards. The equipped deck skin is the data-deck attribute on <html>
+ * (see ../deckStyle.tsx and @shared/decks). Two sprite folders back all of
+ * them:
+ *  - classic (the free default): a photographed deck
+ *    (src/client/public/cards-classic/).
+ *  - pixel: Kenney's CC0 pixel-art deck, cropped so each sprite is exactly
+ *    the card (42x60 source, see src/client/public/cards/).
+ * The premium skins past those two are CSS filters over the classic sprites
+ * -- see "Purchasable deck skins" at the foot of this file.
  * The wrapper still owns everything AROUND the face -- radius, shadow, the
  * winner/playable rings, the muted and illusion veils -- so every interaction
  * state below is unchanged regardless of which deck is active.
@@ -25,19 +29,20 @@
     filter var(--t-normal) ease-out;
 }
 
-/* The sprite fills the wrapper exactly. `pixelated` is the pixel deck's whole
-   point: those are 42x60 originals shown at roughly 2x, and smoothing turns
-   crisp pixel art into mush. The classic deck is photographed art, so it
-   wants normal smoothing instead -- otherwise it upscales just as blocky. */
+/* The sprite fills the wrapper exactly. The classic deck is photographed art,
+   so it wants normal smoothing -- otherwise it upscales blocky. `pixelated`
+   is the pixel deck's whole point and applies only there: those are 42x60
+   originals shown at roughly 2x, and smoothing turns crisp pixel art into
+   mush. */
 .card__face {
   display: block;
   width: 100%;
   height: 100%;
-  image-rendering: pixelated;
+  image-rendering: auto;
 }
 
-:root[data-deck='classic'] .card__face {
-  image-rendering: auto;
+:root[data-deck='deck-pixel'] .card__face {
+  image-rendering: pixelated;
 }
 
 /* ---- Backs and placeholders ------------------------------------------------- */
@@ -335,4 +340,35 @@
 
 :root[data-cardback='cardback-ash'] {
   --cardback-tint: #6a6a72;
+}
+
+/* ---- Purchasable deck skins -------------------------------------------------
+ * Bought with coins (kind 'deck' in shared/shop.ts) and equipped through
+ * ../deckStyle.tsx, which puts the id on <html> as data-deck. The classic
+ * deck is free and needs no rule here -- it IS the sprites.
+ *
+ * Filters over the classic art rather than new sprite files, for the same
+ * reason the card-back tints above are: one rule restyles all 55 cards, a
+ * skin costs nothing to ship, and the ratio and smoothing already set for the
+ * classic art carry over untouched.
+ *
+ * Applied to .card__face, NOT the wrapper, and that placement is load-bearing
+ * twice over: the four-colour suit badge sits above the face at z-index 6 and
+ * must keep its true per-suit hues, and the muted/barred/illusion states set
+ * their own filter on .card -- one filter per element, so these would
+ * overwrite each other on a shared one.
+ */
+
+/* Inverted classic. `invert` alone would flip the red suits to cyan, which is
+   exactly the cue the four-colour badge exists to shore up; the hue-rotate
+   after it puts the hues back, so this reads as white ink on black with red
+   hearts and diamonds still red. */
+:root[data-deck='deck-negative'] .card__face {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Aged paper. Sepia keeps the red suits warm rather than collapsing the
+   red-vs-black distinction the way a straight grayscale would. */
+:root[data-deck='deck-vintage'] .card__face {
+  filter: sepia(0.62) saturate(1.15) contrast(0.94) brightness(0.96);
 }
