@@ -20,12 +20,25 @@ export default function App() {
   const isLeaderboard = window.location.pathname === '/leaderboard'
   const isShop = window.location.pathname === '/shop'
 
+  // The game is a fixed-viewport table, so tokens.css locks the document at
+  // 100% height with `overflow: hidden`. These three standalone pages are
+  // ordinary long DOCUMENTS, and that lock silently clipped them: content
+  // below the fold existed but no wheel or touch gesture could reach it.
+  // Flagging the document mode on <html> lets CSS unlock scrolling for
+  // exactly these pages, using the same data-attribute convention
+  // data-deck / data-theme / data-motion already follow.
+  const isDocumentPage = isIrlScoresheet || isLeaderboard || isShop
+  useEffect(() => {
+    if (isDocumentPage) document.documentElement.setAttribute('data-page', 'document')
+    else document.documentElement.removeAttribute('data-page')
+  }, [isDocumentPage])
+
   // Keep the URL on the table code, so the address bar is a shareable invite.
   useEffect(() => {
-    if (isIrlScoresheet || isLeaderboard || isShop) return
+    if (isDocumentPage) return
     const path = store.roomCode ? `/${store.roomCode}` : '/'
     if (window.location.pathname !== path) window.history.replaceState({}, '', path)
-  }, [store.roomCode, isIrlScoresheet, isLeaderboard, isShop])
+  }, [store.roomCode, isDocumentPage])
 
   if (isIrlScoresheet) return <IrlScoresheet />
   if (isLeaderboard) return <Leaderboard />

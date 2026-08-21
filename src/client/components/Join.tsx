@@ -214,7 +214,8 @@ export function Join({ connected, error, onJoin }: Props) {
             className={`segmented__option${game === 'prediction' ? ' is-active' : ''}`}
             onClick={() => setGame('prediction')}
           >
-            prediction
+            <span className="segmented__name">prediction</span>
+            <span className="segmented__glyph" aria-hidden="true">🎴</span>
           </button>
           <button
             type="button"
@@ -223,7 +224,8 @@ export function Join({ connected, error, onJoin }: Props) {
             className={`segmented__option${isHearts ? ' is-active' : ''}`}
             onClick={() => setGame('hearts')}
           >
-            hearts ♥
+            <span className="segmented__name">hearts</span>
+            <span className="segmented__glyph" aria-hidden="true">♥</span>
           </button>
           <button
             type="button"
@@ -232,7 +234,8 @@ export function Join({ connected, error, onJoin }: Props) {
             className={`segmented__option${isGolf ? ' is-active' : ''}`}
             onClick={() => setGame('golf')}
           >
-            golf ⛳
+            <span className="segmented__name">golf</span>
+            <span className="segmented__glyph" aria-hidden="true">⛳</span>
           </button>
           <button
             type="button"
@@ -241,7 +244,8 @@ export function Join({ connected, error, onJoin }: Props) {
             className={`segmented__option${isBlackjack ? ' is-active' : ''}`}
             onClick={() => setGame('blackjack')}
           >
-            blackjack 🂡
+            <span className="segmented__name">blackjack</span>
+            <span className="segmented__glyph" aria-hidden="true">🂡</span>
           </button>
           <button
             type="button"
@@ -250,7 +254,8 @@ export function Join({ connected, error, onJoin }: Props) {
             className={`segmented__option${isSpades ? ' is-active' : ''}`}
             onClick={() => setGame('spades')}
           >
-            spades ♠️
+            <span className="segmented__name">spades</span>
+            <span className="segmented__glyph" aria-hidden="true">♠️</span>
           </button>
         </div>
         )}
@@ -328,15 +333,27 @@ export function Join({ connected, error, onJoin }: Props) {
         {!connected && <p className="join__status">connecting to the table…</p>}
         {error && <p className="join__status join__status--error">{error}</p>}
 
-        <a className="join__irl-link" href="/scoresheet">
-          Playing with real cards? Use the IRL score sheet instead →
-        </a>
-        <a className="join__irl-link" href="/leaderboard">
-          🏆 See the leaderboard →
-        </a>
-        <a className="join__irl-link" href="/shop">
-          🪙 Spend your coins in the shop →
-        </a>
+        {/* Real buttons in an even row, not a stack of sentence-length
+            links. Three equally weighted destinations read as three equal
+            targets; as prose they were easy to miss and each one was a
+            different size, which is what made the footer look ragged. */}
+        <nav className="join__nav" aria-label="More">
+          <a className="join__nav-item" href="/scoresheet">
+            <span className="join__nav-glyph" aria-hidden="true">📝</span>
+            <span className="join__nav-label">Score sheet</span>
+            <span className="join__nav-sub">playing with real cards</span>
+          </a>
+          <a className="join__nav-item" href="/leaderboard">
+            <span className="join__nav-glyph" aria-hidden="true">🏆</span>
+            <span className="join__nav-label">Leaderboard</span>
+            <span className="join__nav-sub">wins and history</span>
+          </a>
+          <a className="join__nav-item" href="/shop">
+            <span className="join__nav-glyph" aria-hidden="true">🪙</span>
+            <span className="join__nav-label">Shop</span>
+            <span className="join__nav-sub">themes and emotes</span>
+          </a>
+        </nav>
         <AccountLink />
         {canInstall && (
           <button

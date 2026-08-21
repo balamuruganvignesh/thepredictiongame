@@ -286,12 +286,42 @@
 }
 
 .segmented__option {
-  flex: 1;
-  padding: 9px 8px;
+  /* min-width: 0 is load-bearing, not tidying. Flex items default to
+     min-width: auto, which refuses to shrink an item below its own text --
+     so `flex: 1` alone gave "prediction" and "blackjack" more room than
+     "golf" and the options were visibly unequal. Zeroing the floor is what
+     actually makes every label share the row evenly. */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 5px;
   border-radius: 9px;
   color: var(--text-muted);
   font-family: var(--font-heading);
   font-size: 0.92rem;
+}
+
+/* The game picker stacks its label over its suit glyph so every option has
+   the SAME two-line structure. Left as one inline run ("hearts ♥"), the
+   labels wrapped at different points once the cells were equalised -- some
+   one line, some two -- so the row's baselines disagreed and the cells
+   looked mismatched even though they were exactly the same width. */
+.segmented__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Sized so the longest label ("prediction") fits one line in the narrowest
+     cell of the five-option game picker -- measured, not guessed: 0.82rem
+     overflowed by a pixel and ellipsised. The ellipsis rule above stays as a
+     backstop for a longer game name added later. */
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.segmented__glyph {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .segmented__option.is-active {
@@ -3198,4 +3228,64 @@ button.seat:hover {
 
 .join__signout:hover {
   color: var(--text);
+}
+
+/* ---- Landing-screen nav (score sheet / leaderboard / shop) ------------------
+ * Three equal cards rather than a stack of sentence-length links. Equal
+ * columns because the three destinations are equally weighted -- prose links
+ * of different lengths read as a ranking nobody intended, and were easy to
+ * skip past entirely.
+ */
+
+.join__nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.join__nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  /* min-width: 0 for the same reason .segmented__option needs it: without a
+     zero floor the longest label ("Leaderboard") would widen its column and
+     the three would stop being equal. */
+  min-width: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-button);
+  background: var(--sunken);
+  color: var(--text);
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background var(--t-quick) ease-out,
+    border-color var(--t-quick) ease-out;
+}
+
+.join__nav-item:hover,
+.join__nav-item:focus-visible {
+  background: var(--panel-header);
+  border-color: var(--accent);
+}
+
+.join__nav-glyph {
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+
+.join__nav-label {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.join__nav-sub {
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: var(--text-faint);
 }
