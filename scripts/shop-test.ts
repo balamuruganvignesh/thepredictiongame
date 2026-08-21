@@ -28,7 +28,8 @@ const {
   spendPowerupCharge,
 } = await import('../src/server/db/shop')
 const { PLACEMENT_COINS, SHOP_ITEMS } = await import('../src/shared/shop')
-const { REDEEM_CODES } = await import('../src/server/codes')
+const { BUILTIN_CODES } = await import('../src/server/codes')
+const { createCode, deleteCode, getCode, listCodes } = await import('../src/server/db/codes')
 const { GOOGLE_AVATAR } = await import('../src/shared/avatars')
 type Standing = import('../src/shared/protocol').Standing
 
@@ -223,8 +224,9 @@ console.log('\nredeem codes')
 // A code is sized in catalogue COVERAGE, so these assertions are written
 // against the live catalogue rather than a hardcoded number of coins -- the
 // promise a code makes has to survive a price change.
-const FULL = REDEEM_CODES.find((entry) => entry.coverage === 1)!.code
-const HALF = REDEEM_CODES.find((entry) => entry.coverage === 0.5)!.code
+const FULL = BUILTIN_CODES.find((entry) => entry.coverage === 1)!.code
+const HALF = BUILTIN_CODES.find((entry) => entry.coverage === 0.5)!.code
+check('the built-in codes are seeded into the store', !!getCode(FULL) && !!getCode(HALF))
 
 const R = 'redeemer'
 const wholeShop = SHOP_ITEMS.reduce((sum, item) => sum + item.price, 0)
@@ -282,6 +284,48 @@ check('the once-rich wallet is broke now', getBalance(RICH) === 0)
 // own refusal, and still not a burn.
 check('a fully-stocked wallet has nothing left to cover', coverageCost(RICH, 0.5) === 0)
 check('so the half code is still refused, not spent', !redeemCode(RICH, HALF).ok)
+
+console.log('\nminting codes')
+
+// The authoring half: what scripts/codes.ts and /admin/codes both call.
+check('a flat-coin code mints', createCode({ code: 'FLAT500', coins: 500 }).ok)
+const F = 'flat-redeemer'
+const flat = redeemCode(F, 'flat-500')
+check('a flat code grants exactly its coins', flat.ok && flat.granted === 500)
+// Unlike coverage, a flat grant is an AMOUNT rather than a target, so a rich
+// wallet still gets the full number.
+check('and adds rather than topping up', getBalance(F) === 500)
+
+check('both grant shapes at once is refused', !createCode({ coverage: 0.5, coins: 100 }).ok)
+check('neither grant shape is refused', !createCode({}).ok)
+// The fat-finger this exists for: 100 meaning "100%" would be a hundred shops.
+check('a coverage above 1 is refused', !createCode({ code: 'TOOBIG', coverage: 100 }).ok)
+check('a zero coverage is refused', !createCode({ code: 'ZERO', coverage: 0 }).ok)
+check('fractional coins are refused', !createCode({ code: 'FRAC', coins: 1.5 }).ok)
+check('a duplicate code is refused', !createCode({ code: 'FLAT500', coins: 10 }).ok)
+check('a too-short code is refused', !createCode({ code: 'AB', coins: 10 }).ok)
+
+// With no code given one is generated, and it has to be usable as typed.
+const minted = createCode({ coverage: 1 })
+check('a code is generated when none is given', minted.ok && minted.code.code.length === 8)
+check('the generated code is redeemable', minted.ok && redeemCode('gen-check', minted.code.code).ok)
+check('a label is derived from the grant', minted.ok && minted.code.label === 'the whole shop')
+
+// Use limits are global across players, unlike the once-per-player rule.
+check('a limited code mints', createCode({ code: 'ONLYTWO', coins: 10, maxUses: 2 }).ok)
+check('the first claim works', redeemCode('claim-1', 'ONLYTWO').ok)
+check('the second claim works', redeemCode('claim-2', 'ONLYTWO').ok)
+check('the third is refused', !redeemCode('claim-3', 'ONLYTWO').ok)
+check('the third granted nothing', getBalance('claim-3') === 0)
+check('uses are counted on the row', getCode('ONLYTWO')?.uses === 2)
+
+check('an expired code mints', createCode({ code: 'EXPIRED', coins: 10, expiresAt: Date.now() - 1 }).ok)
+check('and is refused at redemption', !redeemCode('late', 'EXPIRED').ok)
+
+check('every minted code is listed', listCodes().some((row) => row.code === 'FLAT500'))
+check('revoking removes it', deleteCode('flat-500') && !getCode('FLAT500'))
+check('a revoked code no longer redeems', !redeemCode('after-revoke', 'FLAT500').ok)
+check('revoking an unknown code reports it', !deleteCode('NEVEREXISTED'))
 
 fs.rmSync(dir, { recursive: true, force: true })
 

@@ -26,6 +26,8 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type Account,
 } from './db/accounts'
+import { describeGrant, formatCode } from './codes'
+import { createCode, deleteCode, listCodes, type CodeRow } from './db/codes'
 import {
   buyItem,
   equipItem,
@@ -613,6 +615,66 @@ if (ADMIN_TOKEN) {
       roomCount: rooms.size,
       rooms: [...rooms.values()].map((room) => room.summary()),
     })
+  })
+
+  // Minting codes against the LIVE game, which scripts/codes.ts can't reach
+  // (it writes to the SQLite file directly, and production's lives on the Fly
+  // volume). Same token, same 404-not-401 posture: with ADMIN_TOKEN unset
+  // none of this exists.
+  //
+  // A wrong token 404s rather than 401s so the route is indistinguishable
+  // from one that was never registered -- there is no other auth in front of
+  // it, and a 401 advertises that there is something here to guess at.
+  const requireAdmin = (req: express.Request, res: express.Response): boolean => {
+    if (req.query.token === ADMIN_TOKEN) return true
+    res.status(404).end()
+    return false
+  }
+
+  const codeJson = (row: CodeRow) => ({
+    code: formatCode(row.code),
+    grant: describeGrant(row),
+    coverage: row.coverage,
+    coins: row.coins,
+    label: row.label,
+    uses: row.uses,
+    maxUses: row.max_uses,
+    expiresAt: row.expires_at,
+  })
+
+  app.get('/admin/codes', (req, res) => {
+    if (!requireAdmin(req, res)) return
+    res.json({ codes: listCodes().map(codeJson) })
+  })
+
+  // `days` rather than a timestamp, because the useful question at mint time
+  // is "how long should this last", and a hand-written epoch is the easiest
+  // thing in this whole feature to get wrong by a factor of 1000.
+  app.post('/admin/codes', express.json(), (req, res) => {
+    if (!requireAdmin(req, res)) return
+    const days = typeof req.body?.days === 'number' ? req.body.days : null
+    const result = createCode({
+      code: typeof req.body?.code === 'string' ? req.body.code : null,
+      coverage: typeof req.body?.coverage === 'number' ? req.body.coverage : null,
+      coins: typeof req.body?.coins === 'number' ? req.body.coins : null,
+      label: typeof req.body?.label === 'string' ? req.body.label : null,
+      maxUses: typeof req.body?.uses === 'number' ? req.body.uses : null,
+      expiresAt: days ? Date.now() + days * 24 * 60 * 60 * 1000 : null,
+    })
+    if (!result.ok) {
+      res.status(400).json(result)
+      return
+    }
+    res.json({ ok: true, code: codeJson(result.code) })
+  })
+
+  app.delete('/admin/codes/:code', (req, res) => {
+    if (!requireAdmin(req, res)) return
+    if (!deleteCode(req.params.code)) {
+      res.status(404).json({ ok: false, error: 'No such code.' })
+      return
+    }
+    res.json({ ok: true })
   })
 }
 

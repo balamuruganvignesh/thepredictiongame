@@ -14,7 +14,7 @@
 
 import { GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { shopItemById, SHOP_ITEMS, type Equipped } from '@shared/shop'
-import { normalizeCode, redeemCodeByName } from '../codes'
+import { bumpCodeUses, getCode } from './codes'
 import { db } from './index'
 import { log } from '../logger'
 
@@ -245,31 +245,48 @@ export type RedeemResult =
  * an amount; and coins already earned then count toward it, so nobody can
  * stack a code on top of a full wallet and walk away with double the shop.
  */
-export const redeemCode = db.transaction(
-  (playerId: string, rawCode: string): RedeemResult => {
-    const entry = redeemCodeByName(rawCode)
-    if (!entry) return { ok: false, error: 'That code is not valid.' }
+export const redeemCode = db.transaction((playerId: string, rawCode: string): RedeemResult => {
+  const entry = getCode(rawCode)
+  if (!entry) return { ok: false, error: 'That code is not valid.' }
+  if (entry.expires_at != null && entry.expires_at < Date.now()) {
+    return { ok: false, error: 'That code has expired.' }
+  }
+  if (entry.max_uses != null && entry.uses >= entry.max_uses) {
+    return { ok: false, error: 'That code has been fully claimed.' }
+  }
+  if (selectRedeemed.get(playerId, entry.code)) {
+    return { ok: false, error: "You've already redeemed that code." }
+  }
 
-    const code = normalizeCode(entry.code)
-    if (selectRedeemed.get(playerId, code)) {
-      return { ok: false, error: "You've already redeemed that code." }
-    }
+  const balance = getBalance(playerId)
+  // A coverage code is a TARGET and tops the wallet up to it; a flat-coin
+  // code is an AMOUNT and simply adds. Both are grants, but only the first
+  // can be satisfied by coins you already have -- which is why only the
+  // first can come out at zero.
+  const granted =
+    entry.coverage != null
+      ? Math.max(0, coverageCost(playerId, entry.coverage) - balance)
+      : (entry.coins ?? 0)
+  if (granted === 0) {
+    // Burning the code for nothing would be the worst possible outcome for
+    // a player who happened to be rich when they typed it, so it stays
+    // unredeemed and usable later.
+    return { ok: false, error: `You already have enough coins for ${entry.label}.` }
+  }
 
-    const balance = getBalance(playerId)
-    const target = coverageCost(playerId, entry.coverage)
-    const granted = Math.max(0, target - balance)
-    if (granted === 0) {
-      // Burning the code for nothing would be the worst possible outcome for
-      // a player who happened to be rich when they typed it, so it stays
-      // unredeemed and usable later.
-      return { ok: false, error: `You already have enough coins for ${entry.label}.` }
-    }
+  const now = Date.now()
+  insertLedger.run({
+    playerId,
+    delta: granted,
+    reason: `code:${entry.code}`,
+    gameResultId: null,
+    now,
+  })
+  syncAccountCoins.run({ playerId })
+  insertRedeemed.run({ playerId, code: entry.code, coins: granted, now })
+  // Inside the same transaction as the grant it counts, so the two can never
+  // disagree about how many times a code was actually claimed.
+  bumpCodeUses.run(entry.code)
 
-    const now = Date.now()
-    insertLedger.run({ playerId, delta: granted, reason: `code:${code}`, gameResultId: null, now })
-    syncAccountCoins.run({ playerId })
-    insertRedeemed.run({ playerId, code, coins: granted, now })
-
-    return { ok: true, granted, balance: balance + granted }
-  },
-)
+  return { ok: true, granted, balance: balance + granted }
+})

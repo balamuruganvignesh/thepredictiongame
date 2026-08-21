@@ -114,6 +114,25 @@ db.exec(`
     cardback   TEXT
   );
 
+  -- The codes themselves, in the store rather than in source, so minting one
+  -- is a command rather than an edit and a redeploy. Seeded with the built-in
+  -- codes in server/codes.ts on first boot; everything after that is authored
+  -- through scripts/codes.ts or the /admin/codes routes.
+  --
+  -- coverage and coins are the two grant shapes and exactly one is set: a
+  -- fraction of the catalogue (which reprices itself), or a flat number of
+  -- coins.
+  CREATE TABLE IF NOT EXISTS redeem_codes (
+    code       TEXT PRIMARY KEY,
+    coverage   REAL,
+    coins      INTEGER,
+    label      TEXT NOT NULL,
+    max_uses   INTEGER,
+    uses       INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
+
   -- One row per code a player has redeemed. This table IS the once-per-player
   -- rule: the primary key is what makes a second redemption a constraint
   -- violation rather than a second grant, so it can't be raced by two tabs.
