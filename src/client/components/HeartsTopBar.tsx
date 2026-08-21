@@ -41,6 +41,7 @@ export function HeartsTopBar({
       {players.map((player) => (
         <div
           key={player.id}
+          data-player-id={player.id}
           className={`chip${player.isTurn ? ' chip--turn' : ''}`}
           title={`${player.name}: ${player.penalty} this round, ${player.total} total`}
         >

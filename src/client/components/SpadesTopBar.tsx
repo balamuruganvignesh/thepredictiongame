@@ -53,6 +53,7 @@ export function SpadesTopBar({
       {players.map((player) => (
         <div
           key={player.id}
+          data-player-id={player.id}
           className={`chip${player.isTurn ? ' chip--turn' : ''} chip--team${player.team}`}
           title={`${player.name} (team ${player.team === 0 ? 'A' : 'B'}): ${player.tricksWon} tricks, bid ${
             player.bid == null ? '—' : player.bid === 'nil' ? 'Nil' : player.bid

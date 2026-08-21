@@ -2999,3 +2999,71 @@ button.seat:hover {
 .lobby__mode.is-public .lobby__mode-value {
   color: var(--positive);
 }
+
+/* ---- Emotes -----------------------------------------------------------------
+ *
+ * Reactions float over the sender's seat and delete themselves. Nothing here
+ * is persistent -- that's the whole distinction from chat and from the
+ * roleAnnounce feed, both of which keep history.
+ */
+
+.emote-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  pointer-events: none;
+}
+
+.emote-burst {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.emote-burst__glyph {
+  display: block;
+  font-size: 2.1rem;
+  line-height: 1;
+  filter: drop-shadow(0 3px 8px rgb(0 0 0 / 55%));
+}
+
+.emotes {
+  position: relative;
+}
+
+/* Compact next to the worded dock buttons -- it's one glyph, and the dock is
+   deliberately small. */
+.dock__button--emote {
+  padding: 8px 11px;
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+/* Opens upward, out of the dock. No backdrop on purpose: you react to what's
+   on the table, so the table has to stay visible while you pick. */
+.emotes__pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 4px;
+  padding: 8px;
+  animation: quick-pop 160ms var(--ease-pop);
+}
+
+.emotes__pick {
+  padding: 6px 8px;
+  border-radius: var(--radius-button);
+  background: var(--panel-header);
+  font-size: 1.25rem;
+  line-height: 1.15;
+  transition:
+    background var(--t-quick) ease-out,
+    transform var(--t-quick) ease-out;
+}
+
+.emotes__pick:hover {
+  background: color-mix(in srgb, var(--panel-header) 60%, var(--accent));
+  transform: translateY(-2px);
+}

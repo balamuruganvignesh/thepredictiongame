@@ -6,7 +6,7 @@
 //                   requestState, voteRestart, golfRevealInitial, golfDraw,
 //                   golfResolve, setBlackjackMode, setBlackjackRounds,
 //                   blackjackAction, setSpadesTargetScore, submitSpadesBid,
-//                   requestReplay, setPublic
+//                   requestReplay, setPublic, emote
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
@@ -16,7 +16,7 @@
 //                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate,
 //                   blackjackRoundStart, blackjackState, blackjackScoreUpdate,
 //                   spadesRoundStart, spadesState, spadesScoreUpdate,
-//                   replayData
+//                   replayData, emoteBurst
 //
 // Five games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
@@ -547,6 +547,24 @@ export type SpadesSnapshot = {
   trickNumber: number
 }
 
+// ---- Emotes -----------------------------------------------------------------
+
+/**
+ * A quick reaction, floated over the sender's seat and gone in a second.
+ *
+ * Deliberately NOT chat and deliberately NOT a roleAnnounce, which are this
+ * app's two existing "say something to the table" channels and are both
+ * PERMANENT -- chat keeps history for reconnects, and Room's broadcast
+ * closure mirrors every roleAnnounce into that same history. A reaction has
+ * no history by design: it's tone, not content, and a scrollback full of 👏
+ * would bury the things people actually said.
+ *
+ * `emote` is an id from shared/emotes.ts, never free text -- the server
+ * validates it against that list, so a hand-driven socket can't put arbitrary
+ * strings on other people's screens.
+ */
+export type EmoteBurst = { from: PlayerId; emote: string }
+
 // ---- Replay -----------------------------------------------------------------
 //
 // Rounds that have already been played, so a table can look back at how a
@@ -687,6 +705,7 @@ export interface ServerToClientEvents {
   spadesState: (data: SpadesState) => void
   spadesScoreUpdate: (data: SpadesScoreUpdate) => void
   replayData: (data: ReplayData) => void
+  emoteBurst: (data: EmoteBurst) => void
   restartVote: (data: RestartVote) => void
   /** Spectator-only: the hand of whichever seat they're currently watching. */
   watchedHand: (data: WatchedHand) => void
@@ -754,6 +773,12 @@ export interface ClientToServerEvents {
    * being able to look back at the last round is worth most.
    */
   requestReplay: () => void
+  /**
+   * React to what just happened. Seats only -- the burst is drawn over the
+   * sender's own place at the table, and a spectator hasn't got one. They
+   * still have chat.
+   */
+  emote: (emoteId: string) => void
   chat: (text: string) => void
   /**
    * Vote to abandon the game in progress and reopen the lobby (typically so

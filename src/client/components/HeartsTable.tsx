@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { isLegalHeartsPlay } from '@shared/heartsRules'
 import { ChatPanel } from './ChatPanel'
+import { EmoteBar } from './EmoteBar'
+import { EmoteLayer } from './EmoteLayer'
 import { GameAnnouncer } from './GameAnnouncer'
 import { ReplayViewer } from './ReplayViewer'
 import { GameEnd } from './GameEnd'
@@ -55,6 +57,12 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
   return (
     <div className="table">
       <GameAnnouncer store={store} />
+
+      <EmoteLayer
+        emotes={store.emotes}
+        names={store.names}
+        onDismiss={actions.dismissEmote}
+      />
 
       <HeartsTopBar
         roundNumber={store.roundNumber}
@@ -128,6 +136,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
             setReplayOpen(true)
           }}
         />
+        {!store.spectating && <EmoteBar onEmote={actions.sendEmote} />}
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (

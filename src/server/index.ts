@@ -200,6 +200,9 @@ io.on('connection', (socket) => {
   socket.on('blackjackAction', (action) => withSeat((r, s) => r.blackjackAction(s, action)))
   socket.on('setSpadesTargetScore', (score) => withSeat((r, s) => r.setSpadesTargetScore(s, Number(score))))
   socket.on('setPublic', (isPublic) => withSeat((r, s) => r.setPublic(s, isPublic === true)))
+  // withSeat, not withViewer: the burst is drawn over the sender's own place
+  // at the table, and a spectator hasn't got one. They still have chat.
+  socket.on('emote', (emoteId) => withSeat((r, s) => r.emote(s, String(emoteId ?? ''))))
   socket.on('submitSpadesBid', (bid) => withSeat((r, s) => r.submitSpadesBid(s, bid)))
   socket.on('submitBid', (bid) => withSeat((r, s) => r.submitBid(s, Number(bid))))
   socket.on('submitRebid', (bid) => withSeat((r, s) => r.submitRebid(s, Number(bid))))

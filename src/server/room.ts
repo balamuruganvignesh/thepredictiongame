@@ -35,6 +35,7 @@ import type {
   UseAbilityPayload,
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
+import { EMOTE_COOLDOWN_MS, emoteById } from '@shared/emotes'
 import { passDirection, passTargetIndex } from '@shared/heartsRules'
 import { GRID_SIZE } from '@shared/golfRules'
 import type { SpadesBid } from '@shared/spadesRules'
@@ -158,6 +159,14 @@ export class Room {
    * exactly when a table wants to argue about the last round.
    */
   private replay: ReplayRound[] = []
+
+  /**
+   * seatId -> when they last reacted, for the emote cooldown. A Map rather
+   * than a field on Seat because it's rate-limiting bookkeeping, not table
+   * state: nothing else reads it, it never needs to survive a reconnect, and
+   * a seat that goes away should take its entry with it.
+   */
+  private lastEmoteAt = new Map<string, number>()
 
   constructor(
     readonly code: string,
@@ -430,6 +439,7 @@ export class Room {
   }
 
   private removeSeat(seat: Seat) {
+    this.lastEmoteAt.delete(seat.id)
     const index = this.seats.indexOf(seat)
     if (index < 0) return
     this.seats.splice(index, 1)
@@ -1030,6 +1040,29 @@ export class Room {
     // Only the tail is ever replayed, so there's no reason to keep more.
     if (this.chatLog.length > 200) this.chatLog.shift()
     this.io.broadcast('chat', entry)
+  }
+
+  /**
+   * A quick reaction, floated over the sender's seat and gone in a second.
+   *
+   * Goes out through `broadcast` like everything else, which is exactly why
+   * it lands nowhere permanent: that closure only mirrors `roleAnnounce` into
+   * the chat log, so an emoteBurst reaches every screen and no history. The
+   * separation the chat-vs-feed split already established holds here for
+   * free -- no new plumbing, and no way for a reaction to leak into chat.
+   *
+   * Silently dropped rather than answered with an actionError when it's too
+   * soon or the id is unknown: a rejection toast for mashing an emoji button
+   * would be more annoying than the mashing.
+   */
+  emote(seat: Seat, emoteId: string) {
+    if (!emoteById(emoteId)) return
+    const now = Date.now()
+    const last = this.lastEmoteAt.get(seat.id) ?? 0
+    if (now - last < EMOTE_COOLDOWN_MS) return
+    this.lastEmoteAt.set(seat.id, now)
+    this.lastActivity = now
+    this.io.broadcast('emoteBurst', { from: seat.id, emote: emoteId })
   }
 
   chat(seat: Seat, text: string) {

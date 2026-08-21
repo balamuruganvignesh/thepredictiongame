@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from 'react'
 import { cardKey } from '@shared/cards'
 import type { BlackjackHandPublic } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
+import { EmoteBar } from './EmoteBar'
+import { EmoteLayer } from './EmoteLayer'
 import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { BlackjackScoresheet } from './BlackjackScoresheet'
@@ -70,6 +72,12 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
   return (
     <div className="table">
       <GameAnnouncer store={store} />
+
+      <EmoteLayer
+        emotes={store.emotes}
+        names={store.names}
+        onDismiss={actions.dismissEmote}
+      />
 
       <div className="topbar">
         <div className="topbar__info">
@@ -151,6 +159,7 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
               return (
                 <div
                   key={player.id}
+                  data-player-id={player.id}
                   className={`note blackjack-panel${
                     player.id === bj.currentTurnId ? ' blackjack-panel--turn' : ''
                   }`}
@@ -224,6 +233,7 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
           spectating={store.spectating}
           onVoteRestart={actions.voteRestart}
         />
+        {!store.spectating && <EmoteBar onEmote={actions.sendEmote} />}
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (

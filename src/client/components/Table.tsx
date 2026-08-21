@@ -7,6 +7,8 @@ import type { Card } from '@shared/cards'
 import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
 import { EffectLayer } from './EffectLayer'
+import { EmoteBar } from './EmoteBar'
+import { EmoteLayer } from './EmoteLayer'
 import { GameAnnouncer } from './GameAnnouncer'
 import { ReplayViewer } from './ReplayViewer'
 import { GameEnd } from './GameEnd'
@@ -104,6 +106,12 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
   return (
     <div className="table">
       <GameAnnouncer store={store} />
+
+      <EmoteLayer
+        emotes={store.emotes}
+        names={store.names}
+        onDismiss={actions.dismissEmote}
+      />
 
       <TopBar
         roundNumber={store.roundNumber}
@@ -232,6 +240,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
             setReplayOpen(true)
           }}
         />
+        {!store.spectating && <EmoteBar onEmote={actions.sendEmote} />}
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
           {store.unreadChat > 0 && !chatOpen && (

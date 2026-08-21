@@ -15,6 +15,7 @@ import type {
   BlackjackScoreUpdate,
   BlackjackState,
   ChatMessage,
+  EmoteBurst,
   GameMode,
   GameStateUpdate,
   GameType,
@@ -275,6 +276,13 @@ export type Store = {
   restart: RestartVote
 
   /**
+   * Reactions currently floating over the table. Keyed like activeEffects so
+   * a stale dismissal can never clear the wrong one; EmoteLayer owns removing
+   * its own entries once their animation ends.
+   */
+  emotes: (EmoteBurst & { key: number })[]
+
+  /**
    * Every trick this game has played, fetched on demand. Null until the
    * viewer is opened -- it's a chunky payload nobody needs unless they ask,
    * and it changes constantly while a round is running.
@@ -336,6 +344,7 @@ const initialStore: Store = {
   doubleDeadline: null,
   doubled: false,
   restart: { votes: [], needed: 0, waiting: 0 },
+  emotes: [],
   replay: null,
   chat: [],
   unreadChat: 0,
@@ -394,6 +403,8 @@ type Action =
   | { type: 'snapshot'; data: Snapshot }
   | { type: 'watchedHand'; data: WatchedHand }
   | { type: 'replay'; data: ReplayData | null }
+  | { type: 'emote'; data: EmoteBurst }
+  | { type: 'dismissEmote'; key: number }
   | { type: 'leave' }
 
 const SUIT_GLYPH: Record<string, string> = {
@@ -502,6 +513,7 @@ function reducer(state: Store, action: Action): Store {
         doubleDeadline: null,
         // A new deal, a clean private log.
         abilityLog: [],
+        emotes: [],
       }
     }
 
@@ -1046,6 +1058,16 @@ function reducer(state: Store, action: Action): Store {
     case 'replay':
       return { ...state, replay: action.data }
 
+    case 'emote':
+      return {
+        ...state,
+        nextId: state.nextId + 1,
+        emotes: [...state.emotes, { ...action.data, key: state.nextId }],
+      }
+
+    case 'dismissEmote':
+      return { ...state, emotes: state.emotes.filter((e) => e.key !== action.key) }
+
     case 'leave':
       return { ...initialStore, connected: state.connected, myName: state.myName }
 
@@ -1147,6 +1169,7 @@ export function useGame() {
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
     socket.on('replayData', (data) => dispatch({ type: 'replay', data }))
+    socket.on('emoteBurst', (data) => dispatch({ type: 'emote', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
     socket.on('doubleWindow', (data) => dispatch({ type: 'doubleWindow', seconds: data.seconds }))
@@ -1319,6 +1342,13 @@ export function useGame() {
       /** Spectator-only: pick a seat to watch read-only, or null to stop. */
       watchSeat(seatId: string | null) {
         socket.emit('watchSeat', seatId)
+      },
+      /** React to what just happened. Seats only; the server rate-limits. */
+      sendEmote(emoteId: string) {
+        socket.emit('emote', emoteId)
+      },
+      dismissEmote(key: number) {
+        dispatch({ type: 'dismissEmote', key })
       },
       /** Fetch every trick played this game, for the replay viewer. */
       requestReplay() {
