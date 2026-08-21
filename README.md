@@ -146,6 +146,13 @@ game ends you're given a seat automatically, so you're in for the next one.
 
 ## Signing in, coins and the shop
 
+> **Running it locally with sign-in enabled:** `npm run dev` reads `.env`, so put
+> `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in there (get them from the Google
+> Cloud Console as a **Web application** OAuth client, with
+> `http://localhost:3001/auth/google/callback` as an authorized redirect URI).
+> With them unset the `/auth/*` routes simply aren't registered and the game runs
+> anonymously, exactly as it always has.
+
 Signing in with Google is **optional** — a table code and a name is still all you
 need, and always will be. What an account buys you is one identity instead of
 one per browser: your history, your coins and your cosmetics follow you to your
