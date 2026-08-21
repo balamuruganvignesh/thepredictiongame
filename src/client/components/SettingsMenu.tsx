@@ -8,6 +8,7 @@ import { useState } from 'react'
 import type { RestartVote as RestartVoteState } from '@shared/protocol'
 import { ColorblindToggleButton, MotionToggleButton } from './A11yToggles'
 import { DeckToggleButton } from './DeckToggle'
+import { ThemeToggleButton } from './ThemeToggle'
 import { EffectsToggleButton } from './EffectsToggle'
 import { RestartVoteButton } from './RestartVote'
 import { SoundToggleButton } from './SoundToggle'
@@ -41,6 +42,7 @@ export function SettingsMenu({
       {open && (
         <div className="note settings__pop" role="dialog" aria-label="Settings">
           <DeckToggleButton className="settings__item" />
+          <ThemeToggleButton className="settings__item" />
           <EffectsToggleButton className="settings__item" />
           <SoundToggleButton className="settings__item" />
           <ColorblindToggleButton className="settings__item" />

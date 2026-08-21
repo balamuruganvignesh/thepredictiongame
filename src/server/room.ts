@@ -327,6 +327,7 @@ export class Room {
     name: string,
     playerId: string | null,
     socketId: string,
+    ownedItems: string[] = [],
   ): { seat: Seat } | { spectator: Spectator } | { error: string } {
     this.lastActivity = Date.now()
 
@@ -335,6 +336,9 @@ export class Room {
       existing.socketId = socketId
       existing.connected = true
       existing.disconnectedAt = null
+      // Refreshed on every re-attach, so a purchase made between sessions
+      // takes effect without leaving the table.
+      existing.ownedItems = ownedItems
       if (name.trim()) existing.name = name.trim().slice(0, 20)
       return { seat: existing }
     }
@@ -344,6 +348,7 @@ export class Room {
     const watching = playerId ? this.spectatorById.get(playerId) : undefined
     if (watching) {
       watching.socketId = socketId
+      watching.ownedItems = ownedItems
       if (name.trim()) watching.name = name.trim().slice(0, 20)
       return { spectator: watching }
     }
@@ -355,6 +360,7 @@ export class Room {
         id: crypto.randomUUID(),
         socketId,
         name: name.trim().slice(0, 20) || `Spectator ${this.spectators.length + 1}`,
+        ownedItems,
       }
       this.spectators.push(spectator)
       this.spectatorById.set(spectator.id, spectator)
@@ -387,6 +393,7 @@ export class Room {
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
+      ownedItems,
     }
     this.seats.push(seat)
     this.seatById.set(seat.id, seat)
@@ -520,6 +527,7 @@ export class Room {
         id: spectator.id,
         socketId: spectator.socketId,
         name: spectator.name,
+        ownedItems: spectator.ownedItems,
         seatIndex: this.seats.length + 1,
         ready: false,
         connected: true,
@@ -1056,7 +1064,13 @@ export class Room {
    * would be more annoying than the mashing.
    */
   emote(seat: Seat, emoteId: string) {
-    if (!emoteById(emoteId)) return
+    const emote = emoteById(emoteId)
+    if (!emote) return
+    // Ownership is enforced HERE, not just by EmoteBar hiding the button --
+    // a hand-driven socket must not be able to put a reaction someone hasn't
+    // bought on everyone else's screen. Dropped silently, like the cooldown
+    // below: a rejection toast for an emoji is worse than the mashing.
+    if (emote.premium && !seat.ownedItems.includes(emote.id)) return
     const now = Date.now()
     const last = this.lastEmoteAt.get(seat.id) ?? 0
     if (now - last < EMOTE_COOLDOWN_MS) return

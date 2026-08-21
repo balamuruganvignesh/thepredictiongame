@@ -144,6 +144,22 @@ Join a table that's already playing and you'll watch instead of bouncing off an
 error: you see the tricks, the score sheet and the chat, but no hand. When that
 game ends you're given a seat automatically, so you're in for the next one.
 
+## Signing in, coins and the shop
+
+Signing in with Google is **optional** — a table code and a name is still all you
+need, and always will be. What an account buys you is one identity instead of
+one per browser: your history, your coins and your cosmetics follow you to your
+phone, and you can pick a game back up on another device mid-round.
+
+Finish in the **top three** of any game and you earn coins — 50 for first, 30 for
+second, 15 for third. Ties share the better placing. Abandoned games (a restart
+vote) pay nothing, and neither do two-player tables.
+
+Coins buy cosmetics in the **shop**: table themes, card backs and extra
+reactions. Nothing in there affects play — no powerups, no advantage, nothing
+to buy with real money. You earn coins even while playing anonymously, and they
+come with you the first time you sign in.
+
 ## Credits
 
 Card faces are the [Playing Cards Pack](https://kenney.nl/assets/playing-cards-pack)

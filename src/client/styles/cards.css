@@ -288,3 +288,51 @@
 .card-button--illusion .card__suit-badge {
   display: none;
 }
+
+/* ---- Purchasable card backs -------------------------------------------------
+ * Recolours of whichever deck's back sprite is active, keyed off the
+ * data-cardback attribute theme.tsx sets on <html> -- the same mechanism
+ * data-deck and data-theme already use.
+ *
+ * A tint overlay in `multiply`, NOT a filter on the sprite. Both decks' backs
+ * are mostly white with a light pattern, and hue-rotate on near-white pixels
+ * does almost nothing -- the first attempt at this produced four barely
+ * distinguishable pale cards. Multiplying by a colour maps white to that
+ * colour exactly while leaving the darker pattern darker, so the artwork
+ * survives and the card genuinely changes colour.
+ *
+ * A tint rather than new sprite files, deliberately: one rule recolours BOTH
+ * decks, so a bought back survives switching between pixel and classic art
+ * and a future third deck inherits it for free.
+ *
+ * Only .card--back is tinted, so a card FACE is never touched -- the red and
+ * black suits must stay true-to-life, and the four-colour suit badge depends
+ * on it.
+ */
+
+.card--back::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* transparent when no back is equipped, which makes this rule a no-op --
+     multiply against transparent leaves the sprite exactly as it was. */
+  background: var(--cardback-tint, transparent);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+:root[data-cardback='cardback-crimson'] {
+  --cardback-tint: #a52033;
+}
+
+:root[data-cardback='cardback-forest'] {
+  --cardback-tint: #1f6b3f;
+}
+
+:root[data-cardback='cardback-violet'] {
+  --cardback-tint: #6c3fb0;
+}
+
+:root[data-cardback='cardback-ash'] {
+  --cardback-tint: #6a6a72;
+}

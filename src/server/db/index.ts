@@ -50,3 +50,67 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_game_result_players_player
     ON game_result_players(player_id);
 `)
+
+// ---- Accounts, wallet and cosmetics ------------------------------------------
+//
+// Additive to everything above: an account does NOT replace the seat token,
+// it OWNS one. `accounts.player_id` is the canonical id a signed-in browser
+// adopts, so Room, roles.ts, stats.ts and the leaderboard all keep keying off
+// `playerId` exactly as they did before and need no knowledge of auth at all.
+//
+// Same no-migration-framework posture as the tables above -- these are purely
+// additive CREATE TABLE IF NOT EXISTS, so an existing game.db picks them up on
+// the next boot with nothing to run by hand.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    google_sub  TEXT NOT NULL UNIQUE,
+    email       TEXT,
+    name        TEXT,
+    picture     TEXT,
+    player_id   TEXT NOT NULL UNIQUE,
+    coins       INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    last_login  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token       TEXT PRIMARY KEY,
+    account_id  INTEGER NOT NULL REFERENCES accounts(id),
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id);
+
+  -- A ledger rather than a bare balance column, so a balance is always
+  -- explainable and a double-award shows up as two visible rows instead of
+  -- silently inflating a number. accounts.coins is a denormalized cache kept
+  -- in the same transaction.
+  CREATE TABLE IF NOT EXISTS coin_ledger (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id      TEXT NOT NULL,
+    delta          INTEGER NOT NULL,
+    reason         TEXT NOT NULL,
+    game_result_id INTEGER,
+    created_at     INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_coin_ledger_player ON coin_ledger(player_id);
+
+  -- Keyed by player_id, not account id: an anonymous player earns coins too,
+  -- and if they later sign in and that id becomes canonical, the wallet comes
+  -- with them. Signing in is a reward, never a prerequisite.
+  CREATE TABLE IF NOT EXISTS owned_items (
+    player_id  TEXT NOT NULL,
+    item_id    TEXT NOT NULL,
+    bought_at  INTEGER NOT NULL,
+    PRIMARY KEY (player_id, item_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS equipped_items (
+    player_id  TEXT PRIMARY KEY,
+    theme      TEXT,
+    cardback   TEXT
+  );
+`)

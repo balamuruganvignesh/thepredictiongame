@@ -10,11 +10,47 @@ import { TableBrowser } from './TableBrowser'
 import { storedName } from '../socket'
 import { installAvailable, onInstallAvailabilityChange, promptInstall } from '../pwa'
 import { useDeckStyle } from '../deckStyle'
+import { loginHref, useAuth } from '../auth'
 
 type Props = {
   connected: boolean
   error: string | null
   onJoin: (name: string, roomCode: string | null, gameType?: GameType) => void
+}
+
+/**
+ * Sign in, or who you're signed in as. Sits in the footer link stack rather
+ * than beside the name field on purpose: anonymous play is the supported
+ * default and a 4-letter invite link has to stay the fastest way in, so
+ * signing in reads as an upgrade, not a gate.
+ *
+ * Hidden entirely when the server has no Google credentials configured --
+ * a permanently dead button is worse than no button, the same call the PWA
+ * install prompt already makes.
+ */
+function AccountLink() {
+  const { account, loginAvailable, ready, logout } = useAuth()
+  if (!ready || !loginAvailable) return null
+
+  if (account) {
+    return (
+      <span className="join__account">
+        {account.picture && <img src={account.picture} alt="" className="join__avatar" />}
+        <span>
+          {account.name ?? 'Signed in'} · 🪙 {account.coins}
+        </span>
+        <button type="button" className="join__signout" onClick={() => void logout()}>
+          sign out
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <a className="join__irl-link" href={loginHref()}>
+      🔐 Sign in with Google — keep your scores across devices →
+    </a>
+  )
 }
 
 export function Join({ connected, error, onJoin }: Props) {
@@ -298,6 +334,10 @@ export function Join({ connected, error, onJoin }: Props) {
         <a className="join__irl-link" href="/leaderboard">
           🏆 See the leaderboard →
         </a>
+        <a className="join__irl-link" href="/shop">
+          🪙 Spend your coins in the shop →
+        </a>
+        <AccountLink />
         {canInstall && (
           <button
             type="button"
