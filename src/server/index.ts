@@ -26,9 +26,17 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type Account,
 } from './db/accounts'
-import { buyItem, equipItem, getBalance, getCharges, getEquipped, getOwned } from './db/shop'
+import {
+  buyItem,
+  equipItem,
+  getBalance,
+  getCharges,
+  getEquipped,
+  getOwned,
+  redeemCode,
+} from './db/shop'
 import { authUrl, exchangeCode, googleConfigured } from './auth/google'
-import { SHOP_ITEMS, type MeAccount } from '@shared/shop'
+import { SHOP_ITEMS, type MeAccount, type Wallet } from '@shared/shop'
 import { AVATARS, GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { redis, redisSub } from './redis'
 import { registerRoom, refreshRoom, removeRoom } from './roomDirectory'
@@ -361,6 +369,29 @@ const sessionCookie = (token: string) =>
     ...(process.env.NODE_ENV === 'production' ? ['Secure'] : []),
   ].join('; ')
 
+/**
+ * Whose wallet a shop request is acting on. A signed-in caller is ALWAYS its
+ * account's canonical id -- exactly the rule the socket follows, and for the
+ * same reason: the id in the body is just a string on the wire, and honouring
+ * it would let anyone spend a stranger's coins. Anonymous callers send their
+ * own localStorage id, which is the id that earned those coins in the first
+ * place, so spending needs no account.
+ */
+const walletIdFor = (account: Account | null, claimed: unknown): string | null => {
+  if (account) return account.playerId
+  return typeof claimed === 'string' && claimed.length > 0 ? claimed : null
+}
+
+/** The wallet half of a shop response, for a signed-in OR anonymous player. */
+function walletFor(playerId: string): Wallet {
+  return {
+    playerId,
+    coins: getBalance(playerId),
+    owned: getOwned(playerId),
+    equipped: getEquipped(playerId),
+  }
+}
+
 /** What /api/me and the shop routes both return for a player. */
 function meFor(account: Account): MeAccount {
   return {
@@ -434,9 +465,14 @@ if (googleConfigured) {
 // boot and a 404 would be indistinguishable from a network failure.
 app.get('/api/me', (req, res) => {
   const account = sessionAccount(req)
+  // The wallet rides along because it is NOT account-shaped: an anonymous
+  // browser owns items too, and every cosmetic gate in the client needs to
+  // know what this player owns whether or not anyone is signed in.
+  const walletId = walletIdFor(account, req.query.playerId)
   res.json({
     loginAvailable: googleConfigured,
     account: account ? meFor(account) : null,
+    wallet: walletId ? walletFor(walletId) : null,
   })
 })
 
@@ -445,39 +481,75 @@ app.get('/api/me', (req, res) => {
 // window-shop and see what placing well is worth.
 app.get('/api/shop', (req, res) => {
   const account = sessionAccount(req)
+  // Anonymous callers pass the playerId they already keep in localStorage, so
+  // a signed-out browser sees the coins it earned and the items it bought.
+  const walletId = walletIdFor(account, req.query.playerId)
   res.json({
     items: SHOP_ITEMS,
     avatars: AVATARS,
-    charges: account ? getCharges(account.playerId) : {},
+    charges: walletId ? getCharges(walletId) : {},
+    wallet: walletId ? walletFor(walletId) : null,
     account: account ? meFor(account) : null,
   })
 })
 
-// Buying is the one thing anonymous players cannot do -- there is nowhere
-// durable to put a purchase made by a browser that may clear its storage
-// tomorrow. Coins still ACCRUE anonymously and come along on first sign-in.
+// Anonymous players may spend the coins they earned. Signing in is what makes
+// a wallet outlive one browser's storage and follow you to another device --
+// a reward, not a toll gate on coins already banked.
 app.post('/api/shop/buy', express.json(), (req, res) => {
   const account = sessionAccount(req)
-  if (!account) {
-    res.status(401).json({ ok: false, error: 'Sign in to spend coins.' })
+  const walletId = walletIdFor(account, req.body?.playerId)
+  if (!walletId) {
+    res.status(400).json({ ok: false, error: 'No wallet to spend from.' })
     return
   }
 
   const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : ''
-  const result = buyItem(account.playerId, itemId)
+  const result = buyItem(walletId, itemId)
   if (!result.ok) {
     res.status(400).json(result)
     return
   }
-  res.json({ ok: true, account: meFor(account) })
+  res.json({ ok: true, wallet: walletFor(walletId), account: account ? meFor(account) : null })
+})
+
+// Redeem codes. The catalogue lives in server/codes.ts and is deliberately
+// NOT shared with the client -- a code whose value is that you have to be
+// told it must not ship in the JS bundle.
+//
+// Anonymous players can redeem, for the same reason they can spend: the grant
+// lands on the playerId that browser already carries, and adopting that id at
+// sign-in brings it along. The once-per-player rule is enforced by the
+// redeemed_codes primary key, not by having an account.
+app.post('/api/shop/redeem', express.json(), (req, res) => {
+  const account = sessionAccount(req)
+  const walletId = walletIdFor(account, req.body?.playerId)
+  if (!walletId) {
+    res.status(400).json({ ok: false, error: 'No wallet to credit.' })
+    return
+  }
+
+  const code = typeof req.body?.code === 'string' ? req.body.code : ''
+  const result = redeemCode(walletId, code)
+  if (!result.ok) {
+    res.status(400).json(result)
+    return
+  }
+  res.json({
+    ok: true,
+    granted: result.granted,
+    wallet: walletFor(walletId),
+    account: account ? meFor(account) : null,
+  })
 })
 
 // Ownership is re-checked server-side. The shop page hiding a button is a
 // courtesy; a hand-rolled POST is not.
 app.post('/api/shop/equip', express.json(), (req, res) => {
   const account = sessionAccount(req)
-  if (!account) {
-    res.status(401).json({ ok: false, error: 'Sign in first.' })
+  const walletId = walletIdFor(account, req.body?.playerId)
+  if (!walletId) {
+    res.status(400).json({ ok: false, error: 'No wardrobe to equip into.' })
     return
   }
 
@@ -488,12 +560,12 @@ app.post('/api/shop/equip', express.json(), (req, res) => {
   }
 
   const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : null
-  const result = equipItem(account.playerId, kind, itemId)
+  const result = equipItem(walletId, kind, itemId)
   if (!result.ok) {
     res.status(400).json(result)
     return
   }
-  res.json({ ok: true, account: meFor(account) })
+  res.json({ ok: true, wallet: walletFor(walletId), account: account ? meFor(account) : null })
 })
 
 // ---- Public table browser --------------------------------------------------------

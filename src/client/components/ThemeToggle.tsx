@@ -10,10 +10,10 @@ import { useAuth } from '../auth'
 import { useCosmetics } from '../theme'
 
 export function ThemeToggleButton({ className = '' }: { className?: string }) {
-  const { account } = useAuth()
+  const { wallet } = useAuth()
   const { slots, equip } = useCosmetics()
 
-  const owned = shopItemsOfKind('theme').filter((item) => account?.owned.includes(item.id))
+  const owned = shopItemsOfKind('theme').filter((item) => wallet?.owned.includes(item.id))
   if (owned.length === 0) return null
 
   // '' is the default look and is always in the rotation, so there's a way

@@ -16,9 +16,19 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-shop-test-'))
 process.env.DATABASE_PATH = path.join(dir, 'test.db')
 
 const { recordGameEnded, recordGameAbandoned } = await import('../src/server/db/persistence')
-const { buyItem, equipItem, getBalance, getCharges, getEquipped, getOwned, spendPowerupCharge } =
-  await import('../src/server/db/shop')
-const { PLACEMENT_COINS } = await import('../src/shared/shop')
+const {
+  buyItem,
+  coverageCost,
+  equipItem,
+  getBalance,
+  getCharges,
+  getEquipped,
+  getOwned,
+  redeemCode,
+  spendPowerupCharge,
+} = await import('../src/server/db/shop')
+const { PLACEMENT_COINS, SHOP_ITEMS } = await import('../src/shared/shop')
+const { REDEEM_CODES } = await import('../src/server/codes')
 const { GOOGLE_AVATAR } = await import('../src/shared/avatars')
 type Standing = import('../src/shared/protocol').Standing
 
@@ -207,6 +217,71 @@ check('and restores a charge', getCharges(C)['powerup-peek'] === 1)
 const firstThemeBuy = buyItem(C, 'theme-felt')
 check('a non-consumable buys once', firstThemeBuy.ok)
 check('a theme still refuses a second purchase', !buyItem(C, 'theme-felt').ok)
+
+console.log('\nredeem codes')
+
+// A code is sized in catalogue COVERAGE, so these assertions are written
+// against the live catalogue rather than a hardcoded number of coins -- the
+// promise a code makes has to survive a price change.
+const FULL = REDEEM_CODES.find((entry) => entry.coverage === 1)!.code
+const HALF = REDEEM_CODES.find((entry) => entry.coverage === 0.5)!.code
+
+const R = 'redeemer'
+const wholeShop = SHOP_ITEMS.reduce((sum, item) => sum + item.price, 0)
+check('coverage of the whole shop is the whole catalogue price', coverageCost(R, 1) === wholeShop)
+// Half the ITEMS, cheapest first -- not half the money, which is a bigger number.
+const cheapestHalf = SHOP_ITEMS.map((i) => i.price)
+  .sort((a, b) => a - b)
+  .slice(0, Math.ceil(SHOP_ITEMS.length / 2))
+  .reduce((sum, price) => sum + price, 0)
+check('half-coverage is the cheapest half of the items', coverageCost(R, 0.5) === cheapestHalf)
+
+check('an unknown code is refused', !redeemCode(R, 'NOT-A-CODE').ok)
+check('a refused code grants nothing', getBalance(R) === 0)
+
+const redeemed = redeemCode(R, FULL)
+check('the full code redeems', redeemed.ok)
+check('it funds the whole catalogue', getBalance(R) === wholeShop)
+check('and every item is now affordable', SHOP_ITEMS.every((item) => buyItem(R, item.id).ok))
+check('which spends the wallet exactly to zero', getBalance(R) === 0)
+check('the same code cannot be redeemed twice', !redeemCode(R, FULL).ok)
+check('the second attempt granted nothing', getBalance(R) === 0)
+
+// Codes are typed off a screen, so case and the dashes people add for
+// legibility are both discarded before the lookup.
+const H = 'half-redeemer'
+check('a code matches case-insensitively and ignores dashes', redeemCode(H, ` ${HALF.toLowerCase()} `.replace(/(.{4})/, '$1-')).ok)
+check('half-coverage funds half the items', getBalance(H) === cheapestHalf)
+
+// Topping UP rather than adding: coins already earned count toward what the
+// code covers, so a code can never be stacked on a full wallet.
+const T = 'topped-up'
+recordGameEnded({
+  roomCode: 'TOPU',
+  gameType: 'spades',
+  gameName: 'Spades',
+  standings: [s(T, 500), s('u2', 400), s('u3', 300)],
+})
+check('the top-up player starts with a placement award', getBalance(T) === FIRST)
+const topped = redeemCode(T, FULL)
+check('the code redeems', topped.ok)
+check('it granted only the shortfall', topped.ok && topped.granted === wholeShop - FIRST)
+check('leaving exactly the coverage, not more', getBalance(T) === wholeShop)
+
+// Burning a code for nothing would be the worst outcome for a player who
+// happened to be rich, so it stays unredeemed.
+const RICH = 'rich'
+check('the full code redeems for a fresh wallet', redeemCode(RICH, FULL).ok)
+check('a wallet that already covers the half code is refused it', !redeemCode(RICH, HALF).ok)
+check('and the refusal granted nothing', getBalance(RICH) === wholeShop)
+// The refusal must leave the code UNREDEEMED, or a player who happened to be
+// rich when they typed it loses it for nothing.
+check('spending down and trying again works', SHOP_ITEMS.every((item) => buyItem(RICH, item.id).ok))
+check('the once-rich wallet is broke now', getBalance(RICH) === 0)
+// Every item is owned now, so there is nothing left to cover -- which is its
+// own refusal, and still not a burn.
+check('a fully-stocked wallet has nothing left to cover', coverageCost(RICH, 0.5) === 0)
+check('so the half code is still refused, not spent', !redeemCode(RICH, HALF).ok)
 
 fs.rmSync(dir, { recursive: true, force: true })
 

@@ -73,8 +73,8 @@ export function Join({ connected, error, onJoin }: Props) {
   const isSpades = game === 'spades'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
-  const { account } = useAuth()
-  const owned = account?.owned ?? []
+  const { wallet } = useAuth()
+  const owned = wallet?.owned ?? []
 
   // A shared link like /ABCD drops you straight into the join form.
   useEffect(() => {

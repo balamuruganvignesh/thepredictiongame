@@ -18,8 +18,8 @@ export function EmoteBar({ onEmote }: { onEmote: (id: string) => void }) {
   // Bought reactions only show up for the people who bought them. The server
   // re-checks this in Room.emote -- hiding the button here just avoids
   // offering one that would be silently dropped.
-  const { account } = useAuth()
-  const emotes = availableEmotes(account?.owned ?? [])
+  const { wallet } = useAuth()
+  const emotes = availableEmotes(wallet?.owned ?? [])
 
   return (
     <div className="emotes">

@@ -22,6 +22,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { DEFAULT_DECK, deckArt, deckById, type DeckArt } from '@shared/decks'
 import type { ShopKind } from '@shared/shop'
 import { useAuth } from './auth'
+import { walletPlayerId } from './socket'
 
 const STORAGE_KEY = 'deckSkin'
 
@@ -36,20 +37,21 @@ const DeckStyleContext = createContext<{
 } | null>(null)
 
 export function DeckStyleProvider({ children }: { children: ReactNode }) {
-  const { account } = useAuth()
+  // The WALLET, not the account -- see the same swap in theme.tsx.
+  const { wallet } = useAuth()
   const [deck, setDeckState] = useState<string>(storedDeck)
 
   // The server is the source of truth once it has spoken -- a deck bought on
   // a phone should already be equipped here without re-picking it.
   useEffect(() => {
-    if (!account) return
-    const next = account.equipped.deck ?? DEFAULT_DECK
+    if (!wallet) return
+    const next = wallet.equipped.deck ?? DEFAULT_DECK
     localStorage.setItem(STORAGE_KEY, next)
     setDeckState(next)
-  }, [account])
+  }, [wallet])
 
   const skin = deckById(deck)
-  const owned = !skin || !skin.premium || (account?.owned.includes(deck) ?? false)
+  const owned = !skin || !skin.premium || (wallet?.owned.includes(deck) ?? false)
   const active = owned ? deck : DEFAULT_DECK
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function DeckStyleProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({
         kind: 'deck' satisfies ShopKind,
         itemId: next === DEFAULT_DECK ? null : next,
+        playerId: walletPlayerId(),
       }),
     }).catch(() => {
       // Signed out, or offline. The local preference still applied, which is

@@ -4,12 +4,17 @@
 // accounts.ts's merge step) the whole wallet comes with them. Signing in is a
 // reward, not a prerequisite.
 //
-// Buying is the one thing that DOES require an account, because there is
-// nowhere durable to put a purchase made by a browser that might clear its
-// storage tomorrow -- that check lives in the route, not here.
+// Spending does NOT require an account either. An anonymous browser spends
+// against the playerId it already keeps in localStorage -- the same id that
+// earned the coins, holds the seat and carries the chaos role history -- and
+// signing in later adopts that id, wallet and wardrobe intact. The risk that
+// buys is: an anonymous wallet lives and dies with one browser's storage.
+// That's the player's to accept, and it keeps signing in a reward rather than
+// a toll gate on coins they already earned.
 
 import { GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
-import { shopItemById, type Equipped } from '@shared/shop'
+import { shopItemById, SHOP_ITEMS, type Equipped } from '@shared/shop'
+import { normalizeCode, redeemCodeByName } from '../codes'
 import { db } from './index'
 import { log } from '../logger'
 
@@ -197,3 +202,74 @@ export function equipItem(
   }
   return { ok: true, equipped: next }
 }
+
+// ---- Redeem codes ------------------------------------------------------------
+//
+// A code is a coin GRANT, never an item grant, and that is deliberate: coins
+// go through the same ledger and the same buyItem transaction every other
+// purchase does, so a redeemed player owns things by buying them and there is
+// exactly one code path that can put an item in a wardrobe.
+
+const selectRedeemed = db.prepare(`SELECT code FROM redeemed_codes WHERE player_id = ? AND code = ?`)
+const insertRedeemed = db.prepare(`
+  INSERT INTO redeemed_codes (player_id, code, coins, redeemed_at)
+  VALUES (@playerId, @code, @coins, @now)
+`)
+
+/**
+ * What it costs to buy the given FRACTION of the items this player doesn't
+ * already own -- the cheapest ones first, so "half the shop" means half the
+ * items rather than half the money (they are not the same number, and the
+ * item count is the promise a code makes).
+ *
+ * Sized against what's UNOWNED so a code is worth the same to a new player
+ * and to one who has already bought a theme, and computed off the live
+ * catalogue so it stays honest when prices move or items are added.
+ */
+export function coverageCost(playerId: string, fraction: number): number {
+  const owned = new Set(getOwned(playerId))
+  const prices = SHOP_ITEMS.filter((item) => !owned.has(item.id))
+    .map((item) => item.price)
+    .sort((a, b) => a - b)
+  const count = Math.ceil(prices.length * fraction)
+  return prices.slice(0, count).reduce((sum, price) => sum + price, 0)
+}
+
+export type RedeemResult =
+  | { ok: true; granted: number; balance: number }
+  | { ok: false; error: string }
+
+/**
+ * Tops the wallet UP to what the code covers rather than adding a flat sum.
+ * Two reasons: a code promises "enough to buy X", which is a target and not
+ * an amount; and coins already earned then count toward it, so nobody can
+ * stack a code on top of a full wallet and walk away with double the shop.
+ */
+export const redeemCode = db.transaction(
+  (playerId: string, rawCode: string): RedeemResult => {
+    const entry = redeemCodeByName(rawCode)
+    if (!entry) return { ok: false, error: 'That code is not valid.' }
+
+    const code = normalizeCode(entry.code)
+    if (selectRedeemed.get(playerId, code)) {
+      return { ok: false, error: "You've already redeemed that code." }
+    }
+
+    const balance = getBalance(playerId)
+    const target = coverageCost(playerId, entry.coverage)
+    const granted = Math.max(0, target - balance)
+    if (granted === 0) {
+      // Burning the code for nothing would be the worst possible outcome for
+      // a player who happened to be rich when they typed it, so it stays
+      // unredeemed and usable later.
+      return { ok: false, error: `You already have enough coins for ${entry.label}.` }
+    }
+
+    const now = Date.now()
+    insertLedger.run({ playerId, delta: granted, reason: `code:${code}`, gameResultId: null, now })
+    syncAccountCoins.run({ playerId })
+    insertRedeemed.run({ playerId, code, coins: granted, now })
+
+    return { ok: true, granted, balance: balance + granted }
+  },
+)

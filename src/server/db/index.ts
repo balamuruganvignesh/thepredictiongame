@@ -113,6 +113,19 @@ db.exec(`
     theme      TEXT,
     cardback   TEXT
   );
+
+  -- One row per code a player has redeemed. This table IS the once-per-player
+  -- rule: the primary key is what makes a second redemption a constraint
+  -- violation rather than a second grant, so it can't be raced by two tabs.
+  -- The coins granted are recorded here as well as in the ledger purely so a
+  -- redemption is legible without joining the two.
+  CREATE TABLE IF NOT EXISTS redeemed_codes (
+    player_id   TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    coins       INTEGER NOT NULL,
+    redeemed_at INTEGER NOT NULL,
+    PRIMARY KEY (player_id, code)
+  );
 `)
 
 // ---- Additive column migrations ---------------------------------------------

@@ -12,9 +12,9 @@ import { useDeckStyle } from '../deckStyle'
 
 export function DeckToggleButton({ className = '' }: { className?: string }) {
   const { deck, setDeck } = useDeckStyle()
-  const { account } = useAuth()
+  const { wallet } = useAuth()
 
-  const decks = availableDecks(account?.owned ?? [])
+  const decks = availableDecks(wallet?.owned ?? [])
   const index = decks.findIndex((skin) => skin.id === deck)
   const next = decks[(index + 1) % decks.length]
   const current = decks[index === -1 ? 0 : index]

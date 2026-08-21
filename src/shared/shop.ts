@@ -271,6 +271,19 @@ export type Equipped = {
   avatar: string | null
 }
 
+/**
+ * A wallet and wardrobe, with no account attached. Anonymous players spend
+ * too -- the coins were earned by the playerId in that browser's localStorage,
+ * so that id is what the shop reads and writes. `MeAccount` below is this plus
+ * who is signed in.
+ */
+export type Wallet = {
+  playerId: string
+  coins: number
+  owned: string[]
+  equipped: Equipped
+}
+
 export type MeAccount = {
   playerId: string
   name: string | null

@@ -3288,6 +3288,44 @@ button.seat:hover {
   line-height: 1.45;
 }
 
+.shop__redeem {
+  padding: 16px 18px 18px;
+  margin-bottom: 18px;
+}
+
+.shop__redeem h2 {
+  font-family: var(--font-heading);
+  color: var(--accent);
+  margin: 0 0 4px;
+}
+
+.shop__redeem-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.shop__redeem-input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--sunken);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.shop__redeem-status {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .shop__section {
   padding: 16px 18px 20px;
   margin-bottom: 18px;

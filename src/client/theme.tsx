@@ -17,6 +17,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ShopKind } from '@shared/shop'
 import { useAuth } from './auth'
+import { walletPlayerId } from './socket'
 
 /** '' is the built-in look, which every player has without buying anything. */
 type Slots = { theme: string; cardback: string }
@@ -35,23 +36,25 @@ const ThemeContext = createContext<{
 } | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { account } = useAuth()
+  // The WALLET, not the account: an anonymous player buys and equips too, so
+  // ownership can't be gated on being signed in.
+  const { wallet } = useAuth()
   const [slots, setSlots] = useState<Slots>(stored)
 
   // The server is the source of truth once it has spoken -- something bought
   // on a phone should already be equipped here without re-picking it.
   useEffect(() => {
-    if (!account) return
+    if (!wallet) return
     const next: Slots = {
-      theme: account.equipped.theme ?? '',
-      cardback: account.equipped.cardback ?? '',
+      theme: wallet.equipped.theme ?? '',
+      cardback: wallet.equipped.cardback ?? '',
     }
     localStorage.setItem(STORAGE_KEYS.theme, next.theme)
     localStorage.setItem(STORAGE_KEYS.cardback, next.cardback)
     setSlots(next)
-  }, [account])
+  }, [wallet])
 
-  const ownsOrDefault = (id: string) => !id || (account?.owned.includes(id) ?? false)
+  const ownsOrDefault = (id: string) => !id || (wallet?.owned.includes(id) ?? false)
   const active: Slots = {
     theme: ownsOrDefault(slots.theme) ? slots.theme : '',
     cardback: ownsOrDefault(slots.cardback) ? slots.cardback : '',
@@ -71,7 +74,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     void fetch('/api/shop/equip', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: slot satisfies ShopKind, itemId: itemId || null }),
+      // Anonymous players equip too, against the id in their own storage;
+      // a signed-in caller's id comes from the session cookie server-side.
+      body: JSON.stringify({
+        kind: slot satisfies ShopKind,
+        itemId: itemId || null,
+        playerId: walletPlayerId(),
+      }),
     }).catch(() => {
       // Signed out, or offline. The local preference still applied, which is
       // the part the player can see -- there's nothing useful to say here.

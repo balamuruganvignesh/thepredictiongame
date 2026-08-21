@@ -15,14 +15,14 @@ import { rememberAvatar, storedAvatar } from '../socket'
 import { Avatar } from './Avatar'
 
 export function AvatarPicker({ name }: { name: string }) {
-  const { account } = useAuth()
+  const { account, wallet } = useAuth()
   const [open, setOpen] = useState(false)
   const [chosen, setChosen] = useState<string>(() => storedAvatar() ?? '')
 
   // The server is authoritative once it has spoken, so a signed-in player
   // sees what their account actually carries rather than this browser's copy.
   const current = account?.equipped.avatar ?? chosen
-  const owned = account?.owned ?? []
+  const owned = wallet?.owned ?? []
   const options = availableAvatars(owned)
   const hasLocked = AVATARS.some((preset) => preset.premium && !owned.includes(preset.id))
 

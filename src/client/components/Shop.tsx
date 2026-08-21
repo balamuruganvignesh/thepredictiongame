@@ -8,12 +8,13 @@
 // nothing here can fail halfway or need a refund.
 
 import { useEffect, useState } from 'react'
-import { PLACEMENT_COINS, type MeAccount, type ShopItem, type ShopKind } from '@shared/shop'
+import { PLACEMENT_COINS, type MeAccount, type ShopItem, type ShopKind, type Wallet } from '@shared/shop'
 import { emoteById } from '@shared/emotes'
 import { avatarById } from '@shared/avatars'
 import { powerupById } from '@shared/powerups'
 import { DEFAULT_DECK } from '@shared/decks'
 import { loginHref, useAuth } from '../auth'
+import { walletPlayerId } from '../socket'
 import { useDeckStyle } from '../deckStyle'
 import { useCosmetics } from '../theme'
 
@@ -64,28 +65,44 @@ export function Shop() {
   const { deck: equippedDeck, setDeck } = useDeckStyle()
   const [items, setItems] = useState<ShopItem[] | null>(null)
   const [charges, setCharges] = useState<Record<string, number>>({})
+  const [wallet, setWallet] = useState<Wallet | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [codeStatus, setCodeStatus] = useState<string | null>(null)
+  const [redeeming, setRedeeming] = useState(false)
+
+  type ShopResponse = {
+    items: ShopItem[]
+    charges?: Record<string, number>
+    wallet: Wallet | null
+    account: MeAccount | null
+  }
+
+  // The playerId rides along on every shop call: a signed-out browser spends
+  // against the id in its own localStorage, which is the id that earned the
+  // coins. A signed-in caller's id comes from the session cookie server-side
+  // and this one is ignored.
+  const playerId = walletPlayerId()
+
+  const loadShop = async () => {
+    const body = (await fetch(
+      `/api/shop?playerId=${encodeURIComponent(playerId)}`,
+    ).then((r) => r.json())) as ShopResponse
+    setItems(body.items)
+    setCharges(body.charges ?? {})
+    setWallet(body.wallet)
+  }
 
   useEffect(() => {
-    fetch('/api/shop')
-      .then(
-        (r) =>
-          r.json() as Promise<{
-            items: ShopItem[]
-            charges?: Record<string, number>
-            account: MeAccount | null
-          }>,
-      )
-      .then((body) => {
-        setItems(body.items)
-        setCharges(body.charges ?? {})
-      })
-      .catch(() => setError("Couldn't reach the shop."))
+    void loadShop().catch(() => setError("Couldn't reach the shop."))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const owned = account?.owned ?? []
-  const coins = account?.coins ?? 0
+  // The wallet is the authority for both, since it exists for anonymous
+  // players too; the account only adds who is signed in.
+  const owned = wallet?.owned ?? account?.owned ?? []
+  const coins = wallet?.coins ?? account?.coins ?? 0
 
   const buy = async (item: ShopItem) => {
     setBusy(item.id)
@@ -94,19 +111,43 @@ export function Shop() {
       const response = await fetch('/api/shop/buy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId: item.id }),
+        body: JSON.stringify({ itemId: item.id, playerId }),
       })
       const body = (await response.json()) as { ok: boolean; error?: string }
       if (!body.ok) setError(body.error ?? 'That purchase did not go through.')
       else {
         await refresh()
-        const fresh = await fetch('/api/shop').then((r) => r.json())
-        setCharges(fresh.charges ?? {})
+        await loadShop()
       }
     } catch {
       setError("Couldn't reach the shop.")
     } finally {
       setBusy(null)
+    }
+  }
+
+  const redeem = async () => {
+    if (!code.trim()) return
+    setRedeeming(true)
+    setCodeStatus(null)
+    try {
+      const response = await fetch('/api/shop/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim(), playerId }),
+      })
+      const body = (await response.json()) as { ok: boolean; granted?: number; error?: string }
+      if (!body.ok) setCodeStatus(body.error ?? 'That code did not work.')
+      else {
+        setCodeStatus(`Code accepted — ${body.granted} coins added.`)
+        setCode('')
+        await refresh()
+        await loadShop()
+      }
+    } catch {
+      setCodeStatus("Couldn't reach the shop.")
+    } finally {
+      setRedeeming(false)
     }
   }
 
@@ -120,26 +161,46 @@ export function Shop() {
       </header>
 
       <div className="note shop__wallet">
-        {account ? (
-          <>
-            <span className="shop__coins">🪙 {coins}</span>
-            <span className="shop__wallet-note">
-              Finish in the top three of a game to earn {PLACEMENT_COINS.join(' / ')} coins.
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="shop__wallet-note">
-              You can earn coins without an account — placing in the top three banks them against this
-              browser, and they follow you the first time you sign in. Spending them needs an account.
-            </span>
-            {loginAvailable && (
-              <a className="button button--accent" href={loginHref()}>
-                Sign in with Google
-              </a>
-            )}
-          </>
+        <span className="shop__coins">🪙 {coins}</span>
+        <span className="shop__wallet-note">
+          Finish in the top three of a game to earn {PLACEMENT_COINS.join(' / ')} coins.
+          {!account &&
+            ' Coins and purchases are kept against this browser — sign in and they follow you to any device.'}
+        </span>
+        {!account && loginAvailable && (
+          <a className="button button--ghost" href={loginHref()}>
+            Sign in with Google
+          </a>
         )}
+      </div>
+
+      <div className="note shop__redeem">
+        <h2>Got a code?</h2>
+        <p className="shop__section-blurb">
+          Codes are handed out, not sold. Each one works once per player and tops your wallet up to
+          what it covers — coins you already have count toward it.
+        </p>
+        <form
+          className="shop__redeem-row"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void redeem()
+          }}
+        >
+          <input
+            className="shop__redeem-input"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="ENTER CODE"
+            aria-label="Redeem code"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button type="submit" className="button button--accent" disabled={redeeming || !code.trim()}>
+            {redeeming ? 'Checking…' : 'Redeem'}
+          </button>
+        </form>
+        {codeStatus && <p className="shop__redeem-status">{codeStatus}</p>}
       </div>
 
       {error && <p className="join__status join__status--error">{error}</p>}
@@ -195,7 +256,7 @@ export function Shop() {
                         <button
                           type="button"
                           className="button button--accent"
-                          disabled={!account || busy === item.id || coins < item.price}
+                          disabled={busy === item.id || coins < item.price}
                           onClick={() => void buy(item)}
                           title={`You hold ${charges[item.id] ?? 0}`}
                         >
@@ -217,9 +278,8 @@ export function Shop() {
                         <button
                           type="button"
                           className="button button--accent"
-                          disabled={!account || busy === item.id || coins < item.price}
+                          disabled={busy === item.id || coins < item.price}
                           onClick={() => void buy(item)}
-                          title={account ? undefined : 'Sign in to spend coins'}
                         >
                           🪙 {item.price}
                         </button>

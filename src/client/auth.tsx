@@ -10,11 +10,17 @@
 // second device lands back in the same chair with no new machinery.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { MeAccount } from '@shared/shop'
-import { rememberPlayerId, storedPlayerId } from './socket'
+import type { MeAccount, Wallet } from '@shared/shop'
+import { rememberPlayerId, storedPlayerId, walletPlayerId } from './socket'
 
 type AuthValue = {
   account: MeAccount | null
+  /**
+   * What this player owns and has equipped, signed in or not. Anonymous
+   * players buy and equip too, so every cosmetic gate reads THIS rather than
+   * `account` -- which now only answers "who is signed in".
+   */
+  wallet: Wallet | null
   /** False when the server has no Google credentials -- hide the button. */
   loginAvailable: boolean
   /** Null until the first /api/me settles, so the UI can avoid flashing. */
@@ -30,15 +36,24 @@ export const loginHref = () => `/auth/google?anon=${encodeURIComponent(storedPla
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<MeAccount | null>(null)
+  const [wallet, setWallet] = useState<Wallet | null>(null)
   const [loginAvailable, setLoginAvailable] = useState(false)
   const [ready, setReady] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch('/api/me')
-      const body = (await response.json()) as { account: MeAccount | null; loginAvailable: boolean }
+      // The anonymous id is minted here if this browser has never had one:
+      // a wallet has to be keyed by something durable to be spendable, and
+      // /shop is reachable before anyone has ever sat at a table.
+      const response = await fetch(`/api/me?playerId=${encodeURIComponent(walletPlayerId())}`)
+      const body = (await response.json()) as {
+        account: MeAccount | null
+        wallet: Wallet | null
+        loginAvailable: boolean
+      }
       setLoginAvailable(body.loginAvailable)
       setAccount(body.account)
+      setWallet(body.wallet)
 
       // Adopt the account's canonical id. Everything durable in this app --
       // seat re-attach, chaos role history, stats, the wallet -- keys off
@@ -69,8 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ account, loginAvailable, ready, refresh, logout }),
-    [account, loginAvailable, ready, refresh, logout],
+    () => ({ account, wallet, loginAvailable, ready, refresh, logout }),
+    [account, wallet, loginAvailable, ready, refresh, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
