@@ -2686,8 +2686,10 @@ button.seat:hover {
    screen, which is the only threat an in-person score sheet has. Blurring the
    glyph rather than swapping in dots keeps the column widths from jumping
    when a round's bids all land and it reveals. */
+/* Specific enough to beat .irl-score.is-good/.is-bad, which come later. */
 .irl-field.is-masked input,
-.is-masked {
+.irl-table .irl-score.is-masked,
+.irl-table td.is-masked {
   color: transparent;
   text-shadow: 0 0 7px var(--text-muted);
 }

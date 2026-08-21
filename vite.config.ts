@@ -32,7 +32,14 @@ export default defineConfig({
       // The Google OAuth redirect lands on /auth/google/callback, which is a
       // server route, not a client one -- without this it hits the SPA
       // fallback and sign-in silently does nothing in dev.
-      '/auth': {
+      //
+      // The trailing slash is load-bearing: a proxy key is a PREFIX match, so
+      // a bare '/auth' also swallows src/client/auth.tsx, which the dev server
+      // serves at /auth.tsx. That request came back as the Express 404 page
+      // instead of a module, and the whole app rendered blank in dev (prod is
+      // unaffected -- the module is bundled by then). Every real server route
+      // here is /auth/<something>.
+      '/auth/': {
         target: 'http://localhost:3001',
       },
     },
