@@ -84,8 +84,12 @@
 
 /* The classic deck's photographed cards are narrower than the pixel deck's
    sprites -- keep the wrapper's aspect true to whichever is active instead
-   of stretching one to fit the other's ratio. */
-:root[data-deck='classic'] {
+   of stretching one to fit the other's ratio. One rule per skin that draws
+   from the classic art folder (see @shared/decks' `art`), since the premium
+   skins are filters over those same sprites and share their ratio. */
+:root[data-deck='classic'],
+:root[data-deck='deck-negative'],
+:root[data-deck='deck-vintage'] {
   --card-aspect: 1.5282;
 }
 

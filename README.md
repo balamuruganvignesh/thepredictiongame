@@ -162,9 +162,16 @@ Finish in the **top three** of any game and you earn coins — 50 for first, 30 
 second, 15 for third. Ties share the better placing. Abandoned games (a restart
 vote) pay nothing, and neither do two-player tables.
 
-Coins buy things in the **shop**: table themes, card backs and profile logos
-(all of which change how things look), extra reactions, and **powerups**.
-Nothing costs real money — coins are earned by playing.
+Coins buy things in the **shop**: table themes, **card decks**, card backs and
+profile logos (all of which change how things look), extra reactions, and
+**powerups**. Nothing costs real money — coins are earned by playing.
+
+The **classic deck is free and the default** — you never have to buy your way
+into readable cards. The shop adds three more: the pixel-art deck, a
+**Negative** deck (the classic one inverted, white ink on black, red suits
+still red) and a **Vintage** deck (the same cards, tea-stained). Pick yours on
+the landing screen or from the settings menu mid-game; it's your own screen
+only.
 
 **Powerups are the one thing that affects play**, so they're gated twice: the
 host has to switch them on for the table, and each use spends a charge you

@@ -10,6 +10,7 @@ import { TableBrowser } from './TableBrowser'
 import { storedName } from '../socket'
 import { installAvailable, onInstallAvailabilityChange, promptInstall } from '../pwa'
 import { useDeckStyle } from '../deckStyle'
+import { DECKS } from '@shared/decks'
 import { loginHref, useAuth } from '../auth'
 import { AvatarPicker } from './AvatarPicker'
 
@@ -72,6 +73,8 @@ export function Join({ connected, error, onJoin }: Props) {
   const isSpades = game === 'spades'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
+  const { account } = useAuth()
+  const owned = account?.owned ?? []
 
   // A shared link like /ABCD drops you straight into the join form.
   useEffect(() => {
@@ -108,25 +111,33 @@ export function Join({ connected, error, onJoin }: Props) {
           <DeckStack />
         </div>
 
+        {/* Every skin is shown, locked ones included -- a padlock that leads
+            to the shop is the whole point of a paywalled cosmetic, and the
+            classic deck being first and free means nobody is ever looking at
+            a row they can't use. aria-disabled rather than disabled, for the
+            same reason the forbidden bid chip uses it: "you don't own this
+            yet" is information a keyboard user needs to land on. */}
         <div className="segmented segmented--small" role="tablist" aria-label="Card deck">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={deck === 'pixel'}
-            className={`segmented__option${deck === 'pixel' ? ' is-active' : ''}`}
-            onClick={() => setDeck('pixel')}
-          >
-            pixel deck
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={deck === 'classic'}
-            className={`segmented__option${deck === 'classic' ? ' is-active' : ''}`}
-            onClick={() => setDeck('classic')}
-          >
-            classic deck
-          </button>
+          {DECKS.map((skin) => {
+            const locked = skin.premium === true && !owned.includes(skin.id)
+            return (
+              <button
+                type="button"
+                role="tab"
+                key={skin.id}
+                aria-selected={deck === skin.id}
+                aria-disabled={locked || undefined}
+                className={`segmented__option${deck === skin.id ? ' is-active' : ''}${
+                  locked ? ' is-locked' : ''
+                }`}
+                onClick={() => (locked ? (window.location.href = '/shop') : setDeck(skin.id))}
+                title={locked ? `${skin.blurb} Buy it in the shop.` : skin.blurb}
+              >
+                {locked ? '🔒 ' : ''}
+                {skin.label.toLowerCase()}
+              </button>
+            )
+          })}
         </div>
 
         {/* Joining by code: the table already has a game, so this screen
