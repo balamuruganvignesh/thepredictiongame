@@ -3,9 +3,12 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { A11yProvider } from './a11ySettings'
 import { DeckStyleProvider } from './deckStyle'
+import { registerServiceWorker } from './pwa'
 import './styles/tokens.css'
 import './styles/app.css'
 import './styles/cards.css'
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

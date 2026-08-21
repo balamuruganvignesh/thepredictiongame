@@ -7,6 +7,7 @@ import { BlackjackConfig, Config, GolfConfig, HeartsConfig, SpadesConfig } from 
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
 import { storedName } from '../socket'
+import { installAvailable, onInstallAvailabilityChange, promptInstall } from '../pwa'
 import { useDeckStyle } from '../deckStyle'
 
 type Props = {
@@ -16,6 +17,13 @@ type Props = {
 }
 
 export function Join({ connected, error, onJoin }: Props) {
+  // Only offered when the browser has actually said the app is installable
+  // (see ../pwa.ts) -- a permanently-visible "install" button that does
+  // nothing on iOS, or on a browser that already installed it, is worse than
+  // no button.
+  const [canInstall, setCanInstall] = useState(installAvailable)
+  useEffect(() => onInstallAvailabilityChange(setCanInstall), [])
+
   const [name, setName] = useState(storedName)
   const [code, setCode] = useState('')
   const [mode, setMode] = useState<'create' | 'join'>('create')
@@ -255,6 +263,15 @@ export function Join({ connected, error, onJoin }: Props) {
         <a className="join__irl-link" href="/leaderboard">
           🏆 See the leaderboard →
         </a>
+        {canInstall && (
+          <button
+            type="button"
+            className="join__irl-link join__install"
+            onClick={() => void promptInstall()}
+          >
+            📲 Install it to your home screen →
+          </button>
+        )}
       </form>
     </div>
   )

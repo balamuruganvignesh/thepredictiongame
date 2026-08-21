@@ -2805,3 +2805,76 @@ button.seat:hover {
   gap: 10px;
   margin: 16px 18px 20px;
 }
+
+/* ---- Connection status ------------------------------------------------------
+ *
+ * Replaces the old one-word "reconnecting…" toast. Bottom-left, out of the
+ * dock's corner, and it stays put rather than fading -- a dropped connection
+ * isn't a transient notification, it's a state you're in until it resolves.
+ */
+
+.connection {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--panel) 92%, var(--danger));
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+  font-family: var(--font-heading);
+  font-size: 0.84rem;
+}
+
+.connection__dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: connection-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes connection-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.connection__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.connection__sub {
+  color: var(--text-faint);
+  font-size: 0.74rem;
+}
+
+.connection__retry {
+  padding: 5px 9px;
+  border-radius: var(--radius-button);
+  background: var(--panel-header);
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  transition: background var(--t-quick) ease-out;
+}
+
+.connection__retry:hover {
+  background: color-mix(in srgb, var(--panel-header) 65%, var(--stroke));
+}
+
+/* The install offer, styled as one of the landing screen's footer links --
+   it only appears when the browser says the app is actually installable. */
+.join__install {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font: inherit;
+}

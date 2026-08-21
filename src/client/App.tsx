@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { BackgroundFX } from './components/BackgroundFX'
+import { ConnectionStatus } from './components/ConnectionStatus'
 import { Feed } from './components/Feed'
 import { Join } from './components/Join'
 import { Lobby } from './components/Lobby'
@@ -74,7 +75,7 @@ export default function App() {
       {store.toast && <div className="toast">{store.toast}</div>}
 
       {!store.connected && store.view !== 'join' && (
-        <div className="toast toast--warn">reconnecting…</div>
+        <ConnectionStatus inGame={store.view === 'game' || store.view === 'gameover'} />
       )}
     </>
   )
