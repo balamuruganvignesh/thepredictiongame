@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { playBidLock } from '../sound'
+import { useRovingFocus } from '../useRovingFocus'
 import { trumpGlyph } from '../useGame'
 
 export type BidRow = { id: string; name: string; bid: number | null; isCurrentTurn: boolean }
@@ -42,6 +43,10 @@ export function BiddingModal({
 }: Props) {
   const secondsLeft = useCountdown(doubleDeadline)
   const windowOpen = !doubled && doubleDeadline != null && secondsLeft > 0
+  // One tab stop for the whole chip row; arrows move along it. The forbidden
+  // chip stays IN the row (aria-disabled, not disabled) -- "you may not bid
+  // this number" is information a keyboard user needs to land on, not skip.
+  const chips = useRovingFocus(cardsDealt + 1, '.bid-chip')
 
   // The chip you tapped gets a beat to punch in and glow before this whole
   // section swaps to "waiting for the others" -- without it, a fast server
@@ -89,7 +94,13 @@ export function BiddingModal({
         </div>
 
         {picking ? (
-          <div className="bid-chips">
+          <div
+            className="bid-chips"
+            ref={chips.containerRef}
+            role="group"
+            aria-label="Choose your bid"
+            onKeyDown={chips.onKeyDown}
+          >
             {Array.from({ length: cardsDealt + 1 }, (_, n) => {
               // The last bidder can't make the bids sum to the number of tricks.
               const forbidden = isLastBidder && sumSoFar + n === cardsDealt
@@ -101,8 +112,9 @@ export function BiddingModal({
                   className={`bid-chip${forbidden ? ' is-forbidden' : ''}${
                     selected ? ' bid-chip--selected' : ''
                   }${dimmed ? ' bid-chip--dimmed' : ''}`}
-                  onClick={() => !forbidden && handleBid(n)}
-                  disabled={forbidden || confirming != null}
+                  onClick={() => !forbidden && confirming == null && handleBid(n)}
+                  {...chips.itemProps(n)}
+                  aria-disabled={forbidden || confirming != null}
                   aria-label={forbidden ? `${n} — not allowed this round` : `Bid ${n}`}
                 >
                   {n}

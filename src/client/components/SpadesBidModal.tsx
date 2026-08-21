@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react'
 import { playBidLock } from '../sound'
+import { useRovingFocus } from '../useRovingFocus'
 import type { SpadesBid } from '@shared/spadesRules'
 
 export type SpadesBidRow = { id: string; name: string; team: 0 | 1; bid: SpadesBid | null; isCurrentTurn: boolean }
@@ -22,6 +23,10 @@ type Props = {
 
 export function SpadesBidModal({ isMyTurn, hasBid, myBid, rows, currentTurnName, bags, onBid }: Props) {
   const [confirming, setConfirming] = useState<SpadesBid | null>(null)
+  // 14 chips (0-13) is far too many individual tab stops; one stop, arrows
+  // inside. Nil stays its own button below, outside the row, because it's a
+  // different commitment rather than the bottom of the numeric range.
+  const chips = useRovingFocus(14, '.bid-chip')
 
   useEffect(() => {
     if (confirming == null) return
@@ -64,7 +69,13 @@ export function SpadesBidModal({ isMyTurn, hasBid, myBid, rows, currentTurnName,
 
         {picking ? (
           <>
-            <div className="bid-chips">
+            <div
+              className="bid-chips"
+              ref={chips.containerRef}
+              role="group"
+              aria-label="Choose your bid"
+              onKeyDown={chips.onKeyDown}
+            >
               {Array.from({ length: 14 }, (_, n) => {
                 const selected = confirming === n
                 const dimmed = confirming != null && !selected
@@ -74,8 +85,9 @@ export function SpadesBidModal({ isMyTurn, hasBid, myBid, rows, currentTurnName,
                     className={`bid-chip${selected ? ' bid-chip--selected' : ''}${
                       dimmed ? ' bid-chip--dimmed' : ''
                     }`}
-                    onClick={() => handleBid(n)}
-                    disabled={confirming != null}
+                    onClick={() => confirming == null && handleBid(n)}
+                    {...chips.itemProps(n)}
+                    aria-disabled={confirming != null}
                     aria-label={`Bid ${n}`}
                   >
                     {n}

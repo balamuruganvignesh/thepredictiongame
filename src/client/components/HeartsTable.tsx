@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { isLegalHeartsPlay } from '@shared/heartsRules'
 import { ChatPanel } from './ChatPanel'
+import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { HeartsScoresheet } from './HeartsScoresheet'
@@ -13,6 +14,7 @@ import { HeartsTopBar } from './HeartsTopBar'
 import { PassModal, PassWaiting } from './PassModal'
 import { SettingsMenu } from './SettingsMenu'
 import { TrickArea } from './TrickArea'
+import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -21,17 +23,7 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const [chatOpen, setChatOpen] = useState(false)
 
-  // Tab toggles the score sheet, as on the other table.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      if (event.target instanceof HTMLInputElement) return
-      event.preventDefault()
-      setScoresOpen((open) => !open)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
   useEffect(() => {
     if (chatOpen) actions.markChatRead()
@@ -60,6 +52,8 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
 
   return (
     <div className="table">
+      <GameAnnouncer store={store} />
+
       <HeartsTopBar
         roundNumber={store.roundNumber}
         trickNumber={store.trickNumber}

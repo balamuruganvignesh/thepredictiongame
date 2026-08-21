@@ -8,10 +8,12 @@
 import { useEffect, useState } from 'react'
 import type { BlackjackHandPublic } from '@shared/protocol'
 import { ChatPanel } from './ChatPanel'
+import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { BlackjackScoresheet } from './BlackjackScoresheet'
 import { CardBack, PlayingCard } from './PlayingCard'
 import { SettingsMenu } from './SettingsMenu'
+import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -28,16 +30,7 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const [chatOpen, setChatOpen] = useState(false)
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      if (event.target instanceof HTMLInputElement) return
-      event.preventDefault()
-      setScoresOpen((open) => !open)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
   useEffect(() => {
     if (chatOpen) actions.markChatRead()
@@ -54,6 +47,8 @@ export function BlackjackTable({ store, actions }: { store: Store; actions: Game
 
   return (
     <div className="table">
+      <GameAnnouncer store={store} />
+
       <div className="topbar">
         <div className="topbar__info">
           <span className="topbar__trump" title="round">

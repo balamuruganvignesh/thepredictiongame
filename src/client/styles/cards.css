@@ -238,3 +238,64 @@
 .card-pop {
   animation: card-pop 280ms var(--ease-pop);
 }
+
+/* ---- Four-colour suit badge (accessibility) ---------------------------------
+ *
+ * Off by default; toggled in the settings menu (see ../a11ySettings.tsx).
+ * Both decks encode suit as red-vs-black only, which is exactly the
+ * distinction a colour-vision deficiency collapses, and the pixel deck draws
+ * its pips at 6px of source art on top of that. The badge adds back TWO
+ * independent cues -- a per-suit hue on the four-colour-deck convention, and
+ * the rank + glyph as actual text, which still works with no colour at all.
+ * Corner-anchored so it never covers the face's own index.
+ */
+.card__suit-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  padding: 0 calc(var(--card-w) * 0.05);
+  border-bottom-right-radius: var(--card-radius);
+  font-family: var(--font-body);
+  font-size: calc(var(--card-w) * 0.26);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
+  pointer-events: none;
+}
+
+.card__suit-badge--spades {
+  background: #1a1a1e;
+}
+
+.card__suit-badge--hearts {
+  background: #c82026;
+}
+
+.card__suit-badge--diamonds {
+  background: #2c6fd4;
+}
+
+.card__suit-badge--clubs {
+  background: #1f8a4c;
+}
+
+.card__suit-badge--joker {
+  background: var(--card-joker);
+}
+
+/* A card that can't be played is dimmed by a filter on .card, which would
+   take the badge down with it -- the badge is a legibility aid, so it stays
+   at full strength however the card underneath is being treated. */
+.card-button--muted .card__suit-badge {
+  filter: brightness(2.1) saturate(2.4);
+}
+
+/* ...except under an Illusion, where the whole point is that the holder
+   cannot read the card. The blackout panel sits at z-index 5; the badge would
+   otherwise sit on top of it and name the very card being concealed. */
+.card-button--illusion .card__suit-badge {
+  display: none;
+}

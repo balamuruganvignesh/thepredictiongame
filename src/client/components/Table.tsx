@@ -7,6 +7,7 @@ import type { Card } from '@shared/cards'
 import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
 import { EffectLayer } from './EffectLayer'
+import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
@@ -18,6 +19,7 @@ import { SettingsMenu } from './SettingsMenu'
 import { TopBar, type ChipData } from './TopBar'
 import { TrickArea } from './TrickArea'
 import { useEffectsEnabled } from '../effectsSettings'
+import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -31,18 +33,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
   const [roleOpen, setRoleOpen] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(0)
 
-  // Tab toggles the score sheet. Skipped while the caret is in a text field,
-  // so typing in chat doesn't flip panels.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      if (event.target instanceof HTMLInputElement) return
-      event.preventDefault()
-      setScoresOpen((open) => !open)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
   // Opening the chat clears the unread badge.
   useEffect(() => {
@@ -110,6 +101,8 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
 
   return (
     <div className="table">
+      <GameAnnouncer store={store} />
+
       <TopBar
         roundNumber={store.roundNumber}
         trickNumber={store.trickNumber}
@@ -184,6 +177,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
               hand={store.watchedSeat.hand}
               isMyTurn={false}
               leadSuit={store.leadSuit}
+              label={`${store.watchedSeat.name}'s hand`}
               onPlay={() => {}}
             />
           )}

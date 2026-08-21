@@ -122,12 +122,42 @@ input {
   outline-offset: 2px;
 }
 
+/* Reduced motion, from either direction.
+   The media query is the default and stays authoritative UNLESS the player
+   explicitly asked for full motion in the settings menu -- hence the
+   :not([data-motion='full']) guard, without which the !important below could
+   never be overridden by a preference set inside the app. The second block is
+   the same rules for someone who asked for reduced motion while their OS says
+   nothing. See ../a11ySettings.tsx; JS-driven animations (the Web Animations
+   API, which CSS can't reach) gate themselves on prefersReducedMotion(). */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-motion='full']) *,
+  :root:not([data-motion='full']) *::before,
+  :root:not([data-motion='full']) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Present to assistive tech, invisible on screen. The live region every table
+   narrates itself through (see components/GameAnnouncer.tsx) uses this. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

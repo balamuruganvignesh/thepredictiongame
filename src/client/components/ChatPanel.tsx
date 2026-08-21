@@ -42,7 +42,10 @@ export function ChatPanel({ messages, meId, onSend, onClose, raised = false }: P
         </button>
       </header>
 
-      <div className="chat__messages">
+      {/* role="log": new lines are appended to an ongoing record, which is
+          exactly what a log is -- and unlike aria-live on the whole panel it
+          doesn't re-read the entire backlog when one message lands. */}
+      <div className="chat__messages" role="log" aria-label="Messages" aria-live="polite">
         {messages.length === 0 && <p className="chat__empty">say something to the table.</p>}
         {messages.map((message) =>
           message.from == null ? (
@@ -69,7 +72,9 @@ export function ChatPanel({ messages, meId, onSend, onClose, raised = false }: P
           maxLength={MAX_CHAT_LENGTH}
           placeholder="message the table…"
           aria-label="Chat message"
-          // Tab toggles the score sheet globally; let it do nothing weird here.
+          // The score-sheet shortcut ignores keystrokes aimed at a text field
+          // anyway (see ../useScoresheetShortcut), but stopping propagation
+          // here keeps typing entirely local to the box regardless.
           onKeyDown={(e) => e.stopPropagation()}
         />
         <button className="button button--primary chat__send" type="submit" disabled={!draft.trim()}>

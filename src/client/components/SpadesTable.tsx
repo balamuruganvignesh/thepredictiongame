@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Card } from '@shared/cards'
 import { isLegalSpadesPlay } from '@shared/spadesRules'
 import { ChatPanel } from './ChatPanel'
+import { GameAnnouncer } from './GameAnnouncer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { SettingsMenu } from './SettingsMenu'
@@ -14,6 +15,7 @@ import { SpadesBidModal, type SpadesBidRow } from './SpadesBidModal'
 import { SpadesScoresheet } from './SpadesScoresheet'
 import { SpadesTopBar } from './SpadesTopBar'
 import { TrickArea } from './TrickArea'
+import { useScoresheetShortcut } from '../useScoresheetShortcut'
 import type { GameActions, Store } from '../useGame'
 
 const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
@@ -22,16 +24,7 @@ export function SpadesTable({ store, actions }: { store: Store; actions: GameAct
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const [chatOpen, setChatOpen] = useState(false)
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      if (event.target instanceof HTMLInputElement) return
-      event.preventDefault()
-      setScoresOpen((open) => !open)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
   useEffect(() => {
     if (chatOpen) actions.markChatRead()
@@ -63,6 +56,8 @@ export function SpadesTable({ store, actions }: { store: Store; actions: GameAct
 
   return (
     <div className="table">
+      <GameAnnouncer store={store} />
+
       <SpadesTopBar
         handNumber={store.roundNumber}
         trickNumber={store.trickNumber}

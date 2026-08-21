@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import type { RestartVote as RestartVoteState } from '@shared/protocol'
+import { ColorblindToggleButton, MotionToggleButton } from './A11yToggles'
 import { DeckToggleButton } from './DeckToggle'
 import { EffectsToggleButton } from './EffectsToggle'
 import { RestartVoteButton } from './RestartVote'
@@ -36,6 +37,8 @@ export function SettingsMenu({
           <DeckToggleButton className="settings__item" />
           <EffectsToggleButton className="settings__item" />
           <SoundToggleButton className="settings__item" />
+          <ColorblindToggleButton className="settings__item" />
+          <MotionToggleButton className="settings__item" />
           <button
             className="dock__button settings__item"
             onClick={() => {

@@ -1,10 +1,17 @@
 // The local player's hand along the bottom of the screen. Clicking a card
 // sends playCard -- the server is the final authority on legality, this is just
-// UX (illegal cards are veiled and unclickable, playable ones get a warm ring
+// UX (illegal cards are veiled and unplayable, playable ones get a warm ring
 // and lift on hover).
+//
+// Keyboard: the whole fan is ONE tab stop with a roving tabindex, arrows to
+// move along it, Enter/Space to play, Home/End for the ends. Thirteen
+// separate tab stops (a Spades hand) is technically navigable and genuinely
+// unusable, and the roving pattern is what every other card/toolbar widget
+// converges on.
 
 import type { Card } from '@shared/cards'
 import { cardKey, isLegalPlay } from '@shared/cards'
+import { useRovingFocus } from '../useRovingFocus'
 import { PlayingCard, cardLabel } from './PlayingCard'
 
 type Props = {
@@ -20,7 +27,7 @@ type Props = {
   /**
    * A card a Time Traveler's Rewind is barring. The opposite of an Illusion:
    * this one is REAL, the server refuses it, so it must actually be
-   * unclickable rather than merely look that way.
+   * unplayable rather than merely look that way.
    */
   barredCard?: string | null
   /**
@@ -30,6 +37,12 @@ type Props = {
    * exactly -- offering an illegal card just earns a rejection toast.
    */
   isPlayable?: (card: Card, hand: Card[]) => boolean
+  /**
+   * What this fan IS. Defaults to your own hand; a spectator peeking at a
+   * seat gets that seat's name instead, since "Your hand" would be a lie in
+   * the one place the component renders somebody else's cards.
+   */
+  label?: string
   onPlay: (card: Card) => void
 }
 
@@ -40,11 +53,20 @@ export function Hand({
   illusionCards = [],
   barredCard = null,
   isPlayable,
+  label = 'Your hand',
   onPlay,
 }: Props) {
   const allowed = isPlayable ?? ((card: Card, cards: Card[]) => isLegalPlay(card, cards, leadSuit))
+  const { containerRef, onKeyDown, itemProps } = useRovingFocus(hand.length, '.card-button')
+
   return (
-    <div className="hand" aria-label="Your hand">
+    <div
+      className="hand"
+      ref={containerRef}
+      role="group"
+      aria-label={`${label}, ${hand.length} card${hand.length === 1 ? '' : 's'}`}
+      onKeyDown={onKeyDown}
+    >
       {hand.map((card, i) => {
         const key = cardKey(card)
         const barred = key === barredCard
@@ -72,7 +94,13 @@ export function Hand({
             }
             style={{ animationDelay: `${i * 55}ms` }}
             onClick={() => legal && onPlay(card)}
-            disabled={!legal}
+            {...itemProps(i)}
+            // aria-disabled, NOT disabled: a disabled button is removed from
+            // the focus order, which would drop unplayable cards out of the
+            // roving fan entirely -- and being able to read your whole hand,
+            // playable or not, is the same reason the muted veil stays
+            // readable rather than blacking the face out.
+            aria-disabled={!legal}
             // The label stays honest: a screen reader shouldn't be fooled by a
             // purely visual trick it can't see.
             aria-label={
@@ -80,7 +108,7 @@ export function Hand({
                 ? `${cardLabel(card)} — rewound, you must play something else`
                 : legal
                   ? `Play the ${cardLabel(card)}`
-                  : cardLabel(card)
+                  : `${cardLabel(card)} — not playable right now`
             }
           >
             <PlayingCard card={card} />

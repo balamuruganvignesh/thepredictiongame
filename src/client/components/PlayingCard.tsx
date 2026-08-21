@@ -11,6 +11,8 @@
 // interaction states are unchanged regardless of deck.
 
 import type { Card } from '@shared/cards'
+import { displayName } from '@shared/cards'
+import { useA11y } from '../a11ySettings'
 import { useDeckStyle, type DeckStyle } from '../deckStyle'
 
 /** Rank -> the token Kenney's filenames use. */
@@ -81,6 +83,7 @@ export function cardImage(card: Card, deck: DeckStyle = 'pixel'): string {
 
 export function PlayingCard({ card, className = '' }: { card: Card; className?: string }) {
   const { deck } = useDeckStyle()
+  const { colorblindSuits } = useA11y()
   return (
     <div className={`card ${className}`.trim()}>
       <img
@@ -89,6 +92,20 @@ export function PlayingCard({ card, className = '' }: { card: Card; className?: 
         alt={cardLabel(card)}
         draggable={false}
       />
+      {/* The four-colour badge. Both decks put the suit across ONE axis --
+          red vs. black -- which is exactly the axis a red/green or
+          blue/yellow deficiency collapses, and the pixel deck's pips are 6px
+          of source art on top of that. The badge restores two independent
+          cues at a readable size: a per-suit hue on the four-colour-deck
+          convention (spades black, hearts red, diamonds blue, clubs green)
+          AND the rank+glyph as text, which carries on its own if the hue
+          doesn't. aria-hidden because the <img> alt already names the card --
+          this is the same information again, for eyes rather than readers. */}
+      {colorblindSuits && (
+        <span className={`card__suit-badge card__suit-badge--${card.suit.toLowerCase()}`} aria-hidden="true">
+          {displayName(card)}
+        </span>
+      )}
     </div>
   )
 }
