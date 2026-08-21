@@ -27,6 +27,7 @@ type Props = {
   onSetBlackjackRounds: (rounds: number) => void
   onSetSpadesTargetScore: (score: number) => void
   onSetTournamentGames: (games: GameType[]) => void
+  onSetPublic: (isPublic: boolean) => void
   onSendChat: (text: string) => void
   onChatRead: () => void
 }
@@ -46,6 +47,7 @@ export function Lobby({
   onSetBlackjackRounds,
   onSetSpadesTargetScore,
   onSetTournamentGames,
+  onSetPublic,
   onSendChat,
   onChatRead,
 }: Props) {
@@ -333,6 +335,27 @@ export function Lobby({
               </span>
             </button>
           )}
+
+          {/* Opt-IN, and shown to everyone rather than only the host, so a
+              guest can always see whether the table they're sitting at is
+              listed publicly. */}
+          <button
+            className={`note lobby__mode${lobby.isPublic ? ' is-public' : ''}`}
+            onClick={() => isHost && onSetPublic(!lobby.isPublic)}
+            disabled={!isHost}
+          >
+            <span className="lobby__mode-kicker">visibility</span>
+            <span className="lobby__mode-value">{lobby.isPublic ? 'PUBLIC 🌍' : 'PRIVATE 🔒'}</span>
+            <span className="lobby__mode-hint">
+              {isHost
+                ? lobby.isPublic
+                  ? 'anyone can find this table'
+                  : 'tap to list it publicly'
+                : lobby.isPublic
+                  ? 'listed in the table browser'
+                  : 'invite only'}
+            </span>
+          </button>
 
           {!isHearts && !isGolf && !isBlackjack && !isSpades && (
             <button className="note lobby__roles" onClick={() => setGalleryOpen(true)}>

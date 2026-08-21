@@ -2878,3 +2878,124 @@ button.seat:hover {
   text-align: center;
   font: inherit;
 }
+
+/* ---- Public table browser ---------------------------------------------------
+ *
+ * Only tables whose host opted in show up here, and only while they're still
+ * in the lobby with a free chair -- see Room.publicListing().
+ */
+
+.browser {
+  margin-top: 6px;
+}
+
+.browser__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.browser__refresh {
+  color: var(--text-faint);
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  transition: color var(--t-quick) ease-out;
+}
+
+.browser__refresh:hover {
+  color: var(--accent);
+}
+
+.browser__empty {
+  margin: 0;
+  padding: 16px 12px;
+  border: 1px dashed color-mix(in srgb, var(--stroke) 70%, transparent);
+  border-radius: var(--radius-panel);
+  color: var(--text-faint);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.browser__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 244px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.browser__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background: var(--panel-header);
+  text-align: left;
+  transition:
+    background var(--t-quick) ease-out,
+    border-color var(--t-quick) ease-out;
+}
+
+.browser__row:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--panel-header) 70%, var(--accent));
+}
+
+.browser__row:disabled {
+  opacity: 0.55;
+}
+
+.browser__game {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-size: 0.94rem;
+}
+
+.browser__badge {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--double-ink);
+  color: #fff;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+
+.browser__meta {
+  grid-column: 1;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.browser__code {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  color: var(--accent);
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+}
+
+.browser__random {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* The lobby's visibility card, when the table is listed. */
+.lobby__mode.is-public {
+  border-color: color-mix(in srgb, var(--positive) 55%, transparent);
+}
+
+.lobby__mode.is-public .lobby__mode-value {
+  color: var(--positive);
+}

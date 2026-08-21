@@ -1233,6 +1233,10 @@ export function useGame() {
       setTournamentGames(games: GameType[]) {
         socket.emit('setTournamentGames', games)
       },
+      /** Host only, lobby only: list this table in the public browser. */
+      setPublic(isPublic: boolean) {
+        socket.emit('setPublic', isPublic)
+      },
       setBlackjackMode(mode: BlackjackMode) {
         socket.emit('setBlackjackMode', mode)
       },

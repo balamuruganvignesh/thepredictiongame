@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { BlackjackConfig, Config, GolfConfig, HeartsConfig, SpadesConfig } from '@shared/config'
 import type { GameType } from '@shared/protocol'
 import { DeckStack } from './PlayingCard'
+import { TableBrowser } from './TableBrowser'
 import { storedName } from '../socket'
 import { installAvailable, onInstallAvailabilityChange, promptInstall } from '../pwa'
 import { useDeckStyle } from '../deckStyle'
@@ -26,7 +27,7 @@ export function Join({ connected, error, onJoin }: Props) {
 
   const [name, setName] = useState(storedName)
   const [code, setCode] = useState('')
-  const [mode, setMode] = useState<'create' | 'join'>('create')
+  const [mode, setMode] = useState<'create' | 'join' | 'browse'>('create')
   const [game, setGame] = useState<GameType>('prediction')
   const isHearts = game === 'hearts'
   const isGolf = game === 'golf'
@@ -52,6 +53,15 @@ export function Join({ connected, error, onJoin }: Props) {
     if (!ready) return
     // The game is only ours to choose when we're the ones opening the table.
     onJoin(trimmedName, mode === 'join' ? code.toUpperCase() : null, mode === 'create' ? game : undefined)
+  }
+
+  /**
+   * Picking a table out of the browser joins it directly rather than filling
+   * in the code box and waiting for another click -- you already chose.
+   */
+  const joinListed = (listedCode: string) => {
+    if (!connected || trimmedName.length === 0) return
+    onJoin(trimmedName, listedCode, undefined)
   }
 
   return (
@@ -95,7 +105,9 @@ export function Join({ connected, error, onJoin }: Props) {
                   : isSpades
                     ? 'SPADES'
                     : 'THE PREDICTION GAME'
-            : 'JOIN A TABLE'}
+            : mode === 'browse'
+              ? 'OPEN TABLES'
+              : 'JOIN A TABLE'}
         </h1>
         <p className="join__subtitle">
           {creating
@@ -108,10 +120,17 @@ export function Join({ connected, error, onJoin }: Props) {
                   : isSpades
                     ? 'bid it, make it, bag it'
                     : '5 up 5 down'
-            : 'five games, one table'}
+            : mode === 'browse'
+              ? 'pull up a chair anywhere'
+              : 'five games, one table'}
         </p>
         <p className="join__blurb">
-          {!creating ? (
+          {mode === 'browse' ? (
+            <>
+              Tables their hosts have listed publicly, still in the lobby with a chair free. Put
+              your name in and pick one — or take pot luck.
+            </>
+          ) : !creating ? (
             <>
               You’ll land in whichever game that table is playing — The Prediction Game, Hearts,
               Golf, Blackjack, or Spades. The host picks.
@@ -231,6 +250,15 @@ export function Join({ connected, error, onJoin }: Props) {
           >
             join a table
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'browse'}
+            className={`segmented__option${mode === 'browse' ? ' is-active' : ''}`}
+            onClick={() => setMode('browse')}
+          >
+            browse 🌍
+          </button>
         </div>
 
         {mode === 'join' && (
@@ -250,9 +278,16 @@ export function Join({ connected, error, onJoin }: Props) {
           </label>
         )}
 
-        <button className="button button--accent join__go" type="submit" disabled={!ready}>
-          {mode === 'create' ? 'DEAL ME IN' : 'JOIN TABLE'}
-        </button>
+        {mode === 'browse' ? (
+          <TableBrowser
+            disabled={!connected || trimmedName.length === 0}
+            onPick={joinListed}
+          />
+        ) : (
+          <button className="button button--accent join__go" type="submit" disabled={!ready}>
+            {mode === 'create' ? 'DEAL ME IN' : 'JOIN TABLE'}
+          </button>
+        )}
 
         {!connected && <p className="join__status">connecting to the table…</p>}
         {error && <p className="join__status join__status--error">{error}</p>}

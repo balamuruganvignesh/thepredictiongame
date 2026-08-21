@@ -50,6 +50,7 @@ export default function App() {
           onSetHoleCount={actions.setHoleCount}
           onSetSpadesTargetScore={actions.setSpadesTargetScore}
           onSetTournamentGames={actions.setTournamentGames}
+          onSetPublic={actions.setPublic}
           onSetBlackjackMode={actions.setBlackjackMode}
           onSetBlackjackRounds={actions.setBlackjackRounds}
           onSendChat={actions.sendChat}

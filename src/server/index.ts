@@ -199,6 +199,7 @@ io.on('connection', (socket) => {
   socket.on('setBlackjackRounds', (rounds) => withSeat((r, s) => r.setBlackjackRounds(s, Number(rounds))))
   socket.on('blackjackAction', (action) => withSeat((r, s) => r.blackjackAction(s, action)))
   socket.on('setSpadesTargetScore', (score) => withSeat((r, s) => r.setSpadesTargetScore(s, Number(score))))
+  socket.on('setPublic', (isPublic) => withSeat((r, s) => r.setPublic(s, isPublic === true)))
   socket.on('submitSpadesBid', (bid) => withSeat((r, s) => r.submitSpadesBid(s, bid)))
   socket.on('submitBid', (bid) => withSeat((r, s) => r.submitBid(s, Number(bid))))
   socket.on('submitRebid', (bid) => withSeat((r, s) => r.submitRebid(s, Number(bid))))
@@ -261,6 +262,31 @@ app.get('/api/leaderboard', (req, res) => {
 
 app.get('/api/players/:id/stats', (req, res) => {
   res.json(getPlayerStats(req.params.id))
+})
+
+// ---- Public table browser --------------------------------------------------------
+
+// Cross-table, not table-scoped, so it's REST for the same reason the
+// leaderboard is -- protocol.ts stays the source of truth for what a live
+// table sends to the people already at it, and this is a stranger asking
+// what's out there.
+//
+// Opt-in only: Room.publicListing() returns null unless the host explicitly
+// listed the table, and also for tables that are mid-game, empty or full,
+// since none of those are joinable anyway. That means the busiest possible
+// response is a handful of rows, so there's no pagination here.
+//
+// The payload carries no player ids and no game state -- just a room code
+// (which is already the shareable invite), the host's display name, and how
+// many seats are taken.
+app.get('/api/tables', (_req, res) => {
+  const tables = [...rooms.values()]
+    .map((room) => room.publicListing())
+    .filter((listing) => listing != null)
+    // Freshest first: a table someone just opened is the one most likely to
+    // still be waiting for players.
+    .sort((a, b) => b!.lastActivity - a!.lastActivity)
+  res.json(tables)
 })
 
 // ---- Admin status --------------------------------------------------------------

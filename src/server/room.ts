@@ -108,6 +108,13 @@ export class Room {
   private blackjackMode: BlackjackMode = 'dealer'
   private blackjackRounds: number = BlackjackConfig.defaultRounds
   private spadesTargetScore: number = SpadesConfig.defaultTargetScore
+  /**
+   * Listed in the public table browser. OFF by default and only the host can
+   * change it: a table opened to play with friends must never appear in a
+   * public directory because nobody thought to opt out. Opt-IN is the whole
+   * design of this flag.
+   */
+  private isPublic = false
   /** Host-picked rotation of games; null means a normal single-game table. */
   private tournamentGames: GameType[] | null = null
   private tournamentIndex = 0
@@ -593,6 +600,7 @@ export class Room {
       blackjackRounds: this.blackjackRounds,
       spadesTargetScore: this.spadesTargetScore,
       spectators: this.spectators.map((s) => s.name),
+      isPublic: this.isPublic,
       tournamentGames: this.tournamentGames,
     })
   }
@@ -704,6 +712,54 @@ export class Room {
     const ordered = KNOWN_GAME_TYPES.filter((g) => requested.has(g))
     this.tournamentGames = ordered.length >= 2 ? ordered : null
     this.broadcastLobby()
+  }
+
+  /** List this table publicly, or take it back off. Host only, lobby only. */
+  setPublic(seat: Seat, isPublic: boolean) {
+    if (this.gameState !== 'Lobby') return
+    if (!this.isHost(seat)) {
+      this.io.send(seat, 'actionError', 'Only the host can list the table publicly.')
+      return
+    }
+    if (this.isPublic === isPublic) return
+    this.isPublic = isPublic
+    this.systemChat(
+      isPublic
+        ? 'This table is now listed publicly — anyone can find and join it.'
+        : 'This table is private again.',
+    )
+    this.broadcastLobby()
+  }
+
+  /**
+   * One row in the public table browser, or null when this table shouldn't be
+   * listed. Everything a stranger needs to decide whether to sit down and
+   * nothing more -- no player ids, no chat, no game state. Deliberately NOT a
+   * Socket.IO event: this is a cross-table read like the leaderboard, not
+   * something a table sends to the people already at it.
+   */
+  publicListing() {
+    // Four separate reasons not to appear, all of them "you couldn't join
+    // this anyway": not opted in, already playing, empty (a ghost the reaper
+    // hasn't swept yet), or full.
+    if (!this.isPublic) return null
+    if (this.gameState !== 'Lobby') return null
+    const players = this.seats.length
+    if (players === 0) return null
+    if (players >= this.limits.max) return null
+
+    return {
+      code: this.code,
+      gameType: this.gameType,
+      gameName: this.gameName(),
+      mode: this.roles.getMode(),
+      players,
+      minPlayers: this.limits.min,
+      maxPlayers: this.limits.max,
+      hostName: this.host?.name ?? '',
+      isTournament: this.tournamentGames != null,
+      lastActivity: this.lastActivity,
+    }
   }
 
   /** Blackjack between a shared dealer and ranked-against-each-other. Host only, lobby only. */

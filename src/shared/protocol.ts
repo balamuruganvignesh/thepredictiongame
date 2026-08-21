@@ -6,7 +6,7 @@
 //                   requestState, voteRestart, golfRevealInitial, golfDraw,
 //                   golfResolve, setBlackjackMode, setBlackjackRounds,
 //                   blackjackAction, setSpadesTargetScore, submitSpadesBid,
-//                   requestReplay
+//                   requestReplay, setPublic
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
@@ -68,6 +68,12 @@ export type LobbyUpdate = {
   spadesTargetScore: number
   /** Names of anyone watching a game in progress, waiting for a chair. */
   spectators: string[]
+  /**
+   * Listed in the public table browser at /api/tables. Host-controlled and
+   * OFF by default -- a private game with friends must never show up in a
+   * directory because nobody thought to opt out.
+   */
+  isPublic: boolean
   /**
    * Host-picked rotation of games to play back to back with combined scoring.
    * Null/absent means a normal single-game table. At least 2 games, in the
@@ -734,6 +740,11 @@ export interface ClientToServerEvents {
   blackjackAction: (action: BlackjackAction) => void
   /** Host only, lobby only: the score that ends a Spades game. */
   setSpadesTargetScore: (score: number) => void
+  /**
+   * Host only, lobby only: list this table in the public browser, or take it
+   * back off. Off by default -- see LobbyUpdate.isPublic.
+   */
+  setPublic: (isPublic: boolean) => void
   /** Spades: your bid for the hand -- 0-13, or 'nil'. */
   submitSpadesBid: (bid: SpadesBid) => void
   requestState: () => void
