@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+
+.DS_Store
+.Rhistory
+
+graphify-out/
+!graphify-out/GRAPH_REPORT.md
