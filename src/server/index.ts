@@ -26,8 +26,8 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type Account,
 } from './db/accounts'
-import { describeGrant, formatCode } from './codes'
-import { createCode, deleteCode, listCodes, type CodeRow } from './db/codes'
+import { registerAdminRoutes } from './admin'
+import { sellableItems } from './db/catalogue'
 import {
   buyItem,
   equipItem,
@@ -38,7 +38,7 @@ import {
   redeemCode,
 } from './db/shop'
 import { authUrl, exchangeCode, googleConfigured } from './auth/google'
-import { SHOP_ITEMS, type MeAccount, type Wallet } from '@shared/shop'
+import { type MeAccount, type Wallet } from '@shared/shop'
 import { AVATARS, GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { redis, redisSub } from './redis'
 import { registerRoom, refreshRoom, removeRoom } from './roomDirectory'
@@ -487,7 +487,8 @@ app.get('/api/shop', (req, res) => {
   // a signed-out browser sees the coins it earned and the items it bought.
   const walletId = walletIdFor(account, req.query.playerId)
   res.json({
-    items: SHOP_ITEMS,
+    // Live prices, and nothing that has been taken off sale.
+    items: sellableItems(),
     avatars: AVATARS,
     charges: walletId ? getCharges(walletId) : {},
     wallet: walletId ? walletFor(walletId) : null,
@@ -597,86 +598,12 @@ app.get('/api/tables', (_req, res) => {
 
 // ---- Admin status --------------------------------------------------------------
 
-// Off by default: with ADMIN_TOKEN unset the route doesn't exist at all,
-// rather than existing and rejecting every request -- the difference matters
-// on a public host with no other auth in front of it. The token travels as a
-// query param for a plain-browser-friendly URL; this endpoint carries no
-// player PII beyond display names already visible to anyone at the table, so
-// that tradeoff is acceptable here.
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN
-if (ADMIN_TOKEN) {
-  app.get('/admin/status', (req, res) => {
-    if (req.query.token !== ADMIN_TOKEN) {
-      res.status(404).end()
-      return
-    }
-    res.json({
-      uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-      roomCount: rooms.size,
-      rooms: [...rooms.values()].map((room) => room.summary()),
-    })
-  })
-
-  // Minting codes against the LIVE game, which scripts/codes.ts can't reach
-  // (it writes to the SQLite file directly, and production's lives on the Fly
-  // volume). Same token, same 404-not-401 posture: with ADMIN_TOKEN unset
-  // none of this exists.
-  //
-  // A wrong token 404s rather than 401s so the route is indistinguishable
-  // from one that was never registered -- there is no other auth in front of
-  // it, and a 401 advertises that there is something here to guess at.
-  const requireAdmin = (req: express.Request, res: express.Response): boolean => {
-    if (req.query.token === ADMIN_TOKEN) return true
-    res.status(404).end()
-    return false
-  }
-
-  const codeJson = (row: CodeRow) => ({
-    code: formatCode(row.code),
-    grant: describeGrant(row),
-    coverage: row.coverage,
-    coins: row.coins,
-    label: row.label,
-    uses: row.uses,
-    maxUses: row.max_uses,
-    expiresAt: row.expires_at,
-  })
-
-  app.get('/admin/codes', (req, res) => {
-    if (!requireAdmin(req, res)) return
-    res.json({ codes: listCodes().map(codeJson) })
-  })
-
-  // `days` rather than a timestamp, because the useful question at mint time
-  // is "how long should this last", and a hand-written epoch is the easiest
-  // thing in this whole feature to get wrong by a factor of 1000.
-  app.post('/admin/codes', express.json(), (req, res) => {
-    if (!requireAdmin(req, res)) return
-    const days = typeof req.body?.days === 'number' ? req.body.days : null
-    const result = createCode({
-      code: typeof req.body?.code === 'string' ? req.body.code : null,
-      coverage: typeof req.body?.coverage === 'number' ? req.body.coverage : null,
-      coins: typeof req.body?.coins === 'number' ? req.body.coins : null,
-      label: typeof req.body?.label === 'string' ? req.body.label : null,
-      maxUses: typeof req.body?.uses === 'number' ? req.body.uses : null,
-      expiresAt: days ? Date.now() + days * 24 * 60 * 60 * 1000 : null,
-    })
-    if (!result.ok) {
-      res.status(400).json(result)
-      return
-    }
-    res.json({ ok: true, code: codeJson(result.code) })
-  })
-
-  app.delete('/admin/codes/:code', (req, res) => {
-    if (!requireAdmin(req, res)) return
-    if (!deleteCode(req.params.code)) {
-      res.status(404).json({ ok: false, error: 'No such code.' })
-      return
-    }
-    res.json({ ok: true })
-  })
-}
+// Everything admin-facing lives in admin.ts, including its own login. Off by
+// default: with ADMIN_TOKEN unset not one of those routes is registered, so
+// the whole surface 404s exactly like a server that never had it -- the
+// difference from a 401 matters on a public host with no other auth in front
+// of it.
+registerAdminRoutes(app, { rooms, startedAt })
 
 // ---- Static client ------------------------------------------------------------
 

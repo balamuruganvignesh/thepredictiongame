@@ -13,7 +13,8 @@
 // a toll gate on coins they already earned.
 
 import { GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
-import { shopItemById, SHOP_ITEMS, type Equipped } from '@shared/shop'
+import { shopItemById, type Equipped } from '@shared/shop'
+import { pricedItem, sellableItems } from './catalogue'
 import { bumpCodeUses, getCode } from './codes'
 import { db } from './index'
 import { log } from '../logger'
@@ -129,8 +130,11 @@ export type BuyResult = { ok: true; balance: number } | { ok: false; error: stri
  * window; SQLite's transaction is what closes it.
  */
 export const buyItem = db.transaction((playerId: string, itemId: string): BuyResult => {
-  const item = shopItemById(itemId)
+  // The LIVE price, never the catalogue's -- charging one number while the
+  // shop advertises another is a shop that lies about its prices.
+  const item = pricedItem(itemId)
   if (!item) return { ok: false, error: 'No such item.' }
+  if (item.hidden) return { ok: false, error: 'That item is not for sale.' }
 
   // A consumable is bought in charges, so owning one is no reason to refuse
   // another -- that's the whole point of it being spent in play.
@@ -228,7 +232,11 @@ const insertRedeemed = db.prepare(`
  */
 export function coverageCost(playerId: string, fraction: number): number {
   const owned = new Set(getOwned(playerId))
-  const prices = SHOP_ITEMS.filter((item) => !owned.has(item.id))
+  // Live prices and only what's actually on sale: a code promising "the whole
+  // shop" has to mean the shop as it stands today, not as shared/shop.ts
+  // priced it.
+  const prices = sellableItems()
+    .filter((item) => !owned.has(item.id))
     .map((item) => item.price)
     .sort((a, b) => a - b)
   const count = Math.ceil(prices.length * fraction)

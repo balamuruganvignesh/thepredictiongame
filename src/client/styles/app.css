@@ -3731,3 +3731,257 @@ button.seat:hover {
   color: var(--accent);
   font-size: 0.85em;
 }
+
+/* ---- Admin console (/admin) -------------------------------------------------- */
+
+/* Every colour here comes from tokens.css, so the console follows whatever
+   theme the operator has equipped like every other page. */
+
+.button--small {
+  font-size: 0.8rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.admin--login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+}
+
+.admin__login-card {
+  padding: 20px 22px;
+  width: min(420px, 100%);
+}
+
+.admin__login-card h1 {
+  font-family: var(--font-title);
+  color: var(--accent);
+  margin: 0 0 4px;
+}
+
+.admin__token {
+  letter-spacing: 0.3em;
+}
+
+.admin__header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin__tab {
+  border: 1px solid var(--panel-border);
+  background: var(--panel-header);
+  color: var(--text-muted);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.admin__tab--on {
+  background: var(--accent);
+  color: var(--ink-on-accent);
+  border-color: var(--accent);
+}
+
+/* Wide content scrolls inside its own box rather than pushing the page
+   sideways -- the same rule the score sheets follow. */
+.admin__table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.admin__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin__table th {
+  text-align: left;
+  font-family: var(--font-heading);
+  color: var(--text-muted);
+  font-weight: normal;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.admin__table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: middle;
+}
+
+.admin__row--off td {
+  opacity: 0.5;
+}
+
+.admin__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.admin__id {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin__was {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  margin-left: 6px;
+}
+
+.admin__price {
+  width: 7ch;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.admin__row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-top: 12px;
+}
+
+.admin__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 150px;
+}
+
+.admin__field--wide {
+  flex: 1 1 220px;
+}
+
+.admin__field span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.admin__field input,
+.admin__field select {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  min-width: 0;
+}
+
+.admin__log {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin__log-row {
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.admin__log-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin__log-when {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.admin__flag {
+  background: var(--panel-header);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+.admin__log-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.admin__chip {
+  background: var(--panel-header);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 0.85rem;
+}
+
+.admin__chip em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.admin__detail-line {
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+
+.admin__ledger {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.admin__ledger li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 6px;
+}
+
+.admin__credit {
+  color: var(--accent);
+  min-width: 5ch;
+}
+
+.admin__debit {
+  color: var(--danger, #d9534f);
+  min-width: 5ch;
+}

@@ -114,6 +114,18 @@ db.exec(`
     cardback   TEXT
   );
 
+  -- Price and visibility changes on top of the shared catalogue, so a price
+  -- is a setting rather than a deploy. One row per CHANGED item only: an item
+  -- with no row here is at its catalogue price, which keeps shared/shop.ts
+  -- the readable source of what the shop is and this table the short list of
+  -- what has been tuned since.
+  CREATE TABLE IF NOT EXISTS item_overrides (
+    item_id    TEXT PRIMARY KEY,
+    price      INTEGER,
+    hidden     INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
+
   -- The codes themselves, in the store rather than in source, so minting one
   -- is a command rather than an edit and a redeploy. Seeded with the built-in
   -- codes in server/codes.ts on first boot; everything after that is authored

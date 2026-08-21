@@ -8,6 +8,7 @@ import { BlackjackTable } from './components/BlackjackTable'
 import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { IrlScoresheet } from './components/IrlScoresheet'
+import { Admin } from './components/Admin'
 import { Leaderboard } from './components/Leaderboard'
 import { Shop } from './components/Shop'
 import { SpadesTable } from './components/SpadesTable'
@@ -19,15 +20,16 @@ export default function App() {
   const isIrlScoresheet = window.location.pathname === '/scoresheet'
   const isLeaderboard = window.location.pathname === '/leaderboard'
   const isShop = window.location.pathname === '/shop'
+  const isAdmin = window.location.pathname === '/admin'
 
   // The game is a fixed-viewport table, so tokens.css locks the document at
-  // 100% height with `overflow: hidden`. These three standalone pages are
+  // 100% height with `overflow: hidden`. These four standalone pages are
   // ordinary long DOCUMENTS, and that lock silently clipped them: content
   // below the fold existed but no wheel or touch gesture could reach it.
   // Flagging the document mode on <html> lets CSS unlock scrolling for
   // exactly these pages, using the same data-attribute convention
   // data-deck / data-theme / data-motion already follow.
-  const isDocumentPage = isIrlScoresheet || isLeaderboard || isShop
+  const isDocumentPage = isIrlScoresheet || isLeaderboard || isShop || isAdmin
   useEffect(() => {
     if (isDocumentPage) document.documentElement.setAttribute('data-page', 'document')
     else document.documentElement.removeAttribute('data-page')
@@ -43,6 +45,7 @@ export default function App() {
   if (isIrlScoresheet) return <IrlScoresheet />
   if (isLeaderboard) return <Leaderboard />
   if (isShop) return <Shop />
+  if (isAdmin) return <Admin />
 
   return (
     <>

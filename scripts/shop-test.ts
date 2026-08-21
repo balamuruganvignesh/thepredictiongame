@@ -30,6 +30,9 @@ const {
 const { PLACEMENT_COINS, SHOP_ITEMS } = await import('../src/shared/shop')
 const { BUILTIN_CODES } = await import('../src/server/codes')
 const { createCode, deleteCode, getCode, listCodes } = await import('../src/server/db/codes')
+const { pricedItem, revertItem, sellableItems, setItemOverride } = await import(
+  '../src/server/db/catalogue'
+)
 const { GOOGLE_AVATAR } = await import('../src/shared/avatars')
 type Standing = import('../src/shared/protocol').Standing
 
@@ -326,6 +329,47 @@ check('every minted code is listed', listCodes().some((row) => row.code === 'FLA
 check('revoking removes it', deleteCode('flat-500') && !getCode('FLAT500'))
 check('a revoked code no longer redeems', !redeemCode('after-revoke', 'FLAT500').ok)
 check('revoking an unknown code reports it', !deleteCode('NEVEREXISTED'))
+
+console.log('\nprice overrides')
+
+// The whole point of the override layer: the price the shop shows, the price
+// buyItem charges and the price a coverage code is worth are one number.
+const P2 = 'price-shopper'
+check('an item starts at its catalogue price', pricedItem('theme-neon')?.price === 250)
+check('a price can be overridden', setItemOverride('theme-neon', { price: 40 }).ok)
+check('the new price reads back', pricedItem('theme-neon')?.price === 40)
+check('the catalogue price is remembered as basePrice', pricedItem('theme-neon')?.basePrice === 250)
+
+check('a code funds the OVERRIDDEN catalogue', redeemCode(P2, FULL).ok)
+const overriddenTotal = SHOP_ITEMS.reduce(
+  (sum, item) => sum + (item.id === 'theme-neon' ? 40 : item.price),
+  0,
+)
+check('coverage is priced live, not from shared/shop.ts', getBalance(P2) === overriddenTotal)
+
+const beforeBuy = getBalance(P2)
+check('buying charges the overridden price', buyItem(P2, 'theme-neon').ok)
+check('and debits exactly that', getBalance(P2) === beforeBuy - 40)
+
+// Hiding takes an item off sale without touching anyone's wardrobe.
+check('an item can be hidden', setItemOverride('theme-ember', { hidden: true }).ok)
+check('a hidden item is not sellable', !sellableItems().some((item) => item.id === 'theme-ember'))
+check('and cannot be bought', !buyItem(P2, 'theme-ember').ok)
+check('but is still equippable if already owned', equipItem(P2, 'theme', 'theme-neon').ok)
+// A hidden item is not part of "the whole shop" a code promises, either.
+check(
+  'coverage skips hidden items',
+  coverageCost('coverage-probe', 1) ===
+    sellableItems().reduce((sum, item) => sum + item.price, 0),
+)
+
+check('a negative price is refused', !setItemOverride('theme-neon', { price: -1 }).ok)
+check('a fractional price is refused', !setItemOverride('theme-neon', { price: 1.5 }).ok)
+check('an unknown item is refused', !setItemOverride('no-such-item', { price: 10 }).ok)
+
+check('reverting restores the catalogue price', revertItem('theme-neon') && pricedItem('theme-neon')?.price === 250)
+check('and clears basePrice', pricedItem('theme-neon')?.basePrice === null)
+check('reverting an untouched item reports it', !revertItem('theme-parchment'))
 
 fs.rmSync(dir, { recursive: true, force: true })
 
