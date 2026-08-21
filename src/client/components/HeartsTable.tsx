@@ -7,6 +7,7 @@ import type { Card } from '@shared/cards'
 import { isLegalHeartsPlay } from '@shared/heartsRules'
 import { ChatPanel } from './ChatPanel'
 import { GameAnnouncer } from './GameAnnouncer'
+import { ReplayViewer } from './ReplayViewer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { HeartsScoresheet } from './HeartsScoresheet'
@@ -22,6 +23,7 @@ const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
 export function HeartsTable({ store, actions }: { store: Store; actions: GameActions }) {
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const [chatOpen, setChatOpen] = useState(false)
+  const [replayOpen, setReplayOpen] = useState(false)
 
   useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
@@ -121,6 +123,10 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
           meId={store.meId}
           spectating={store.spectating}
           onVoteRestart={actions.voteRestart}
+          onOpenReplay={() => {
+            actions.requestReplay()
+            setReplayOpen(true)
+          }}
         />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
@@ -156,6 +162,15 @@ export function HeartsTable({ store, actions }: { store: Store; actions: GameAct
 
       {store.view === 'gameover' && store.standings && (
         <GameEnd standings={store.standings} lowestWins={store.lowestWins} tournament={store.tournamentEnded} />
+      )}
+      {replayOpen && (
+        <ReplayViewer
+          replay={store.replay}
+          onClose={() => {
+            setReplayOpen(false)
+            actions.closeReplay()
+          }}
+        />
       )}
     </div>
   )

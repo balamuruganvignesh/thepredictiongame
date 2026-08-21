@@ -8,6 +8,7 @@ import type { Card } from '@shared/cards'
 import { isLegalSpadesPlay } from '@shared/spadesRules'
 import { ChatPanel } from './ChatPanel'
 import { GameAnnouncer } from './GameAnnouncer'
+import { ReplayViewer } from './ReplayViewer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { SettingsMenu } from './SettingsMenu'
@@ -23,6 +24,7 @@ const isWideScreen = () => window.matchMedia('(min-width: 1100px)').matches
 export function SpadesTable({ store, actions }: { store: Store; actions: GameActions }) {
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const [chatOpen, setChatOpen] = useState(false)
+  const [replayOpen, setReplayOpen] = useState(false)
 
   useScoresheetShortcut(() => setScoresOpen((open) => !open))
 
@@ -126,6 +128,10 @@ export function SpadesTable({ store, actions }: { store: Store; actions: GameAct
           meId={store.meId}
           spectating={store.spectating}
           onVoteRestart={actions.voteRestart}
+          onOpenReplay={() => {
+            actions.requestReplay()
+            setReplayOpen(true)
+          }}
         />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
@@ -160,6 +166,15 @@ export function SpadesTable({ store, actions }: { store: Store; actions: GameAct
         <GameEnd
           standings={store.standings}
           tournament={store.tournamentEnded}
+        />
+      )}
+      {replayOpen && (
+        <ReplayViewer
+          replay={store.replay}
+          onClose={() => {
+            setReplayOpen(false)
+            actions.closeReplay()
+          }}
         />
       )}
     </div>

@@ -2727,3 +2727,81 @@ button.seat:hover {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ---- Replay viewer ---------------------------------------------------------- */
+
+.modal--replay {
+  width: min(760px, 94vw);
+  text-align: center;
+}
+
+.modal--replay > *:not(.note__header) {
+  margin: 0 18px;
+}
+
+.replay__rounds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.replay__round {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 38px;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: var(--radius-button);
+  background: var(--panel-header);
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.86rem;
+  transition: background var(--t-quick) ease-out;
+}
+
+.replay__round:hover {
+  background: color-mix(in srgb, var(--panel-header) 70%, var(--stroke));
+}
+
+.replay__round.is-active {
+  background: var(--accent);
+  color: #1a1a1e;
+}
+
+.replay__round-trump {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.replay__caption {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+}
+
+.replay__trick {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  min-height: calc(var(--card-h) + 26px);
+  margin-top: 10px;
+}
+
+.replay__summary {
+  margin-top: 12px;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.replay__controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 16px 18px 20px;
+}

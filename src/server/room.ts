@@ -24,12 +24,14 @@ import type {
   GolfSnapshot,
   HeartsSnapshot,
   RestartVote,
+  ReplayRound,
   RoleAnnounce,
   RosterEntry,
   ServerToClientEvents,
   Snapshot,
   SpadesSnapshot,
   Standing,
+  TrickResolved,
   UseAbilityPayload,
 } from '@shared/protocol'
 import { MAX_CHAT_LENGTH } from '@shared/protocol'
@@ -66,6 +68,15 @@ type Phase = 'RoundStart' | 'Bidding' | 'Playing' | 'Passing'
 
 /** Every game type this table can be set to -- the one place that list lives. */
 const KNOWN_GAME_TYPES: GameType[] = ['prediction', 'hearts', 'golf', 'blackjack', 'spades']
+
+/**
+ * How many finished rounds the in-memory replay keeps. The Prediction Game
+ * plays exactly 10 and Spades rarely more, but Hearts runs until somebody
+ * crosses the target and can go on for a while -- so this is a cap, not a
+ * size. Old rounds fall off the front; the ones worth looking back at are the
+ * recent ones.
+ */
+const REPLAY_MAX_ROUNDS = 12
 
 export class Room {
   readonly seats: Seat[] = []
@@ -132,6 +143,15 @@ export class Room {
   private chatLog: ChatMessage[] = []
   private nextChatId = 1
 
+  /**
+   * Every trick this game has resolved, for the replay viewer. In memory and
+   * nowhere else: it is reset at the top of each game (and each tournament
+   * leg) and dies with the process, with no connection to the SQLite store.
+   * It deliberately SURVIVES the end of a game into the lobby, which is
+   * exactly when a table wants to argue about the last round.
+   */
+  private replay: ReplayRound[] = []
+
   constructor(
     readonly code: string,
     private server: SocketServer<ClientToServerEvents, ServerToClientEvents>,
@@ -149,6 +169,14 @@ export class Room {
         // privately and never broadcast.
         if (event === 'roleAnnounce') {
           this.pushChat({ from: null, name: '', text: (payload as RoleAnnounce).message })
+        }
+        // ...and every resolved trick is recorded for the replay viewer.
+        // Same reasoning as the chat line above: one choke point, so none of
+        // the three trick managers (Prediction, Hearts, Spades) has to know
+        // the replay exists, and a fourth trick-taking game would be
+        // recorded the day it broadcasts its first trickResolved.
+        if (event === 'trickResolved') {
+          this.recordTrick(payload as TrickResolved)
         }
       },
       send: (seat, event, payload) => {
@@ -901,6 +929,45 @@ export class Room {
 
   // ---- Chat -----------------------------------------------------------------
 
+  // ---- Replay ---------------------------------------------------------------
+
+  /**
+   * Appends one resolved trick, opening a new round bucket when the round
+   * number moves on. Called from the `broadcast` choke point, so it sees
+   * every trick from all three trick-taking games and none of the games has
+   * to call it.
+   *
+   * `this.roundNumber` / `this.trumpSuit` are read rather than passed because
+   * TrickResolved carries neither -- and every trick manager sets both on the
+   * Room before its play phase starts, so they're always the right round's.
+   */
+  private recordTrick(trick: TrickResolved) {
+    let round = this.replay[this.replay.length - 1]
+    if (!round || round.roundNumber !== this.roundNumber) {
+      round = { roundNumber: this.roundNumber, trumpSuit: this.trumpSuit, tricks: [] }
+      this.replay.push(round)
+      if (this.replay.length > REPLAY_MAX_ROUNDS) this.replay.shift()
+    }
+    round.tricks.push({
+      trickNumber: trick.trickNumber,
+      plays: trick.plays,
+      winnerId: trick.winnerId,
+      counted: trick.counted,
+    })
+  }
+
+  /**
+   * Names are snapshotted INTO the payload rather than left for the client to
+   * look up in its roster: a replay outlives the round it records, and by the
+   * time anyone opens it a player may have dropped and lost their chair, at
+   * which point the live roster no longer knows who they were.
+   */
+  sendReplay(viewer: Seat | Spectator) {
+    const names: Record<string, string> = {}
+    for (const seat of this.seats) names[seat.id] = seat.name
+    this.sendToSocket(viewer.socketId, 'replayData', { rounds: this.replay, names })
+  }
+
   private pushChat(message: Omit<ChatMessage, 'id'>) {
     const entry: ChatMessage = { id: this.nextChatId++, ...message }
     this.chatLog.push(entry)
@@ -1530,6 +1597,11 @@ export class Room {
     this.aborted = false
     this.restartVotes.clear()
     this.history = {}
+    // A fresh game (or tournament leg) gets a fresh replay. Reset HERE and
+    // not at the end of the loop on purpose: the replay has to survive into
+    // the lobby, which is exactly when a table wants to re-watch the round
+    // that just decided the game.
+    this.replay = []
     for (const seat of this.seats) {
       seat.totalScore = 0
       seat.lastRoundScore = null

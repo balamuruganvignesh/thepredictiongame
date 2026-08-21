@@ -5,7 +5,8 @@
 //                   submitRebid, declareDouble, playCard, passCards, useAbility,
 //                   requestState, voteRestart, golfRevealInitial, golfDraw,
 //                   golfResolve, setBlackjackMode, setBlackjackRounds,
-//                   blackjackAction, setSpadesTargetScore, submitSpadesBid
+//                   blackjackAction, setSpadesTargetScore, submitSpadesBid,
+//                   requestReplay
 // Server -> Client: joined, joinError, lobbyUpdate, gameState, dealHand,
 //                   trickUpdate, trickResolved, roundEnded, scoreUpdate,
 //                   gameEnded, actionError, doubleWindow, gameLog, roleState,
@@ -14,7 +15,8 @@
 //                   passResult, heartsState, heartsScoreUpdate, restartVote,
 //                   golfRoundStart, golfState, golfDrawResult, golfScoreUpdate,
 //                   blackjackRoundStart, blackjackState, blackjackScoreUpdate,
-//                   spadesRoundStart, spadesState, spadesScoreUpdate
+//                   spadesRoundStart, spadesState, spadesScoreUpdate,
+//                   replayData
 //
 // Five games share this protocol. Everything about the table -- joining, the
 // roster, chat, spectators, the trick area, reconnect -- is common; the
@@ -539,6 +541,44 @@ export type SpadesSnapshot = {
   trickNumber: number
 }
 
+// ---- Replay -----------------------------------------------------------------
+//
+// Rounds that have already been played, so a table can look back at how a
+// trick actually went. IN-MEMORY ONLY, and deliberately so for v1: the
+// recording lives on the Room, dies with the process, and has no connection
+// to the SQLite store in db/. Rebuilding a replay from persistence is a
+// strictly bigger problem (every hand, every ability, schema migrations) and
+// is explicitly not what this is.
+//
+// Trick-taking games only -- the Prediction Game, Hearts and Spades. Golf and
+// Blackjack have no tricks to step through, so they simply don't offer it
+// rather than showing an empty viewer.
+
+export type ReplayTrick = {
+  trickNumber: number
+  plays: PlayEntry[]
+  winnerId: PlayerId
+  /** false when chaos mode voided the win (Gravekeeper) -- see TrickResolved. */
+  counted: boolean
+}
+
+export type ReplayRound = {
+  roundNumber: number
+  /** '' in Hearts, which has no trump. */
+  trumpSuit: string
+  tricks: ReplayTrick[]
+}
+
+/**
+ * Names travel WITH the replay rather than being read from the live roster:
+ * a replay outlives the round it came from, and by the time someone opens it
+ * a player may have dropped and given up their chair entirely.
+ */
+export type ReplayData = {
+  rounds: ReplayRound[]
+  names: Record<PlayerId, string>
+}
+
 // ---- Reconnect --------------------------------------------------------------
 
 /**
@@ -640,6 +680,7 @@ export interface ServerToClientEvents {
   spadesRoundStart: (data: SpadesRoundStart) => void
   spadesState: (data: SpadesState) => void
   spadesScoreUpdate: (data: SpadesScoreUpdate) => void
+  replayData: (data: ReplayData) => void
   restartVote: (data: RestartVote) => void
   /** Spectator-only: the hand of whichever seat they're currently watching. */
   watchedHand: (data: WatchedHand) => void
@@ -696,6 +737,12 @@ export interface ClientToServerEvents {
   /** Spades: your bid for the hand -- 0-13, or 'nil'. */
   submitSpadesBid: (bid: SpadesBid) => void
   requestState: () => void
+  /**
+   * Ask for every trick the table has played this game. Available to
+   * spectators too -- watching a game you can't yet play in is exactly when
+   * being able to look back at the last round is worth most.
+   */
+  requestReplay: () => void
   chat: (text: string) => void
   /**
    * Vote to abandon the game in progress and reopen the lobby (typically so

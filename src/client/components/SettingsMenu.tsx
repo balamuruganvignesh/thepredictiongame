@@ -19,6 +19,7 @@ export function SettingsMenu({
   meId,
   spectating,
   onVoteRestart,
+  onOpenReplay,
 }: {
   scoresOpen: boolean
   onToggleScores: () => void
@@ -26,6 +27,11 @@ export function SettingsMenu({
   meId: string | null
   spectating: boolean
   onVoteRestart: (vote: boolean) => void
+  /**
+   * Omitted by the games that have no tricks to replay (Golf, Blackjack), so
+   * they simply don't show the item rather than offering an empty viewer.
+   */
+  onOpenReplay?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const restartLive = restart.votes.length > 0
@@ -48,6 +54,17 @@ export function SettingsMenu({
           >
             {scoresOpen ? 'HIDE SCORES' : 'SCORES'}
           </button>
+          {onOpenReplay && (
+            <button
+              className="dock__button settings__item"
+              onClick={() => {
+                onOpenReplay()
+                setOpen(false)
+              }}
+            >
+              ⏪ REPLAY
+            </button>
+          )}
           <RestartVoteButton
             className="settings__item"
             restart={restart}

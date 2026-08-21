@@ -8,6 +8,7 @@ import { BiddingModal, type BidRow } from './BiddingModal'
 import { ChatPanel } from './ChatPanel'
 import { EffectLayer } from './EffectLayer'
 import { GameAnnouncer } from './GameAnnouncer'
+import { ReplayViewer } from './ReplayViewer'
 import { GameEnd } from './GameEnd'
 import { Hand } from './Hand'
 import { RoleBanner } from './RoleBanner'
@@ -30,6 +31,7 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
   const [scoresOpen, setScoresOpen] = useState(isWideScreen)
   const { enabled: effectsEnabled } = useEffectsEnabled()
   const [chatOpen, setChatOpen] = useState(false)
+  const [replayOpen, setReplayOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(0)
 
@@ -225,6 +227,10 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
           meId={store.meId}
           spectating={store.spectating}
           onVoteRestart={actions.voteRestart}
+          onOpenReplay={() => {
+            actions.requestReplay()
+            setReplayOpen(true)
+          }}
         />
         <button className="dock__button" onClick={() => setChatOpen((open) => !open)}>
           CHAT
@@ -294,6 +300,15 @@ export function Table({ store, actions }: { store: Store; actions: GameActions }
 
       {store.view === 'gameover' && store.standings && (
         <GameEnd standings={store.standings} tournament={store.tournamentEnded} />
+      )}
+      {replayOpen && (
+        <ReplayViewer
+          replay={store.replay}
+          onClose={() => {
+            setReplayOpen(false)
+            actions.closeReplay()
+          }}
+        />
       )}
     </div>
   )

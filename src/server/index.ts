@@ -211,6 +211,12 @@ io.on('connection', (socket) => {
   socket.on('requestState', () =>
     withViewer((r, seat, spectator) => r.sendState(seat ?? spectator!)),
   )
+  // withViewer, not withSeat: someone stuck spectating a game they can't
+  // join yet is exactly who benefits most from being able to look back at
+  // the round that just went by.
+  socket.on('requestReplay', () =>
+    withViewer((r, seat, spectator) => r.sendReplay(seat ?? spectator!)),
+  )
   // Seated players hold no spectator identity, so this is silently a no-op
   // for them -- picking a hand to watch only makes sense without one of your own.
   socket.on('watchSeat', (targetSeatId) =>

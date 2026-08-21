@@ -32,6 +32,7 @@ import type {
   PassResult,
   PlayEntry,
   RebidPrompt,
+  ReplayData,
   RestartVote,
   RoleState,
   RoleSync,
@@ -273,6 +274,13 @@ export type Store = {
    */
   restart: RestartVote
 
+  /**
+   * Every trick this game has played, fetched on demand. Null until the
+   * viewer is opened -- it's a chunky payload nobody needs unless they ask,
+   * and it changes constantly while a round is running.
+   */
+  replay: ReplayData | null
+
   chat: ChatMessage[]
   /** Messages that have arrived since the chat panel was last open. */
   unreadChat: number
@@ -328,6 +336,7 @@ const initialStore: Store = {
   doubleDeadline: null,
   doubled: false,
   restart: { votes: [], needed: 0, waiting: 0 },
+  replay: null,
   chat: [],
   unreadChat: 0,
   feed: [],
@@ -384,6 +393,7 @@ type Action =
   | { type: 'dropFeed'; id: number }
   | { type: 'snapshot'; data: Snapshot }
   | { type: 'watchedHand'; data: WatchedHand }
+  | { type: 'replay'; data: ReplayData | null }
   | { type: 'leave' }
 
 const SUIT_GLYPH: Record<string, string> = {
@@ -1033,6 +1043,9 @@ function reducer(state: Store, action: Action): Store {
     case 'watchedHand':
       return { ...state, watchedSeat: action.data }
 
+    case 'replay':
+      return { ...state, replay: action.data }
+
     case 'leave':
       return { ...initialStore, connected: state.connected, myName: state.myName }
 
@@ -1133,6 +1146,7 @@ export function useGame() {
     socket.on('snapshot', (data) => dispatch({ type: 'snapshot', data }))
     socket.on('restartVote', (data) => dispatch({ type: 'restartVote', data }))
     socket.on('watchedHand', (data) => dispatch({ type: 'watchedHand', data }))
+    socket.on('replayData', (data) => dispatch({ type: 'replay', data }))
 
     socket.on('actionError', (message) => dispatch({ type: 'toast', message }))
     socket.on('doubleWindow', (data) => dispatch({ type: 'doubleWindow', seconds: data.seconds }))
@@ -1301,6 +1315,14 @@ export function useGame() {
       /** Spectator-only: pick a seat to watch read-only, or null to stop. */
       watchSeat(seatId: string | null) {
         socket.emit('watchSeat', seatId)
+      },
+      /** Fetch every trick played this game, for the replay viewer. */
+      requestReplay() {
+        socket.emit('requestReplay')
+      },
+      /** Drop the fetched replay, so reopening the viewer asks for a fresh one. */
+      closeReplay() {
+        dispatch({ type: 'replay', data: null })
       },
     }),
     [],
