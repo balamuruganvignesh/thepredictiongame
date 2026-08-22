@@ -38,9 +38,7 @@ function AccountLink() {
     return (
       <span className="join__account">
         {account.picture && <img src={account.picture} alt="" className="join__avatar" />}
-        <span>
-          {account.name ?? 'Signed in'} · 🪙 {account.coins}
-        </span>
+        <span>{account.name ?? 'Signed in'}</span>
         <button type="button" className="join__signout" onClick={() => void logout()}>
           sign out
         </button>
@@ -73,8 +71,6 @@ export function Join({ connected, error, onJoin }: Props) {
   const isSpades = game === 'spades'
   const creating = mode === 'create'
   const { deck, setDeck } = useDeckStyle()
-  const { wallet } = useAuth()
-  const owned = wallet?.owned ?? []
 
   // A shared link like /ABCD drops you straight into the join form.
   useEffect(() => {
@@ -111,33 +107,20 @@ export function Join({ connected, error, onJoin }: Props) {
           <DeckStack />
         </div>
 
-        {/* Every skin is shown, locked ones included -- a padlock that leads
-            to the shop is the whole point of a paywalled cosmetic, and the
-            classic deck being first and free means nobody is ever looking at
-            a row they can't use. aria-disabled rather than disabled, for the
-            same reason the forbidden bid chip uses it: "you don't own this
-            yet" is information a keyboard user needs to land on. */}
         <div className="segmented segmented--small" role="tablist" aria-label="Card deck">
-          {DECKS.map((skin) => {
-            const locked = skin.premium === true && !owned.includes(skin.id)
-            return (
-              <button
-                type="button"
-                role="tab"
-                key={skin.id}
-                aria-selected={deck === skin.id}
-                aria-disabled={locked || undefined}
-                className={`segmented__option${deck === skin.id ? ' is-active' : ''}${
-                  locked ? ' is-locked' : ''
-                }`}
-                onClick={() => (locked ? (window.location.href = '/shop') : setDeck(skin.id))}
-                title={locked ? `${skin.blurb} Buy it in the shop.` : skin.blurb}
-              >
-                {locked ? '🔒 ' : ''}
-                {skin.label.toLowerCase()}
-              </button>
-            )
-          })}
+          {DECKS.map((skin) => (
+            <button
+              type="button"
+              role="tab"
+              key={skin.id}
+              aria-selected={deck === skin.id}
+              className={`segmented__option${deck === skin.id ? ' is-active' : ''}`}
+              onClick={() => setDeck(skin.id)}
+              title={skin.blurb}
+            >
+              {skin.label.toLowerCase()}
+            </button>
+          ))}
         </div>
 
         {/* Joining by code: the table already has a game, so this screen
@@ -365,11 +348,6 @@ export function Join({ connected, error, onJoin }: Props) {
             <span className="join__nav-glyph" aria-hidden="true">🏆</span>
             <span className="join__nav-label">Leaderboard</span>
             <span className="join__nav-sub">wins and history</span>
-          </a>
-          <a className="join__nav-item" href="/shop">
-            <span className="join__nav-glyph" aria-hidden="true">🪙</span>
-            <span className="join__nav-label">Shop</span>
-            <span className="join__nav-sub">themes and emotes</span>
           </a>
         </nav>
         <AccountLink />

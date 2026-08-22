@@ -48,9 +48,6 @@ import { RoleManager } from './engine/roles'
 import { BiddingManager } from './engine/bidding'
 import { TrickManager } from './engine/tricks'
 import { scoreRound } from './engine/scoring'
-import { PowerupManager } from './engine/powerups'
-import { isPowerupId } from '@shared/powerups'
-import { getCharges, getOwned, spendPowerupCharge } from './db/shop'
 import { dealHearts } from './engine/hearts/deck'
 import { PassManager } from './engine/hearts/passing'
 import { HeartsTrickManager } from './engine/hearts/play'
@@ -99,7 +96,6 @@ export class Room {
 
   private io: EngineIO
   private roles: RoleManager
-  private powerups: PowerupManager
   private bidding: BiddingManager
   private tricks: TrickManager
 
@@ -217,9 +213,6 @@ export class Room {
       },
     }
     this.roles = new RoleManager(this.io)
-    // Off by default and lobby-only to switch on: a table that never opts in
-    // behaves exactly as it did before powerups existed.
-    this.powerups = new PowerupManager(this.io, false)
     this.bidding = new BiddingManager(this.io, this.roles)
     this.tricks = new TrickManager(this.io, this.roles)
     // The Time Traveler's Rewind reaches back into the live trick. Injected
@@ -334,7 +327,6 @@ export class Room {
     name: string,
     playerId: string | null,
     socketId: string,
-    ownedItems: string[] = [],
     profile: { avatar: string | null; avatarUrl: string | null } = { avatar: null, avatarUrl: null },
   ): { seat: Seat } | { spectator: Spectator } | { error: string } {
     this.lastActivity = Date.now()
@@ -344,9 +336,6 @@ export class Room {
       existing.socketId = socketId
       existing.connected = true
       existing.disconnectedAt = null
-      // Refreshed on every re-attach, so a purchase made between sessions
-      // takes effect without leaving the table.
-      existing.ownedItems = ownedItems
       existing.avatar = profile.avatar
       existing.avatarUrl = profile.avatarUrl
       if (name.trim()) existing.name = name.trim().slice(0, 20)
@@ -358,7 +347,6 @@ export class Room {
     const watching = playerId ? this.spectatorById.get(playerId) : undefined
     if (watching) {
       watching.socketId = socketId
-      watching.ownedItems = ownedItems
       watching.avatar = profile.avatar
       watching.avatarUrl = profile.avatarUrl
       if (name.trim()) watching.name = name.trim().slice(0, 20)
@@ -372,7 +360,6 @@ export class Room {
         id: playerId ?? crypto.randomUUID(),
         socketId,
         name: name.trim().slice(0, 20) || `Spectator ${this.spectators.length + 1}`,
-        ownedItems,
         avatar: profile.avatar,
         avatarUrl: profile.avatarUrl,
       }
@@ -388,12 +375,11 @@ export class Room {
       // The claimed id BECOMES the seat id when there is one. Minting a fresh
       // UUID here regardless -- which this did until it was caught -- meant a
       // player's identity was per-TABLE, not per-person: every durable thing
-      // keyed off the seat id (game_result_players, the wallet, coin awards,
-      // powerup charges, chaos roleHistory) was written against an id that
-      // existed for one table and was then overwritten in localStorage by the
-      // `joined` reply. For a SIGNED-IN player the id comes from their
-      // session, so this is also what makes one account mean one identity
-      // across devices.
+      // keyed off the seat id (game_result_players, chaos roleHistory) was
+      // written against an id that existed for one table and was then
+      // overwritten in localStorage by the `joined` reply. For a SIGNED-IN
+      // player the id comes from their session, so this is also what makes
+      // one account mean one identity across devices.
       id: playerId ?? crypto.randomUUID(),
       socketId,
       name: name.trim().slice(0, 20) || `Player ${this.seats.length + 1}`,
@@ -416,7 +402,6 @@ export class Room {
       totalScore: 0,
       lastRoundScore: null,
       disconnectedAt: null,
-      ownedItems,
       avatar: profile.avatar,
       avatarUrl: profile.avatarUrl,
     }
@@ -552,7 +537,6 @@ export class Room {
         id: spectator.id,
         socketId: spectator.socketId,
         name: spectator.name,
-        ownedItems: spectator.ownedItems,
         avatar: spectator.avatar,
         avatarUrl: spectator.avatarUrl,
         seatIndex: this.seats.length + 1,
@@ -643,7 +627,6 @@ export class Room {
       canStart: this.canStart(),
       mode: this.roles.getMode(),
       gameType: this.gameType,
-      powerups: this.powerups.isEnabled,
       targetScore: this.targetScore,
       holeCount: this.holeCount,
       blackjackMode: this.blackjackMode,
@@ -765,73 +748,6 @@ export class Room {
   }
 
   /** List this table publicly, or take it back off. Host only, lobby only. */
-  /**
-   * Host-only, lobby-only, same shape as setPublic. Announced in chat rather
-   * than left silent: powerups change what can happen to you during a round,
-   * so everyone at the table deserves to know before they ready up.
-   */
-  setPowerups(seat: Seat, enabled: boolean) {
-    if (this.gameState !== 'Lobby') return
-    if (!this.isHost(seat)) {
-      this.io.send(seat, 'actionError', 'Only the host can switch powerups on.')
-      return
-    }
-    if (this.powerups.isEnabled === enabled) return
-    this.powerups.setEnabled(enabled)
-    // Charges are private, so every seat needs its own refreshed copy --
-    // `enabled` rides that same payload, and without this a player who joined
-    // before the toggle keeps a stale "off" and never sees the tray.
-    for (const other of this.seats) this.sendPowerupCharges(other)
-    this.systemChat(
-      enabled
-        ? 'Powerups are ON for this table — bought charges can be spent during a round.'
-        : 'Powerups are off again.',
-    )
-    this.broadcastLobby()
-  }
-
-  /**
-   * Spends a charge, but only if the powerup actually did something --
-   * PowerupManager returns false for every rejection, and billing a player
-   * for a powerup that did nothing is the one outcome worth avoiding here.
-   */
-  usePowerup(seat: Seat, powerupId: string, targetId?: string) {
-    if (this.gameType !== 'prediction') {
-      this.io.send(seat, 'powerupDenied', { text: 'Powerups only work in The Prediction Game.' })
-      return
-    }
-    if (!isPowerupId(powerupId)) return
-    if (!seat.ownedItems.includes(powerupId)) {
-      this.io.send(seat, 'powerupDenied', { text: "You don't have that charge." })
-      return
-    }
-
-    const phase = this.phase === 'Bidding' ? 'Bidding' : 'Playing'
-    const target = targetId ? (this.seatById.get(targetId) ?? null) : null
-    const fired = this.powerups.use(seat, powerupId, target, {
-      seats: this.seats,
-      trumpSuit: this.trumpSuit,
-      phase,
-    })
-    if (!fired) return
-
-    // The DB is the authority on charges, not the in-memory copy: two sockets
-    // driving the same seat must not be able to spend the same charge twice.
-    if (!spendPowerupCharge(seat.id, powerupId)) {
-      this.io.send(seat, 'powerupDenied', { text: "You don't have that charge." })
-      return
-    }
-    seat.ownedItems = getOwned(seat.id)
-    this.sendPowerupCharges(seat)
-  }
-
-  sendPowerupCharges(seat: Seat) {
-    this.io.send(seat, 'powerupCharges', {
-      charges: getCharges(seat.id),
-      enabled: this.powerups.isEnabled,
-    })
-  }
-
   setPublic(seat: Seat, isPublic: boolean) {
     if (this.gameState !== 'Lobby') return
     if (!this.isHost(seat)) {
@@ -1165,11 +1081,6 @@ export class Room {
   emote(seat: Seat, emoteId: string) {
     const emote = emoteById(emoteId)
     if (!emote) return
-    // Ownership is enforced HERE, not just by EmoteBar hiding the button --
-    // a hand-driven socket must not be able to put a reaction someone hasn't
-    // bought on everyone else's screen. Dropped silently, like the cooldown
-    // below: a rejection toast for an emoji is worse than the mashing.
-    if (emote.premium && !seat.ownedItems.includes(emote.id)) return
     const now = Date.now()
     const last = this.lastEmoteAt.get(seat.id) ?? 0
     if (now - last < EMOTE_COOLDOWN_MS) return
@@ -1588,10 +1499,9 @@ export class Room {
     this.io.broadcast('gameState', { phase: 'Playing', roundNumber })
     await this.tricks.runPlayPhase(this.seats, turnOrder[0], cardsDealt, trumpSuit)
     if (this.aborted) return
-    const results = scoreRound(this.io, this.roles, this.powerups, this.seats, roundNumber)
+    const results = scoreRound(this.io, this.roles, this.seats, roundNumber)
     this.history[roundNumber] = Object.fromEntries(results.map((r) => [r.id, r.roundScore]))
     this.roles.endRound()
-    this.powerups.endRound()
 
     this.io.broadcast('roundEnded', { roundNumber })
     await sleep(Config.roundEndPause)
@@ -1856,7 +1766,6 @@ export class Room {
     }
 
     this.roles.resetGame()
-    this.powerups.resetGame()
     this.tricks.reset()
     this.passing.reset()
     this.heartsTricks.reset()

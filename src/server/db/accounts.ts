@@ -20,7 +20,6 @@ export type Account = {
   name: string | null
   picture: string | null
   playerId: string
-  coins: number
 }
 
 type AccountRow = {
@@ -30,7 +29,6 @@ type AccountRow = {
   name: string | null
   picture: string | null
   player_id: string
-  coins: number
 }
 
 const toAccount = (row: AccountRow): Account => ({
@@ -40,7 +38,6 @@ const toAccount = (row: AccountRow): Account => ({
   name: row.name,
   picture: row.picture,
   playerId: row.player_id,
-  coins: row.coins,
 })
 
 const selectBySub = db.prepare(`SELECT * FROM accounts WHERE google_sub = ?`)
@@ -48,8 +45,8 @@ const selectByPlayerId = db.prepare(`SELECT * FROM accounts WHERE player_id = ?`
 const selectById = db.prepare(`SELECT * FROM accounts WHERE id = ?`)
 
 const insertAccount = db.prepare(`
-  INSERT INTO accounts (google_sub, email, name, picture, player_id, coins, created_at, last_login)
-  VALUES (@googleSub, @email, @name, @picture, @playerId, 0, @now, @now)
+  INSERT INTO accounts (google_sub, email, name, picture, player_id, created_at, last_login)
+  VALUES (@googleSub, @email, @name, @picture, @playerId, @now, @now)
 `)
 
 const touchAccount = db.prepare(`

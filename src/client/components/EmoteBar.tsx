@@ -11,15 +11,10 @@
 
 import { useState } from 'react'
 import { availableEmotes } from '@shared/emotes'
-import { useAuth } from '../auth'
 
 export function EmoteBar({ onEmote }: { onEmote: (id: string) => void }) {
   const [open, setOpen] = useState(false)
-  // Bought reactions only show up for the people who bought them. The server
-  // re-checks this in Room.emote -- hiding the button here just avoids
-  // offering one that would be silently dropped.
-  const { wallet } = useAuth()
-  const emotes = availableEmotes(wallet?.owned ?? [])
+  const emotes = availableEmotes()
 
   return (
     <div className="emotes">

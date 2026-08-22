@@ -5,7 +5,6 @@ import type { RoundResult } from '@shared/protocol'
 import type { Seat } from '../types'
 import type { EngineIO } from './io'
 import type { RoleManager } from './roles'
-import type { PowerupManager } from './powerups'
 
 /**
  * Scores every seat's bid vs. tricksWon for the round that just finished,
@@ -14,7 +13,6 @@ import type { PowerupManager } from './powerups'
 export function scoreRound(
   io: EngineIO,
   roles: RoleManager,
-  powerups: PowerupManager,
   seats: Seat[],
   roundNumber: number,
 ): RoundResult[] {
@@ -41,11 +39,6 @@ export function scoreRound(
   // earlier in seat order than the player they saved would otherwise be paid
   // out before they had earned it. No-op in classic.
   roles.settleGrace(scores)
-
-  // Last of all: a bought Safety Net catches whatever the final number turned
-  // out to be, rather than an intermediate one, and can only ever raise a
-  // negative to zero. No-op on a table with powerups switched off.
-  powerups.applySafetyNets(scores, seats)
 
   const results: RoundResult[] = []
   for (const seat of seats) {

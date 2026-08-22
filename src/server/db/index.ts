@@ -51,7 +51,7 @@ db.exec(`
     ON game_result_players(player_id);
 `)
 
-// ---- Accounts, wallet and cosmetics ------------------------------------------
+// ---- Accounts ------------------------------------------------------------
 //
 // Additive to everything above: an account does NOT replace the seat token,
 // it OWNS one. `accounts.player_id` is the canonical id a signed-in browser
@@ -69,7 +69,6 @@ db.exec(`
     name        TEXT,
     picture     TEXT,
     player_id   TEXT NOT NULL UNIQUE,
-    coins       INTEGER NOT NULL DEFAULT 0,
     created_at  INTEGER NOT NULL,
     last_login  INTEGER NOT NULL
   );
@@ -82,107 +81,4 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id);
-
-  -- A ledger rather than a bare balance column, so a balance is always
-  -- explainable and a double-award shows up as two visible rows instead of
-  -- silently inflating a number. accounts.coins is a denormalized cache kept
-  -- in the same transaction.
-  CREATE TABLE IF NOT EXISTS coin_ledger (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    player_id      TEXT NOT NULL,
-    delta          INTEGER NOT NULL,
-    reason         TEXT NOT NULL,
-    game_result_id INTEGER,
-    created_at     INTEGER NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_coin_ledger_player ON coin_ledger(player_id);
-
-  -- Keyed by player_id, not account id: an anonymous player earns coins too,
-  -- and if they later sign in and that id becomes canonical, the wallet comes
-  -- with them. Signing in is a reward, never a prerequisite.
-  CREATE TABLE IF NOT EXISTS owned_items (
-    player_id  TEXT NOT NULL,
-    item_id    TEXT NOT NULL,
-    bought_at  INTEGER NOT NULL,
-    PRIMARY KEY (player_id, item_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS equipped_items (
-    player_id  TEXT PRIMARY KEY,
-    theme      TEXT,
-    cardback   TEXT
-  );
-
-  -- Price and visibility changes on top of the shared catalogue, so a price
-  -- is a setting rather than a deploy. One row per CHANGED item only: an item
-  -- with no row here is at its catalogue price, which keeps shared/shop.ts
-  -- the readable source of what the shop is and this table the short list of
-  -- what has been tuned since.
-  CREATE TABLE IF NOT EXISTS item_overrides (
-    item_id    TEXT PRIMARY KEY,
-    price      INTEGER,
-    hidden     INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL
-  );
-
-  -- The codes themselves, in the store rather than in source, so minting one
-  -- is a command rather than an edit and a redeploy. Seeded with the built-in
-  -- codes in server/codes.ts on first boot; everything after that is authored
-  -- through scripts/codes.ts or the /admin/codes routes.
-  --
-  -- coverage and coins are the two grant shapes and exactly one is set: a
-  -- fraction of the catalogue (which reprices itself), or a flat number of
-  -- coins.
-  CREATE TABLE IF NOT EXISTS redeem_codes (
-    code       TEXT PRIMARY KEY,
-    coverage   REAL,
-    coins      INTEGER,
-    label      TEXT NOT NULL,
-    max_uses   INTEGER,
-    uses       INTEGER NOT NULL DEFAULT 0,
-    expires_at INTEGER,
-    created_at INTEGER NOT NULL
-  );
-
-  -- One row per code a player has redeemed. This table IS the once-per-player
-  -- rule: the primary key is what makes a second redemption a constraint
-  -- violation rather than a second grant, so it can't be raced by two tabs.
-  -- The coins granted are recorded here as well as in the ledger purely so a
-  -- redemption is legible without joining the two.
-  CREATE TABLE IF NOT EXISTS redeemed_codes (
-    player_id   TEXT NOT NULL,
-    code        TEXT NOT NULL,
-    coins       INTEGER NOT NULL,
-    redeemed_at INTEGER NOT NULL,
-    PRIMARY KEY (player_id, code)
-  );
 `)
-
-// ---- Additive column migrations ---------------------------------------------
-//
-// CREATE TABLE IF NOT EXISTS above only helps a table that does not exist yet.
-// Once a table has shipped -- and equipped_items has, it is live on the Fly
-// volume -- a new column needs a real ALTER. SQLite has no
-// ADD COLUMN IF NOT EXISTS, so check PRAGMA table_info first; running the
-// ALTER blind would throw "duplicate column name" on every boot after the
-// first.
-//
-// Deliberately not a migration framework: these are additive, nullable
-// columns with no backfill and no ordering between them, which is the only
-// kind of schema change this app has ever needed.
-function addColumnIfMissing(table: string, column: string, definition: string) {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-  if (columns.some((c) => c.name === column)) return
-  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-}
-
-addColumnIfMissing('equipped_items', 'avatar', 'TEXT')
-// Which card art renders. NULL is the free classic deck (shared/decks.ts).
-addColumnIfMissing('equipped_items', 'deck', 'TEXT')
-
-// Consumable items (powerups) are held in CHARGES, so one row can stand for
-// several. owned_items' PRIMARY KEY (player_id, item_id) is what makes a
-// quantity column the right shape here rather than one row per charge --
-// and it keeps every non-consumable at its existing implicit quantity of 1.
-addColumnIfMissing('owned_items', 'quantity', 'INTEGER NOT NULL DEFAULT 1')

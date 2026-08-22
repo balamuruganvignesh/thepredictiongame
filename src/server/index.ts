@@ -26,26 +26,13 @@ import {
   SESSION_MAX_AGE_SECONDS,
   type Account,
 } from './db/accounts'
-import { registerAdminRoutes } from './admin'
-import { sellableItems } from './db/catalogue'
-import {
-  buyItem,
-  equipItem,
-  getBalance,
-  getCharges,
-  getEquipped,
-  getOwned,
-  redeemCode,
-} from './db/shop'
 import { authUrl, exchangeCode, googleConfigured } from './auth/google'
-import { type MeAccount, type Wallet } from '@shared/shop'
-import { AVATARS, GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
+import { GOOGLE_AVATAR, isSelectableAvatar } from '@shared/avatars'
 import { redis, redisSub } from './redis'
 import { registerRoom, refreshRoom, removeRoom } from './roomDirectory'
 
 const PORT = Number(process.env.PORT ?? 3001)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const startedAt = Date.now()
 
 // One process hosts EVERY table, so Node's default of dying on an unhandled
 // error would drop every game in progress at once. Log and keep serving: a
@@ -181,25 +168,19 @@ io.on('connection', (socket) => {
     const known = claimedId
       ? target.getSeat(claimedId) != null || target.getSpectator(claimedId) != null
       : false
-    // Resolved once here rather than on every reaction: Room must not do a
-    // synchronous SQLite read on a hot path in the process that hosts every
-    // table. A brand-new anonymous id owns nothing, so this is only ever a
-    // real query for a returning or signed-in player.
-    const owned = claimedId ? getOwned(claimedId) : []
 
     // A signed-in player's avatar comes from their account (so it follows
     // them across devices); an anonymous one sends their own from
-    // localStorage. Either way it is validated against what they actually
-    // own before it can reach anyone else's screen -- the same rule the
-    // premium emote check follows.
-    const requested = account ? (getEquipped(account.playerId).avatar ?? null) : (avatar ?? null)
-    const chosen = requested && isSelectableAvatar(requested, owned) ? requested : null
+    // localStorage. Either way it is validated against the free preset list
+    // before it can reach anyone else's screen.
+    const requested = avatar ?? null
+    const chosen = requested && isSelectableAvatar(requested) ? requested : null
     const profile =
       chosen === GOOGLE_AVATAR
         ? { avatar: null, avatarUrl: account?.picture ?? null }
         : { avatar: chosen, avatarUrl: null }
 
-    const result = target.join(String(name ?? ''), claimedId, socket.id, owned, profile)
+    const result = target.join(String(name ?? ''), claimedId, socket.id, profile)
     if ('error' in result) {
       socket.emit('joinError', result.error)
       return
@@ -242,10 +223,6 @@ io.on('connection', (socket) => {
     target.broadcastLobby()
     // Mid-game rejoin: replay the whole table state onto their empty client.
     if (target.gameState !== 'Lobby') target.sendState(result.seat)
-
-    // Charges are private, so they ride `send` on join rather than the
-    // roster -- nobody else needs to know what you're holding.
-    target.sendPowerupCharges(result.seat)
   })
 
   socket.on('toggleReady', (ready) => withSeat((r, s) => r.setReady(s, ready === true)))
@@ -292,18 +269,6 @@ io.on('connection', (socket) => {
       if (!seat && spectator) r.watchSeat(spectator, targetSeatId ? String(targetSeatId) : null)
     }),
   )
-  socket.on('setPowerups', (enabled) => withSeat((r, seat) => r.setPowerups(seat, Boolean(enabled))))
-
-  socket.on('usePowerup', (data) =>
-    withSeat((r, seat) =>
-      r.usePowerup(
-        seat,
-        String(data?.powerupId ?? ''),
-        data?.targetId ? String(data.targetId) : undefined,
-      ),
-    ),
-  )
-
   socket.on('chat', (text) =>
     withViewer((r, seat, spectator) => {
       if (seat) r.chat(seat, String(text ?? ''))
@@ -343,7 +308,7 @@ app.get('/api/players/:id/stats', (req, res) => {
   res.json(getPlayerStats(req.params.id))
 })
 
-// ---- Accounts, wallet and shop ---------------------------------------------------
+// ---- Accounts ---------------------------------------------------------------
 
 // The whole auth surface is off unless Google is configured -- with the env
 // vars unset these routes are never registered at all, the same "the route
@@ -352,8 +317,7 @@ app.get('/api/players/:id/stats', (req, res) => {
 // exactly as it did before any of this existed.
 //
 // Anonymous play is never gated. Signing in buys you one identity across
-// devices and the ability to spend coins; it is never a precondition for
-// sitting down at a table.
+// devices; it is never a precondition for sitting down at a table.
 
 /** Reads the caller's account from the session cookie, or null. */
 const sessionAccount = (req: express.Request): Account | null =>
@@ -371,38 +335,12 @@ const sessionCookie = (token: string) =>
     ...(process.env.NODE_ENV === 'production' ? ['Secure'] : []),
   ].join('; ')
 
-/**
- * Whose wallet a shop request is acting on. A signed-in caller is ALWAYS its
- * account's canonical id -- exactly the rule the socket follows, and for the
- * same reason: the id in the body is just a string on the wire, and honouring
- * it would let anyone spend a stranger's coins. Anonymous callers send their
- * own localStorage id, which is the id that earned those coins in the first
- * place, so spending needs no account.
- */
-const walletIdFor = (account: Account | null, claimed: unknown): string | null => {
-  if (account) return account.playerId
-  return typeof claimed === 'string' && claimed.length > 0 ? claimed : null
-}
-
-/** The wallet half of a shop response, for a signed-in OR anonymous player. */
-function walletFor(playerId: string): Wallet {
-  return {
-    playerId,
-    coins: getBalance(playerId),
-    owned: getOwned(playerId),
-    equipped: getEquipped(playerId),
-  }
-}
-
-/** What /api/me and the shop routes both return for a player. */
-function meFor(account: Account): MeAccount {
+/** What /api/me returns for a signed-in player -- identity only, no wallet. */
+function meFor(account: Account): { playerId: string; name: string | null; picture: string | null } {
   return {
     playerId: account.playerId,
     name: account.name,
     picture: account.picture,
-    coins: getBalance(account.playerId),
-    owned: getOwned(account.playerId),
-    equipped: getEquipped(account.playerId),
   }
 }
 
@@ -467,108 +405,10 @@ if (googleConfigured) {
 // boot and a 404 would be indistinguishable from a network failure.
 app.get('/api/me', (req, res) => {
   const account = sessionAccount(req)
-  // The wallet rides along because it is NOT account-shaped: an anonymous
-  // browser owns items too, and every cosmetic gate in the client needs to
-  // know what this player owns whether or not anyone is signed in.
-  const walletId = walletIdFor(account, req.query.playerId)
   res.json({
     loginAvailable: googleConfigured,
     account: account ? meFor(account) : null,
-    wallet: walletId ? walletFor(walletId) : null,
   })
-})
-
-// Catalogue plus your own wallet in ONE request, so the shop page renders
-// from a single fetch. The catalogue half is public: a signed-out visitor can
-// window-shop and see what placing well is worth.
-app.get('/api/shop', (req, res) => {
-  const account = sessionAccount(req)
-  // Anonymous callers pass the playerId they already keep in localStorage, so
-  // a signed-out browser sees the coins it earned and the items it bought.
-  const walletId = walletIdFor(account, req.query.playerId)
-  res.json({
-    // Live prices, and nothing that has been taken off sale.
-    items: sellableItems(),
-    avatars: AVATARS,
-    charges: walletId ? getCharges(walletId) : {},
-    wallet: walletId ? walletFor(walletId) : null,
-    account: account ? meFor(account) : null,
-  })
-})
-
-// Anonymous players may spend the coins they earned. Signing in is what makes
-// a wallet outlive one browser's storage and follow you to another device --
-// a reward, not a toll gate on coins already banked.
-app.post('/api/shop/buy', express.json(), (req, res) => {
-  const account = sessionAccount(req)
-  const walletId = walletIdFor(account, req.body?.playerId)
-  if (!walletId) {
-    res.status(400).json({ ok: false, error: 'No wallet to spend from.' })
-    return
-  }
-
-  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : ''
-  const result = buyItem(walletId, itemId)
-  if (!result.ok) {
-    res.status(400).json(result)
-    return
-  }
-  res.json({ ok: true, wallet: walletFor(walletId), account: account ? meFor(account) : null })
-})
-
-// Redeem codes. The catalogue lives in server/codes.ts and is deliberately
-// NOT shared with the client -- a code whose value is that you have to be
-// told it must not ship in the JS bundle.
-//
-// Anonymous players can redeem, for the same reason they can spend: the grant
-// lands on the playerId that browser already carries, and adopting that id at
-// sign-in brings it along. The once-per-player rule is enforced by the
-// redeemed_codes primary key, not by having an account.
-app.post('/api/shop/redeem', express.json(), (req, res) => {
-  const account = sessionAccount(req)
-  const walletId = walletIdFor(account, req.body?.playerId)
-  if (!walletId) {
-    res.status(400).json({ ok: false, error: 'No wallet to credit.' })
-    return
-  }
-
-  const code = typeof req.body?.code === 'string' ? req.body.code : ''
-  const result = redeemCode(walletId, code)
-  if (!result.ok) {
-    res.status(400).json(result)
-    return
-  }
-  res.json({
-    ok: true,
-    granted: result.granted,
-    wallet: walletFor(walletId),
-    account: account ? meFor(account) : null,
-  })
-})
-
-// Ownership is re-checked server-side. The shop page hiding a button is a
-// courtesy; a hand-rolled POST is not.
-app.post('/api/shop/equip', express.json(), (req, res) => {
-  const account = sessionAccount(req)
-  const walletId = walletIdFor(account, req.body?.playerId)
-  if (!walletId) {
-    res.status(400).json({ ok: false, error: 'No wardrobe to equip into.' })
-    return
-  }
-
-  const kind = req.body?.kind
-  if (kind !== 'theme' && kind !== 'cardback' && kind !== 'avatar' && kind !== 'deck') {
-    res.status(400).json({ ok: false, error: 'Unknown slot.' })
-    return
-  }
-
-  const itemId = typeof req.body?.itemId === 'string' ? req.body.itemId : null
-  const result = equipItem(walletId, kind, itemId)
-  if (!result.ok) {
-    res.status(400).json(result)
-    return
-  }
-  res.json({ ok: true, wallet: walletFor(walletId), account: account ? meFor(account) : null })
 })
 
 // ---- Public table browser --------------------------------------------------------
@@ -595,15 +435,6 @@ app.get('/api/tables', (_req, res) => {
     .sort((a, b) => b!.lastActivity - a!.lastActivity)
   res.json(tables)
 })
-
-// ---- Admin status --------------------------------------------------------------
-
-// Everything admin-facing lives in admin.ts, including its own login. Off by
-// default: with ADMIN_TOKEN unset not one of those routes is registered, so
-// the whole surface 404s exactly like a server that never had it -- the
-// difference from a 401 matters on a public host with no other auth in front
-// of it.
-registerAdminRoutes(app, { rooms, startedAt })
 
 // ---- Static client ------------------------------------------------------------
 

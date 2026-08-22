@@ -11,8 +11,6 @@ export type AvatarPreset = {
   id: string
   glyph: string
   label: string
-  /** Set on presets that must be bought (the id doubles as the shop item id). */
-  premium?: true
 }
 
 /**
@@ -35,12 +33,10 @@ export const AVATARS: readonly AvatarPreset[] = [
   { id: 'star', glyph: '⭐', label: 'Star' },
   { id: 'clover', glyph: '🍀', label: 'Clover' },
   { id: 'moon', glyph: '🌙', label: 'Moon' },
-
-  // Bought in the shop. Ids match shared/shop.ts entries of kind 'avatar'.
-  { id: 'avatar-dragon', glyph: '🐲', label: 'Dragon', premium: true },
-  { id: 'avatar-crown', glyph: '👑', label: 'Monarch', premium: true },
-  { id: 'avatar-jester', glyph: '🃏', label: 'Jester', premium: true },
-  { id: 'avatar-phoenix', glyph: '🔥', label: 'Phoenix', premium: true },
+  { id: 'avatar-dragon', glyph: '🐲', label: 'Dragon' },
+  { id: 'avatar-crown', glyph: '👑', label: 'Monarch' },
+  { id: 'avatar-jester', glyph: '🃏', label: 'Jester' },
+  { id: 'avatar-phoenix', glyph: '🔥', label: 'Phoenix' },
 ] as const
 
 const BY_ID = new Map(AVATARS.map((avatar) => [avatar.id, avatar]))
@@ -49,9 +45,9 @@ export function avatarById(id: string): AvatarPreset | undefined {
   return BY_ID.get(id)
 }
 
-/** The presets a player may actually pick, given what they own. */
-export function availableAvatars(owned: readonly string[]): AvatarPreset[] {
-  return AVATARS.filter((avatar) => !avatar.premium || owned.includes(avatar.id))
+/** The presets a player may actually pick -- every preset is free. */
+export function availableAvatars(): AvatarPreset[] {
+  return [...AVATARS]
 }
 
 /**
@@ -59,10 +55,9 @@ export function availableAvatars(owned: readonly string[]): AvatarPreset[] {
  * anyone to ASK for -- resolving it to an actual picture (or to nothing) is
  * the server's job, since only it knows whether the asker is signed in.
  */
-export function isSelectableAvatar(id: string, owned: readonly string[]): boolean {
+export function isSelectableAvatar(id: string): boolean {
   if (id === GOOGLE_AVATAR) return true
-  const avatar = avatarById(id)
-  return avatar != null && (!avatar.premium || owned.includes(avatar.id))
+  return avatarById(id) != null
 }
 
 /**

@@ -144,7 +144,7 @@ Join a table that's already playing and you'll watch instead of bouncing off an
 error: you see the tricks, the score sheet and the chat, but no hand. When that
 game ends you're given a seat automatically, so you're in for the next one.
 
-## Signing in, coins and the shop
+## Signing in and cosmetics
 
 > **Running it locally with sign-in enabled:** `npm run dev` reads `.env`, so put
 > `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in there (get them from the Google
@@ -155,33 +155,18 @@ game ends you're given a seat automatically, so you're in for the next one.
 
 Signing in with Google is **optional** — a table code and a name is still all you
 need, and always will be. What an account buys you is one identity instead of
-one per browser: your history, your coins and your cosmetics follow you to your
-phone, and you can pick a game back up on another device mid-round.
+one per browser: your history follows you to your phone, and you can pick a
+game back up on another device mid-round.
 
-Finish in the **top three** of any game and you earn coins — 50 for first, 30 for
-second, 15 for third. Ties share the better placing. Abandoned games (a restart
-vote) pay nothing, and neither do two-player tables.
-
-Coins buy things in the **shop**: table themes, **card decks**, card backs and
-profile logos (all of which change how things look), extra reactions, and
-**powerups**. Nothing costs real money — coins are earned by playing.
-
-The **classic deck is free and the default** — you never have to buy your way
-into readable cards. The shop adds three more: the pixel-art deck, a
-**Negative** deck (the classic one inverted, white ink on black, red suits
-still red) and a **Vintage** deck (the same cards, tea-stained). Pick yours on
-the landing screen or from the settings menu mid-game; it's your own screen
-only.
-
-**Powerups are the one thing that affects play**, so they're gated twice: the
-host has to switch them on for the table, and each use spends a charge you
-bought. Peek and Trump Sense just tell you something privately; Safety Net
-turns a missed bid into a zero instead of a loss. They work in The Prediction
-Game for now.
+Every table theme, **card deck**, card back, profile logo and reaction is free
+and available to everyone — no shop, no currency. The **classic deck is the
+default**; the shop also lets you pick the pixel-art deck, a **Negative** deck
+(the classic one inverted, white ink on black, red suits still red) and a
+**Vintage** deck (the same cards, tea-stained). Pick yours on the landing
+screen or from the settings menu mid-game; it's your own screen only.
 
 Pick a **profile logo** next to your name on the landing screen — a preset, or
-your Google picture if you're signed in. Everyone at the table sees it. You earn coins even while playing anonymously, and they
-come with you the first time you sign in.
+your Google picture if you're signed in. Everyone at the table sees it.
 
 ## Credits
 

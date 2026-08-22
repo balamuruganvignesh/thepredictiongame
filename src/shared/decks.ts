@@ -22,8 +22,6 @@ export type DeckSkin = {
   label: string
   art: DeckArt
   blurb: string
-  /** Set on skins that must be bought (the id doubles as the shop item id). */
-  premium?: true
 }
 
 /** The free look, and what an unowned or unequipped slot falls back to. */
@@ -41,21 +39,18 @@ export const DECKS: readonly DeckSkin[] = [
     label: 'Pixel',
     art: 'pixel',
     blurb: "Kenney's pixel-art deck, upscaled crisp.",
-    premium: true,
   },
   {
     id: 'deck-negative',
     label: 'Negative',
     art: 'classic',
     blurb: 'The classic deck inverted — white ink on black. Red suits stay red.',
-    premium: true,
   },
   {
     id: 'deck-vintage',
     label: 'Vintage',
     art: 'classic',
     blurb: 'The classic deck, aged. Tea-stained and slightly tired.',
-    premium: true,
   },
 ] as const
 
@@ -66,9 +61,9 @@ export function deckById(id: string): DeckSkin | undefined {
   return BY_ID.get(id)
 }
 
-/** The skins a player may actually pick, given what they own. */
-export function availableDecks(owned: readonly string[]): DeckSkin[] {
-  return DECKS.filter((deck) => !deck.premium || owned.includes(deck.id))
+/** The skins a player may actually pick -- every skin is free. */
+export function availableDecks(): DeckSkin[] {
+  return [...DECKS]
 }
 
 /** Which sprite folder an id renders from, defaulting safely. */

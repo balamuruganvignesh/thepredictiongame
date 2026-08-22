@@ -8,9 +8,7 @@ import { BlackjackTable } from './components/BlackjackTable'
 import { GolfTable } from './components/GolfTable'
 import { HeartsTable } from './components/HeartsTable'
 import { IrlScoresheet } from './components/IrlScoresheet'
-import { Admin } from './components/Admin'
 import { Leaderboard } from './components/Leaderboard'
-import { Shop } from './components/Shop'
 import { SpadesTable } from './components/SpadesTable'
 import { Table } from './components/Table'
 import { useGame } from './useGame'
@@ -19,8 +17,6 @@ export default function App() {
   const { store, actions } = useGame()
   const isIrlScoresheet = window.location.pathname === '/scoresheet'
   const isLeaderboard = window.location.pathname === '/leaderboard'
-  const isShop = window.location.pathname === '/shop'
-  const isAdmin = window.location.pathname === '/admin'
 
   // The game is a fixed-viewport table, so tokens.css locks the document at
   // 100% height with `overflow: hidden`. These four standalone pages are
@@ -29,7 +25,7 @@ export default function App() {
   // Flagging the document mode on <html> lets CSS unlock scrolling for
   // exactly these pages, using the same data-attribute convention
   // data-deck / data-theme / data-motion already follow.
-  const isDocumentPage = isIrlScoresheet || isLeaderboard || isShop || isAdmin
+  const isDocumentPage = isIrlScoresheet || isLeaderboard
   useEffect(() => {
     if (isDocumentPage) document.documentElement.setAttribute('data-page', 'document')
     else document.documentElement.removeAttribute('data-page')
@@ -44,8 +40,6 @@ export default function App() {
 
   if (isIrlScoresheet) return <IrlScoresheet />
   if (isLeaderboard) return <Leaderboard />
-  if (isShop) return <Shop />
-  if (isAdmin) return <Admin />
 
   return (
     <>
@@ -70,7 +64,6 @@ export default function App() {
           onSetSpadesTargetScore={actions.setSpadesTargetScore}
           onSetTournamentGames={actions.setTournamentGames}
           onSetPublic={actions.setPublic}
-          onSetPowerups={actions.setPowerups}
           onSetBlackjackMode={actions.setBlackjackMode}
           onSetBlackjackRounds={actions.setBlackjackRounds}
           onSendChat={actions.sendChat}

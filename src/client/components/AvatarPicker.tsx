@@ -1,43 +1,29 @@
 // Pick your profile logo. Two sources in one grid: the preset glyphs from
-// shared/avatars.ts (free, plus a few bought in the shop) and your Google
-// account picture if you're signed in.
+// shared/avatars.ts and your Google account picture if you're signed in.
 //
-// The choice is written BOTH to localStorage and, when signed in, to the
-// server -- localStorage is what an anonymous player sends on join, and the
-// server copy is what makes the logo follow a signed-in player to another
-// device. A signed-in player's localStorage value is ignored by the server on
-// join, exactly like their playerId.
+// The choice is written to localStorage -- what an anonymous OR signed-in
+// player sends on join. A signed-in player's playerId is still resolved from
+// their session server-side, exactly like before; only the avatar preference
+// itself is local now.
 
 import { useState } from 'react'
-import { AVATARS, availableAvatars, GOOGLE_AVATAR } from '@shared/avatars'
+import { availableAvatars, GOOGLE_AVATAR } from '@shared/avatars'
 import { useAuth } from '../auth'
 import { rememberAvatar, storedAvatar } from '../socket'
 import { Avatar } from './Avatar'
 
 export function AvatarPicker({ name }: { name: string }) {
-  const { account, wallet } = useAuth()
+  const { account } = useAuth()
   const [open, setOpen] = useState(false)
   const [chosen, setChosen] = useState<string>(() => storedAvatar() ?? '')
 
-  // The server is authoritative once it has spoken, so a signed-in player
-  // sees what their account actually carries rather than this browser's copy.
-  const current = account?.equipped.avatar ?? chosen
-  const owned = wallet?.owned ?? []
-  const options = availableAvatars(owned)
-  const hasLocked = AVATARS.some((preset) => preset.premium && !owned.includes(preset.id))
+  const current = chosen
+  const options = availableAvatars()
 
   const pick = (id: string) => {
     rememberAvatar(id)
     setChosen(id)
     setOpen(false)
-    void fetch('/api/shop/equip', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'avatar', itemId: id || null }),
-    }).catch(() => {
-      // Signed out or offline: the local pick still applies and still rides
-      // the next join, so there is nothing useful to tell the player here.
-    })
   }
 
   const previewUrl = current === GOOGLE_AVATAR ? (account?.picture ?? undefined) : undefined
@@ -97,14 +83,6 @@ export function AvatarPicker({ name }: { name: string }) {
             <Avatar playerId={account?.playerId ?? 'anon'} name={name} size="md" />
           </button>
         </div>
-      )}
-
-      {/* Only shown when a premium avatar is actually still locked, so a
-          player who owns them all isn't nagged. */}
-      {hasLocked && (
-        <a className="avatar-picker__more" href="/shop">
-          More in the shop →
-        </a>
       )}
     </div>
   )
